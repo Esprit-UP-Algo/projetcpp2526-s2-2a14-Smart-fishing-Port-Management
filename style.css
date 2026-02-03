@@ -1,0 +1,256 @@
+/* ================= GLOBALS ================= */
+* {
+    font-family: 'Segoe UI', 'Roboto', sans-serif;
+    color: #334155;
+    /* Slate 700 */
+}
+
+/* ================= MAIN WINDOW ================= */
+QMainWindow,
+#centralWidget {
+    background-color: #f1f5f9;
+    /* Slate 100 - Light Gray Background */
+}
+
+/* ================= SIDEBAR ================= */
+#sidebar {
+    background-color: #3b82f6;
+    /* Blue-500 */
+    border-radius: 30px;
+    /* Fully Rounded */
+    margin: 20px 10px 20px 20px;
+    /* Floating Margin: Top Right(reduced) Bottom Left */
+}
+
+/* Logo Box */
+#logoLabel {
+    background-color: white;
+    border-radius: 12px;
+    margin: 20px;
+    padding: 5px;
+    min-height: 70px;
+}
+
+/* Sidebar Buttons */
+#sidebar QPushButton {
+    text-align: left;
+    padding-left: 20px;
+    border: none;
+    color: #e2e8f0;
+    /* Light Text */
+    font-size: 15px;
+    font-weight: 600;
+    height: 45px;
+    background-color: transparent;
+    border-radius: 15px;
+    margin: 5px 15px 5px 10px;
+}
+
+#sidebar QPushButton:hover {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Active Item (Delivery) */
+/* Active Item (Delivery) */
+#sidebar #btnFishing {
+    background-color: #ffffff;
+    /* Pure White */
+    color: #3b82f6;
+    /* Blue Text to match theme */
+    border-radius: 15px;
+    margin: 5px 15px 5px 10px;
+    padding-left: 25px;
+}
+
+/*Icons within buttons should be handled by text or icon property*/
+
+/* ================= HEADER CARD ================= */
+#headerWidget {
+    background-color: white;
+    border-radius: 20px;
+    /* Softer 20px */
+}
+
+#titleLabel {
+    font-size: 26px;
+    /* Slightly larger */
+    font-weight: 800;
+    color: #1e293b;
+    background: transparent;
+    padding: 0;
+}
+
+/* Add Button */
+#btnAddFrigo {
+    background-color: #22c55e;
+    color: white;
+    border-radius: 10px;
+    /* Softer */
+    font-weight: bold;
+    font-size: 14px;
+    padding: 8px 20px;
+    min-width: 130px;
+    text-align: center;
+    margin: 0;
+}
+
+#btnAddFrigo:hover {
+    background-color: #16a34a;
+}
+
+/* ================= TABLE CARD ================= */
+/* ================= TABLE CARD ================= */
+#tableCard {
+    background-color: white;
+    border-radius: 20px;
+}
+
+QTableWidget {
+    background-color: transparent;
+    /* Transparent inside white card */
+    border: none;
+    outline: none;
+    /* No padding here, layout handles it */
+}
+
+QHeaderView {
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
+}
+
+QHeaderView::section {
+    background-color: #eff6ff;
+    color: #475569;
+    font-weight: bold;
+    font-size: 13px;
+    border: none;
+    padding: 15px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+
+QHeaderView::section:first {
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+}
+
+QHeaderView::section:last {
+    border-top-right-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+/* Fix for black corner */
+QTableCornerButton::section {
+    background-color: transparent;
+    border: none;
+}
+
+QTableWidget::item {
+    padding: 10px 15px;
+    /* Top/Bottom 10, Left/Right 15 to match Header */
+    border-bottom: 1px solid #f1f5f9;
+    /* Subtle separator */
+}
+
+QTableWidget::item:selected {
+    background-color: transparent;
+    /* Disable default blue selection block */
+    color: #334155;
+}
+
+/* Badge Styling (Labels inside table) */
+/* These are styled inline in C++ to allow color logic, but base styles here */
+QLabel {
+    font-size: 13px;
+}
+
+/* ================= DIALOG ================= */
+AddFrigoDialog {
+    background-color: white;
+}
+
+AddFrigoDialog QLineEdit,
+AddFrigoDialog QComboBox {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px;
+    background: #f8fafc;
+}
+
+AddFrigoDialog QLineEdit:focus,
+AddFrigoDialog QComboBox:focus {
+    border: 2px solid #3b82f6;
+    background: white;
+}
+
+AddFrigoDialog QLabel {
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 2px;
+}
+
+#btnAddDialog {
+    background-color: #22c55e;
+    color: white;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    padding: 10px 20px;
+    min-width: 100px;
+    border: none;
+}
+
+#btnAddDialog:hover {
+    background-color: #16a34a;
+}
+
+#btnCancelDialog {
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 20px;
+    min-width: 100px;
+}
+
+#btnCancelDialog:hover {
+    background-color: #e2e8f0;
+    color: #1e293b;
+}
+
+/* ================= TABLE ACTIONS ================= */
+#btnTableEdit,
+#btnTableDelete {
+    text-align: center;
+    padding: 5px 15px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 13px;
+    height: 30px;
+    margin: 0;
+    min-width: 60px;
+}
+
+#btnTableEdit {
+    background-color: #3b82f6;
+    /* Blue */
+    color: white;
+}
+
+#btnTableEdit:hover {
+    background-color: #2563eb;
+}
+
+#btnTableDelete {
+    background-color: #ef4444;
+    /* Red */
+    color: white;
+}
+
+#btnTableDelete:hover {
+    background-color: #dc2626;
+}
