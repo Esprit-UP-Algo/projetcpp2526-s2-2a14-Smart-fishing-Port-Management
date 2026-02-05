@@ -1,5 +1,6 @@
 #include "loginwindow.h"
 #include "employeewindow.h"
+#include "dashboardwindow.h"
 #include <QFont>
 #include <QApplication>
 #include <QPalette>
@@ -301,9 +302,9 @@ void LoginWindow::onLogin()
     if (!username.isEmpty() && !password.isEmpty()) {
         qDebug() << "Login attempt:" << username;
 
-        // Open employee window
-        EmployeeWindow* empWindow = new EmployeeWindow();
-        empWindow->show();
+        // Open dashboard window
+        DashboardWindow* dashboard = new DashboardWindow();
+        dashboard->show();
         this->close();
     } else {
         qDebug() << "Please fill in all fields";

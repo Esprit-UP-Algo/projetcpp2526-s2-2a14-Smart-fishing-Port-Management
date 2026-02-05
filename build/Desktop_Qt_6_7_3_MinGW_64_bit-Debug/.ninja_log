@@ -1,72 +1,28 @@
 # ninja log v6
-71	1063	7918278652699228	sans_titre_autogen/timestamp	d517462c619b38a3
-1071	4986	7918278662717850	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-1064	5995	7918278662647686	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-71	1063	7918278652699228	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-71	1063	7918278652699228	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-1184	5878	7912266967087265	CMakeFiles/sans_titre.dir/sans_titre_autogen/mocs_compilation.cpp.obj	e26fd88753289317
-71	1063	7918278652699228	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-5995	6379	7918278711877485	sans_titre.exe	a1fc4aca94cc5360
-62	1044	7918278887461174	sans_titre_autogen/timestamp	d517462c619b38a3
-62	1044	7918278887461174	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-62	1044	7918278887461174	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-62	1044	7918278887461174	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-1051	4741	7918278897416297	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-1045	5770	7918278897339918	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-5770	6136	7918278944604746	sans_titre.exe	a1fc4aca94cc5360
-61	963	7918279549004213	sans_titre_autogen/timestamp	d517462c619b38a3
-61	963	7918279549004213	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-61	963	7918279549004213	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-61	963	7918279549004213	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-970	4494	7918279558133443	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-964	5458	7918279558083458	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-5458	5811	7918279603021249	sans_titre.exe	a1fc4aca94cc5360
-62	988	7918281318949521	sans_titre_autogen/timestamp	d517462c619b38a3
-62	988	7918281318949521	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-62	988	7918281318949521	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-62	988	7918281318949521	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-994	4359	7918281328321859	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-989	5300	7918281328261670	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-5300	5713	7918281371386337	sans_titre.exe	a1fc4aca94cc5360
-63	1087	7918284695911603	sans_titre_autogen/timestamp	d517462c619b38a3
-63	1087	7918284695911603	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-63	1087	7918284695911603	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-63	1087	7918284695911603	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-1095	4815	7918284706232369	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-1088	5823	7918284706172402	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-5823	6191	7918284753518385	sans_titre.exe	a1fc4aca94cc5360
-71	1056	7918285463164663	sans_titre_autogen/timestamp	d517462c619b38a3
-71	1056	7918285463164663	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-71	1056	7918285463164663	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-71	1056	7918285463164663	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-1063	4677	7918285473195571	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-1057	5711	7918285473135226	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-5711	6080	7918285519684666	sans_titre.exe	a1fc4aca94cc5360
-76	1192	7918290678270397	sans_titre_autogen/timestamp	d517462c619b38a3
-76	1192	7918290678270397	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-76	1192	7918290678270397	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-76	1192	7918290678270397	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-1200	5316	7918290689511373	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-1193	6429	7918290689441442	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-6429	6834	7918290741804388	sans_titre.exe	a1fc4aca94cc5360
-72	1064	7918291402048123	sans_titre_autogen/timestamp	d517462c619b38a3
-72	1064	7918291402048123	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-72	1064	7918291402048123	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-72	1064	7918291402048123	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-1071	4929	7918291412052601	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-1065	5953	7918291411992585	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-5953	6315	7918291460869655	sans_titre.exe	a1fc4aca94cc5360
-62	1120	7918301968070969	sans_titre_autogen/timestamp	d517462c619b38a3
-62	1120	7918301968070969	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-62	1120	7918301968070969	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-62	1120	7918301968070969	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-1127	4890	7918301978822427	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-1121	5857	7918301978762306	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-5857	6224	7918302026122750	sans_titre.exe	a1fc4aca94cc5360
-61	1033	7918302599064072	sans_titre_autogen/timestamp	d517462c619b38a3
-61	1033	7918302599064072	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-61	1033	7918302599064072	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
-61	1033	7918302599064072	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
-1042	4889	7918302608881278	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
-1034	5925	7918302608801094	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
-5925	6308	7918302657709668	sans_titre.exe	a1fc4aca94cc5360
+1936	10618	7919520428913105	CMakeFiles/user.dir/Employeewindow.cpp.obj	3e52aee6b24624ea
+27	1904	7919520426945371	user_autogen/timestamp	7454ee7de072bdbd
+1237	9056	7919531470272098	CMakeFiles/sans_titre.dir/sans_titre_autogen/mocs_compilation.cpp.obj	e26fd88753289317
+27	1904	7919520426945371	user_autogen/mocs_compilation.cpp	7454ee7de072bdbd
+58	1236	7919531469063978	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
+1290	8542	7919531470750498	CMakeFiles/sans_titre.dir/Employeedialog.cpp.obj	7a277dd40d50b765
+27	1904	7919520426945371	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/user_autogen/timestamp	7454ee7de072bdbd
+58	1236	7919531469063978	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
+27	1904	7919520426945371	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/user_autogen/mocs_compilation.cpp	7454ee7de072bdbd
+58	1236	7919531469063978	sans_titre_autogen/timestamp	d517462c619b38a3
+58	1236	7919531469063978	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
+1297	6948	7919531470834389	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
+1928	9536	7919520428821546	CMakeFiles/user.dir/loginwindow.cpp.obj	ff81705e3fef47b2
+1914	9573	7919520428691796	CMakeFiles/user.dir/user_autogen/mocs_compilation.cpp.obj	e96cd1ac696439c
+1944	9705	7919520428984315	CMakeFiles/user.dir/Employeedialog.cpp.obj	fac919e8b7541662
+1967	9786	7919527540568193	CMakeFiles/sans_titre.dir/main.cpp.obj	53df162b0f8025b7
+1988	10444	7919527540785300	CMakeFiles/sans_titre.dir/addfrigodialog.cpp.obj	e8c8aabf86597ea8
+1243	8328	7919531470335192	CMakeFiles/sans_titre.dir/loginwindow.cpp.obj	e8abc7c84d3a2dee
+1275	8446	7919531470624122	CMakeFiles/sans_titre.dir/dashboardwindow.cpp.obj	15fc74f763c8a5c5
+1283	9446	7919531470730235	CMakeFiles/sans_titre.dir/Employeewindow.cpp.obj	16126bbee7ad4595
+9447	10253	7919531552364255	sans_titre.exe	f5af05b1d7d7d8e8
+85	363	7919532671761498	sans_titre_autogen/timestamp	d517462c619b38a3
+85	363	7919532671761498	sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
+85	363	7919532671761498	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/timestamp	d517462c619b38a3
+85	363	7919532671761498	D:/projet qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_autogen/mocs_compilation.cpp	d517462c619b38a3
+364	3628	7919532674592698	CMakeFiles/sans_titre.dir/mainwindow.cpp.obj	21457efee4c76840
+3628	4430	7919532707238550	sans_titre.exe	f5af05b1d7d7d8e8

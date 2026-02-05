@@ -23,7 +23,7 @@ struct Employee {
     QString status;
 };
 
-class EmployeeWindow : public QMainWindow
+class EmployeeWindow : public QWidget
 {
     Q_OBJECT
 
@@ -36,21 +36,18 @@ private slots:
     void onAddEmployee();
     void onEditEmployee(int row);
     void onDeleteEmployee(int row);
-    void onLogout();
 
 private:
     void setupUi();
-    QFrame* createSidebar();
     QWidget* createContentArea();
     QFrame* createHeader();
     QFrame* createTableCard();
-    QPushButton* createNavButton(const QString& icon, const QString& text, bool isActive = false, bool isLogout = false);
-    void setupTable();
-    void populateTable(const QString& filterText = "");
-    QWidget* createStatusBadge(const QString& status);
     QWidget* createActionButtons(int row);
     QWidget* createDeleteButton(int row);
-    QString generateEmployeeId();  // Added method to generate ID
+    QWidget* createStatusBadge(const QString& status);
+    void setupTable();
+    void populateTable(const QString& filterText = "");
+    QString generateEmployeeId();
 
     QVector<Employee> employees;
     QTableWidget* table;

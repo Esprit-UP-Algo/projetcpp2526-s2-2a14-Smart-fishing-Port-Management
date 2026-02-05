@@ -9,7 +9,7 @@
 #include <QGraphicsDropShadowEffect>
 
 EmployeeWindow::EmployeeWindow(QWidget *parent)
-    : QMainWindow(parent)
+    : QWidget(parent)
 {
     // Initialize sample data with firstName and lastName
     employees.append({"EMP001", "Ahmed", "Khalil", "Marin", "1200 DT", "12/03/2023", "Actif"});
@@ -56,144 +56,23 @@ void EmployeeWindow::setupUi()
     )");
 
     // Create central widget
-    QWidget* centralWidget = new QWidget(this);
-    setCentralWidget(centralWidget);
+    // QWidget* centralWidget = new QWidget(this); // not needed if this is the widget
+    // setCentralWidget(centralWidget); // not needed
 
     // Main layout
-    QHBoxLayout* mainLayout = new QHBoxLayout(centralWidget);
+    QHBoxLayout* mainLayout = new QHBoxLayout(this);
     mainLayout->setContentsMargins(15, 15, 15, 15);
     mainLayout->setSpacing(15);
 
-    // Sidebar
-    QFrame* sidebar = createSidebar();
-    mainLayout->addWidget(sidebar);
+    // Sidebar - REMOVED
+    // QFrame* sidebar = createSidebar();
+    // mainLayout->addWidget(sidebar);
 
     // Content area
     QWidget* content = createContentArea();
     mainLayout->addWidget(content, 1);
 }
 
-QFrame* EmployeeWindow::createSidebar()
-{
-    QFrame* sidebar = new QFrame();
-    sidebar->setFixedWidth(230);
-    sidebar->setStyleSheet(R"(
-        background-color: #3b82f6;
-        border-radius: 22px;
-    )");
-
-    QVBoxLayout* layout = new QVBoxLayout(sidebar);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(0);
-
-    // Logo with gray background and shadow
-    QLabel* logo = new QLabel();
-
-    QString logoPath = "C:/Users/manne/OneDrive/Documents/logo3.png";
-    QPixmap pix(logoPath);
-
-    if (!pix.isNull()) {
-        logo->setPixmap(pix.scaled(275, 275, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    } else {
-        logo->setText("PORTFLOW");
-        logo->setStyleSheet("color: #3b82f6; font-weight: 900; font-size: 26px;");
-    }
-
-    logo->setAlignment(Qt::AlignCenter);
-    logo->setStyleSheet(R"(
-        background: #d1d5db;
-        border-radius: 22px 22px 0 0;
-    )");
-    logo->setFixedHeight(90);
-
-    // Shadow for logo
-    QGraphicsDropShadowEffect* logoShadow = new QGraphicsDropShadowEffect();
-    logoShadow->setBlurRadius(15);
-    logoShadow->setXOffset(5);
-    logoShadow->setYOffset(5);
-    logoShadow->setColor(QColor(0, 0, 0, 100));
-    logo->setGraphicsEffect(logoShadow);
-
-    layout->addWidget(logo);
-
-    // Navigation buttons
-    layout->addWidget(createNavButton("🏠", "Dashboard"));
-    layout->addWidget(createNavButton("🌤️", "Weather"));
-    layout->addWidget(createNavButton("⛵", "Bateaux"));
-    layout->addWidget(createNavButton("🎣", "Pêche"));
-    layout->addWidget(createNavButton("👥", "Employés", true));
-    layout->addWidget(createNavButton("⚙️", "Paramètres"));
-
-    layout->addStretch();
-
-    // Logout button
-    layout->addWidget(createNavButton("🚪", "Déconnexion", false, true));
-
-    return sidebar;
-}
-
-QPushButton* EmployeeWindow::createNavButton(const QString& icon, const QString& text, bool isActive, bool isLogout)
-{
-    QPushButton* btn = new QPushButton(icon + "  " + text);
-    QFont btnFont("Segoe UI", 15, QFont::Bold);
-    btn->setFont(btnFont);
-    btn->setCursor(Qt::PointingHandCursor);
-    btn->setFixedHeight(55);
-
-    if (isActive) {
-        btn->setStyleSheet(R"(
-            QPushButton {
-                background-color: #1e3f8f;
-                color: white;
-                border: none;
-                text-align: left;
-                padding-left: 30px;
-                border-radius: 20px;
-                margin-bottom: 12px;
-                font-weight: 700;
-            }
-        )");
-    } else if (isLogout) {
-        btn->setStyleSheet(R"(
-            QPushButton {
-                background-color: #60a5fa;
-                color: #000000;
-                border: none;
-                text-align: left;
-                padding-left: 30px;
-                border-radius: 20px;
-                margin-bottom: 12px;
-                font-weight: 700;
-            }
-            QPushButton:hover {
-                background-color: #1e3f8f;
-                color: white;
-                margin-left: 8px;
-            }
-        )");
-        connect(btn, &QPushButton::clicked, this, &EmployeeWindow::onLogout);
-    } else {
-        btn->setStyleSheet(R"(
-            QPushButton {
-                background-color: #60a5fa;
-                color: #000000;
-                border: none;
-                text-align: left;
-                padding-left: 30px;
-                border-radius: 20px;
-                margin-bottom: 12px;
-                font-weight: 700;
-            }
-            QPushButton:hover {
-                background-color: #1e3f8f;
-                color: white;
-                margin-left: 8px;
-            }
-        )");
-    }
-
-    return btn;
-}
 
 QWidget* EmployeeWindow::createContentArea()
 {
@@ -543,18 +422,4 @@ void EmployeeWindow::onDeleteEmployee(int row)
     }
 }
 
-void EmployeeWindow::onLogout()
-{
-    QMessageBox::StandardButton reply = QMessageBox::question(
-        this,
-        "Déconnexion",
-        "Êtes-vous sûr de vouloir vous déconnecter?",
-        QMessageBox::Yes | QMessageBox::No
-        );
 
-    if (reply == QMessageBox::Yes) {
-        LoginWindow* loginWindow = new LoginWindow();
-        loginWindow->show();
-        this->close();
-    }
-}

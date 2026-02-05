@@ -7,7 +7,7 @@
 				{
 					"build" : ".",
 					"hasInstallRule" : true,
-					"jsonFile" : "directory-.-Debug-71c13b7bef28dc0de089.json",
+					"jsonFile" : "directory-.-Debug-71e2e212c98b8fac30d5.json",
 					"minimumCMakeVersion" : 
 					{
 						"string" : "3.16"
@@ -30,7 +30,7 @@
 					[
 						0
 					],
-					"name" : "sans_titre",
+					"name" : "integration_project",
 					"targetIndexes" : 
 					[
 						0,
@@ -44,7 +44,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "sans_titre::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-sans_titre-Debug-b8310e6b0e880ecfaec8.json",
+					"jsonFile" : "target-sans_titre-Debug-4ed92337a4efa94a4107.json",
 					"name" : "sans_titre",
 					"projectIndex" : 0
 				},

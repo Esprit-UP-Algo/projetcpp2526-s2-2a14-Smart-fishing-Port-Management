@@ -168,6 +168,7 @@ D:/projet\ qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_au
   D:/QT/6.7.3/mingw_64/include/QtWidgets/QApplication \
   D:/QT/6.7.3/mingw_64/include/QtWidgets/QComboBox \
   D:/QT/6.7.3/mingw_64/include/QtWidgets/QDialog \
+  D:/QT/6.7.3/mingw_64/include/QtWidgets/QFrame \
   D:/QT/6.7.3/mingw_64/include/QtWidgets/QHBoxLayout \
   D:/QT/6.7.3/mingw_64/include/QtWidgets/QHeaderView \
   D:/QT/6.7.3/mingw_64/include/QtWidgets/QLabel \
@@ -412,4 +413,5 @@ D:/projet\ qt/sans_titre/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/sans_titre_au
   D:/QT/Tools/mingw1120_64/x86_64-w64-mingw32/include/sys/types.h \
   D:/QT/Tools/mingw1120_64/x86_64-w64-mingw32/include/time.h \
   D:/QT/Tools/mingw1120_64/x86_64-w64-mingw32/include/vadefs.h \
-  D:/QT/Tools/mingw1120_64/x86_64-w64-mingw32/include/wchar.h
+  D:/QT/Tools/mingw1120_64/x86_64-w64-mingw32/include/wchar.h \
+  D:/projet\ qt/sans_titre/loginwindow.h
