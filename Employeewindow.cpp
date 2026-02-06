@@ -7,6 +7,7 @@
 #include <QDebug>
 #include <QPixmap>
 #include <QGraphicsDropShadowEffect>
+#include <QLineEdit>
 
 EmployeeWindow::EmployeeWindow(QWidget *parent)
     : QWidget(parent)
@@ -51,7 +52,7 @@ void EmployeeWindow::setupUi()
 
     setStyleSheet(R"(
         QMainWindow {
-            background-color: #000000;
+            background-color: #FFFFFF;
         }
     )");
 
@@ -61,8 +62,9 @@ void EmployeeWindow::setupUi()
 
     // Main layout
     QHBoxLayout* mainLayout = new QHBoxLayout(this);
-    mainLayout->setContentsMargins(15, 15, 15, 15);
-    mainLayout->setSpacing(15);
+    // Mimic FrigoPage default layout or minimal margins
+    mainLayout->setContentsMargins(0, 0, 0, 0); 
+    mainLayout->setSpacing(0);
 
     // Sidebar - REMOVED
     // QFrame* sidebar = createSidebar();
@@ -70,7 +72,7 @@ void EmployeeWindow::setupUi()
 
     // Content area
     QWidget* content = createContentArea();
-    mainLayout->addWidget(content, 1);
+    mainLayout->addWidget(content);
 }
 
 
@@ -80,12 +82,44 @@ QWidget* EmployeeWindow::createContentArea()
     content->setStyleSheet("background-color: transparent;");
 
     QVBoxLayout* layout = new QVBoxLayout(content);
-    layout->setContentsMargins(20, 20, 20, 20);
-    layout->setSpacing(15);
+    // Use default margins similar to QVBoxLayout default (~11px) used in FrigoPage
+    // or set explicitly to something small if Frigo layout looked tighter.
+    // Dashboard code: `QVBoxLayout *frigoLayout = new QVBoxLayout(frigoPage);` -> uses defaults.
+    // So we should probably remove the explicit 20px margins or reduce them significantly.
+    // Let's rely on default by not analyzing, or set to standard ~11.
+    // However, user wants "same size". 
+    // Let's use 11 which is Qt default roughly.
+    layout->setContentsMargins(11, 11, 11, 11);
+    layout->setSpacing(10);
 
     // Header
     QFrame* header = createHeader();
     layout->addWidget(header);
+
+    // Add Employee Button Row
+    QHBoxLayout* btnLayout = new QHBoxLayout();
+    QPushButton* addBtn = new QPushButton("➕ Ajouter Employé");
+    QFont btnFont("Segoe UI", 11);
+    addBtn->setFont(btnFont);
+    addBtn->setCursor(Qt::PointingHandCursor);
+    addBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: #5D9CEC;
+            color: white;
+            height: 35px;
+            border-radius: 8px;
+            padding: 0 15px;
+            border: none;
+        }
+        QPushButton:hover {
+            background-color: #5D9CEC;
+        }
+    )");
+    connect(addBtn, &QPushButton::clicked, this, &EmployeeWindow::onAddEmployee);
+    
+    btnLayout->addWidget(addBtn);
+    btnLayout->addStretch();
+    layout->addLayout(btnLayout);
 
     // Employee table card
     QFrame* tableCard = createTableCard();
@@ -97,20 +131,21 @@ QWidget* EmployeeWindow::createContentArea()
 QFrame* EmployeeWindow::createHeader()
 {
     QFrame* header = new QFrame();
-    header->setFixedHeight(100);
+    // header->setFixedHeight(100); // Removed fixed height
     header->setStyleSheet("background-color: transparent;");
 
     QHBoxLayout* layout = new QHBoxLayout(header);
-    layout->setContentsMargins(20, 20, 20, 15);
+    // Reduced margins to match Frigo (almost 0)
+    layout->setContentsMargins(0, 0, 0, 10); 
 
-    // Gray frame for title
+    // Gray frame for title -> Blue Frame
     QWidget* titleFrame = new QWidget();
     titleFrame->setStyleSheet(R"(
-        background-color: #d1d5db;
+        background-color: #2B5EA6;
         border-radius: 10px;
     )");
     titleFrame->setFixedHeight(55);
-    titleFrame->setFixedWidth(1000);
+    titleFrame->setFixedWidth(1200);
 
     QHBoxLayout* titleLayout = new QHBoxLayout(titleFrame);
     titleLayout->setContentsMargins(15, 8, 15, 8);
@@ -118,8 +153,17 @@ QFrame* EmployeeWindow::createHeader()
     QLabel* title = new QLabel("Gestion des Employés");
     QFont titleFont("Segoe UI", 22, QFont::Bold);
     title->setFont(titleFont);
-    title->setStyleSheet("color: black;");
+    title->setStyleSheet("color: #FFFFFF;");
     titleLayout->addWidget(title);
+    titleLayout->addStretch();
+
+    // Search Bar
+    QLineEdit* searchEdit = new QLineEdit();
+    searchEdit->setPlaceholderText("🔍 Rechercher...");
+    searchEdit->setFixedSize(220, 35);
+    searchEdit->setStyleSheet("QLineEdit{background:white; color:black; border-radius:8px; padding-left:10px; font-size:14px;}");
+    connect(searchEdit, &QLineEdit::textChanged, this, &EmployeeWindow::onSearch);
+    titleLayout->addWidget(searchEdit);
 
     // Shadow for title frame
     QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect();
@@ -132,27 +176,6 @@ QFrame* EmployeeWindow::createHeader()
     layout->addWidget(titleFrame);
     layout->addStretch();
 
-    // Add employee button
-    QPushButton* addBtn = new QPushButton("➕ Ajouter Employé");
-    QFont btnFont("Segoe UI", 11);
-    addBtn->setFont(btnFont);
-    addBtn->setCursor(Qt::PointingHandCursor);
-    addBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: #22c55e;
-            color: white;
-            height: 35px;
-            border-radius: 8px;
-            padding: 0 15px;
-            border: none;
-        }
-        QPushButton:hover {
-            background-color: #16a34a;
-        }
-    )");
-    connect(addBtn, &QPushButton::clicked, this, &EmployeeWindow::onAddEmployee);
-    layout->addWidget(addBtn);
-
     return header;
 }
 
@@ -163,14 +186,12 @@ QFrame* EmployeeWindow::createTableCard()
 
     QVBoxLayout* layout = new QVBoxLayout(card);
     layout->setSpacing(15);
-    layout->setContentsMargins(20, 0, 20, 20);
+    // Removed extra 20px margins to maximize table size
+    layout->setContentsMargins(0, 0, 0, 0);
 
     // Blue frame container for table
     QWidget* tableFrame = new QWidget();
-    tableFrame->setStyleSheet(R"(
-        background-color: #3b82f6;
-        border-radius: 15px;
-    )");
+    tableFrame->setStyleSheet("background:#2B5EA6;border-radius:15px;");
 
     QVBoxLayout* frameLayout = new QVBoxLayout(tableFrame);
     frameLayout->setContentsMargins(20, 20, 20, 20);
@@ -201,30 +222,15 @@ void EmployeeWindow::setupTable()
     table->setSelectionBehavior(QTableWidget::SelectRows);
 
     // Table style with white background and gray rounded header
-    table->setStyleSheet(R"(
-        QTableWidget {
-            background: white;
-            color: black;
-            border: none;
-            border-radius: 12px;
-        }
-        QHeaderView::section {
-            background: #d1d5db;
-            color: black;
-            font-weight: bold;
-            padding: 6px;
-            border: none;
-        }
-        QHeaderView::section:first {
-            border-top-left-radius: 12px;
-        }
-        QHeaderView::section:last {
-            border-top-right-radius: 12px;
-        }
-        QTableWidget::item {
-            padding: 8px;
-        }
-    )");
+    table->setStyleSheet(
+        "QTableWidget{background:white;color:black;border:none;border-radius:12px;}"
+        "QTableWidget::item{background:white;}"
+        "QTableWidget QWidget{background:white;}"
+        "QHeaderView::section{"
+        "background:#d1d5db;color:black;font-weight:bold;padding:6px;border:none;}"
+        "QHeaderView::section:first{border-top-left-radius:12px;}"
+        "QHeaderView::section:last{border-top-right-radius:12px;}"
+        );
 
     QFont tableFont("Segoe UI", 10);
     table->setFont(tableFont);

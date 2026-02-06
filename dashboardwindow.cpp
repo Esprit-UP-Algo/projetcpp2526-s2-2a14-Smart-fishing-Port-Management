@@ -15,14 +15,14 @@ DashboardWindow::DashboardWindow(QWidget *parent) : QMainWindow(parent)
     setWindowTitle("PortFlow Dashboard");
 
     QWidget *central = new QWidget();
-    central->setStyleSheet("background:#000000;");
+    central->setStyleSheet("background:#FFFFFF;");
 
     QHBoxLayout *mainLayout = new QHBoxLayout(central);
 
     // ================= SIDEBAR =================
     QWidget *sidebar = new QWidget();
     sidebar->setFixedWidth(230);
-    sidebar->setStyleSheet("background:#3b82f6;border-radius:22px;");
+    sidebar->setStyleSheet("background:#2B5EA6;border-radius:22px;");
 
     QVBoxLayout *sideLayout = new QVBoxLayout(sidebar);
 
@@ -90,20 +90,17 @@ void DashboardWindow::setupFrigoPage(QWidget *frigoPage) {
     QHBoxLayout *topBar = new QHBoxLayout();
 
     QWidget *titleFrame = new QWidget();
-    titleFrame->setStyleSheet("background:#d1d5db;border-radius:10px;");
+    titleFrame->setStyleSheet("background:#2B5EA6;border-radius:10px;");
     titleFrame->setFixedHeight(55);
-    titleFrame->setFixedWidth(600);
+    titleFrame->setFixedWidth(1200);
 
     QHBoxLayout *titleLayout = new QHBoxLayout(titleFrame);
 
     QLabel *title = new QLabel("Gestion des Frigos");
-    title->setStyleSheet("font-size:22px;font-weight:bold;color:black;");
+    title->setStyleSheet("font-size:22px;font-weight:bold;color:#FFFFFF;");
 
     titleLayout->addWidget(title);
-
-    topBar->addWidget(titleFrame);
-    topBar->addStretch();
-
+    titleLayout->addStretch();
 
     // ===== Barre de recherche =====
     QLineEdit *searchEdit = new QLineEdit();
@@ -114,26 +111,31 @@ void DashboardWindow::setupFrigoPage(QWidget *frigoPage) {
         "QLineEdit{background:white;  color:black;border-radius:8px;padding-left:10px;font-size:14px;}"
         );
 
-    topBar->addWidget(searchEdit);
-    topBar->addSpacing(10);
+    titleLayout->addWidget(searchEdit);
+
+    topBar->addWidget(titleFrame);
+    topBar->addStretch();
+
+    frigoLayout->addLayout(topBar);
 
 
     // ===== Bouton Ajouter =====
     QPushButton *btnAdd = new QPushButton("➕ Ajouter Frigo");
 
     btnAdd->setStyleSheet(
-        "background:#22c55e;color:white;height:35px;border-radius:8px;padding:0 15px;"
+        "background:#5D9CEC;color:white;height:35px;border-radius:8px;padding:0 15px;"
         );
 
-    topBar->addWidget(btnAdd);
-
-    frigoLayout->addLayout(topBar);
+    QHBoxLayout *btnLayout = new QHBoxLayout();
+    btnLayout->addWidget(btnAdd);
+    btnLayout->addStretch();
+    frigoLayout->addLayout(btnLayout);
 
 
     // ================= TABLE FRAME =================
     QWidget *tableFrame = new QWidget();
 
-    tableFrame->setStyleSheet("background:#3b82f6;border-radius:15px;");
+    tableFrame->setStyleSheet("background:#2B5EA6;border-radius:15px;");
 
     QVBoxLayout *frameLayout = new QVBoxLayout(tableFrame);
     frameLayout->setContentsMargins(20,20,20,20);
@@ -157,7 +159,7 @@ void DashboardWindow::setupFrigoPage(QWidget *frigoPage) {
 
     frigoTable->setStyleSheet(
 
-        "QTableWidget{background:white;color:black;border:none;border-radius:12px;}"
+        "QTableWidget{background:white;color:black;border:none;border-radius:12px;font-size:14px;}"
 
         "QTableWidget::item{background:white;}"
 
