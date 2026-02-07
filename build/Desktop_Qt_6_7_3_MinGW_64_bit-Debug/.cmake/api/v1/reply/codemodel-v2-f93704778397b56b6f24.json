@@ -1,0 +1,79 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Debug-71e2e212c98b8fac30d5.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "integration_project",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "sans_titre::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-sans_titre-Debug-ccbc12cfa275d510e098.json",
+					"name" : "sans_titre",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "sans_titre_autogen::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-sans_titre_autogen-Debug-00c16c1e0b097db4eee8.json",
+					"name" : "sans_titre_autogen",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "sans_titre_autogen_timestamp_deps::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-sans_titre_autogen_timestamp_deps-Debug-d33a7301b374ae550155.json",
+					"name" : "sans_titre_autogen_timestamp_deps",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/temps/projett/projett/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug",
+		"source" : "C:/temps/projett/projett"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 7
+	}
+}
