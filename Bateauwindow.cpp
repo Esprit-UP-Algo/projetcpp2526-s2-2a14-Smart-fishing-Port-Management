@@ -99,12 +99,10 @@ QFrame* BateauWindow::createSidebar()
     QPixmap logoPix("C:/images/logo.png");
 
     if (!logoPix.isNull()) {
-        // Image chargée avec succès
         logoLabel->setPixmap(logoPix.scaled(100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         logoLabel->setAlignment(Qt::AlignCenter);
         qDebug() << "Logo chargé depuis: C:/images/logo.png";
     } else {
-        // Image non trouvée - utiliser emoji de secours
         logoLabel->setText("⛵");
         logoLabel->setStyleSheet(R"(
             QLabel {
@@ -385,15 +383,15 @@ void BateauWindow::setupTable()
         }
     )");
 
-    table->setColumnWidth(0, 80);
-    table->setColumnWidth(1, 140);
-    table->setColumnWidth(2, 130);
-    table->setColumnWidth(3, 100);
-    table->setColumnWidth(4, 100);
-    table->setColumnWidth(5, 150);
-    table->setColumnWidth(6, 130);
-    table->setColumnWidth(7, 130);
-    table->setColumnWidth(8, 100);
+    table->setColumnWidth(0, 80);   // ID
+    table->setColumnWidth(1, 140);  // Nom
+    table->setColumnWidth(2, 130);  // Immatriculation
+    table->setColumnWidth(3, 100);  // Capacité
+    table->setColumnWidth(4, 100);  // Longueur
+    table->setColumnWidth(5, 150);  // Propriétaire
+    table->setColumnWidth(6, 130);  // État
+    table->setColumnWidth(7, 130);  // Dernière Maint.
+    table->setColumnWidth(8, 100);  // Disponible
 }
 
 void BateauWindow::populateTable(const QString& filterText)
@@ -402,7 +400,10 @@ void BateauWindow::populateTable(const QString& filterText)
 
     QFont cellFont("Segoe UI", 11);
 
-    for (const Bateau& bateau : bateaux) {
+    for (int i = 0; i < bateaux.size(); ++i) {
+        const Bateau& bateau = bateaux[i];
+
+        // Filter
         if (!filterText.isEmpty()) {
             QString searchLower = filterText.toLower();
             if (!bateau.idBateau.toLower().contains(searchLower) &&
@@ -419,10 +420,10 @@ void BateauWindow::populateTable(const QString& filterText)
 
         // ID
         QTableWidgetItem* idItem = new QTableWidgetItem(bateau.idBateau);
-        idItem->setFont(cellFont);
         idItem->setForeground(QBrush(QColor("#5D9CEC")));
         QFont idFont("Segoe UI", 11, QFont::Bold);
         idItem->setFont(idFont);
+        idItem->setData(Qt::UserRole, i);
         table->setItem(row, 0, idItem);
 
         // Nom
@@ -462,7 +463,7 @@ void BateauWindow::populateTable(const QString& filterText)
         table->setCellWidget(row, 8, createDisponibleBadge(bateau.disponible));
 
         // Actions
-        table->setCellWidget(row, 9, createActionButtons(row));
+        table->setCellWidget(row, 9, createActionButtons(i));
     }
 }
 
@@ -560,7 +561,7 @@ QWidget* BateauWindow::createActionButtons(int row)
     QWidget* widget = new QWidget();
     QHBoxLayout* layout = new QHBoxLayout(widget);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(10);
+    layout->setSpacing(8);
     layout->setAlignment(Qt::AlignCenter);
 
     // Edit button
@@ -583,13 +584,6 @@ QWidget* BateauWindow::createActionButtons(int row)
     layout->addWidget(editBtn);
 
     // Delete button
-    layout->addWidget(createDeleteButton(row));
-
-    return widget;
-}
-
-QWidget* BateauWindow::createDeleteButton(int row)
-{
     QPushButton* deleteBtn = new QPushButton("🗑️");
     deleteBtn->setFixedSize(36, 36);
     deleteBtn->setCursor(Qt::PointingHandCursor);
@@ -606,7 +600,9 @@ QWidget* BateauWindow::createDeleteButton(int row)
         }
     )");
     connect(deleteBtn, &QPushButton::clicked, [this, row]() { onDeleteBateau(row); });
-    return deleteBtn;
+    layout->addWidget(deleteBtn);
+
+    return widget;
 }
 
 QString BateauWindow::generateBateauId()
