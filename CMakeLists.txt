@@ -8,9 +8,11 @@ qt_standard_project_setup()
 qt_add_executable(gestion_bateaux
     WIN32 MACOSX_BUNDLE
     main.cpp
-    mainwindow.cpp
-    mainwindow.h
-    mainwindow.ui
+    Bateaudialog.cpp
+    Bateauwindow.h
+    bateau.ui
+    Bateaudialog.h
+    Bateauwindow.cpp
 )
 
 target_link_libraries(gestion_bateaux
