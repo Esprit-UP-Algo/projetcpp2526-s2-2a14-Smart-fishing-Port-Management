@@ -16,9 +16,7 @@ int main(int argc, char *argv[])
     app.setOrganizationName("PortFlow");
     app.setStyle("Fusion");
 
-    // Lancer directement la fenêtre Bateaux
-    BateauWindow bateauWindow;
-    bateauWindow.show();
+
 
     // Set application properties
     app.setApplicationName("PortFlow");

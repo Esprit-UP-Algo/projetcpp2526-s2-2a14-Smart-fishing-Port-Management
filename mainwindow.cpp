@@ -10,8 +10,9 @@
 #include <QGraphicsOpacityEffect>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr)
+    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr)
 {
+
     setupUi();
 }
 
@@ -131,8 +132,12 @@ QFrame* MainWindow::createSidebar()
     connect(dashboardBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToDashboard);
     navLayout->addWidget(dashboardBtn);
 
-    navLayout->addWidget(createNavButton("⛵", "Bateaux"));
+    bateauxBtn = createNavButton("⛵", "Bateaux");
+    connect(bateauxBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToBateaux);
+    navLayout->addWidget(bateauxBtn);
+
     pechesBtn = createNavButton("🐟", "Pêche");
+
     connect(pechesBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToPeches);
     navLayout->addWidget(pechesBtn);
 
@@ -390,6 +395,42 @@ void MainWindow::onNavigateToPeches()
         switchPage(stackedWidget->indexOf(pechePage));
     }
 }
+
+void MainWindow::onNavigateToBateaux()
+{
+    setActiveButton(bateauxBtn);
+
+    // Créer la page Bateaux si elle n'existe pas
+    if (!bateauPage) {
+        BateauWindow* batWindow = new BateauWindow();
+        batWindow->hide(); // Important : ne pas afficher la fenêtre complète
+
+        // Extraire SEULEMENT le widget de contenu (partie droite)
+        QWidget* centralWidget = batWindow->centralWidget();
+        QHBoxLayout* hLayout = qobject_cast<QHBoxLayout*>(centralWidget->layout());
+
+        if (hLayout && hLayout->count() >= 2) {
+            // Le deuxième élément est le contenu (après la sidebar)
+            QLayoutItem* contentItem = hLayout->itemAt(1);
+            if (contentItem) {
+                bateauPage = contentItem->widget();
+                if (bateauPage) {
+                    bateauPage->setParent(nullptr); // Détacher du layout original
+                    stackedWidget->addWidget(bateauPage);
+                }
+            }
+        }
+        // Nettoyer la fenêtre temporaire
+        // batWindow->deleteLater(); // Attention: cela pourrait supprimer le widget enfant si mal géré
+        // Dans ce cas, comme on a reparenté le widget, on peut supprimer la fenêtre conteneur vide
+        // Mais par sécurité on peut le garder en mémoire ou le supprimer après
+    }
+
+    if (bateauPage) {
+        switchPage(stackedWidget->indexOf(bateauPage));
+    }
+}
+
 
 void MainWindow::onLogout()
 {

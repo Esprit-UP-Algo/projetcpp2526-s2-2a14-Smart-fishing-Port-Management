@@ -1,6 +1,9 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "pechewindow.h"
+#include "Bateaudialog.h"
+#include "Bateauwindow.h"
 #include <QMainWindow>
 #include <QWidget>
 #include <QVBoxLayout>
@@ -24,6 +27,7 @@ private slots:
     void onNavigateToFrigos();
     void onNavigateToPeches();
     void onNavigateToDashboard();
+    void onNavigateToBateaux();
     void onLogout();
 
 private:
@@ -35,15 +39,19 @@ private:
     void switchPage(int index);
 
     QStackedWidget* stackedWidget;
+    QVector<QPair<QString, QString>> notifications;
     QPushButton* dashboardBtn;
     QPushButton* employeesBtn;
     QPushButton* pechesBtn;
     QPushButton* frigosBtn;
+    QPushButton* bateauxBtn;
     QPushButton* currentActiveBtn;
 
     QWidget* employeePage;
     QWidget* pechePage;
     QWidget* frigoPage;
+    QWidget* bateauPage;
+
 };
 
 #endif // MAINWINDOW_H
