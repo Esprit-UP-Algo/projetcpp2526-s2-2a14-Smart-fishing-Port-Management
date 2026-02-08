@@ -1,9 +1,0 @@
-C:/Users/Dhafer/Downloads/gestion_peche/gestion_peche/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/CMakeFiles/gestion_peche.dir
-C:/Users/Dhafer/Downloads/gestion_peche/gestion_peche/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/CMakeFiles/edit_cache.dir
-C:/Users/Dhafer/Downloads/gestion_peche/gestion_peche/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/CMakeFiles/rebuild_cache.dir
-C:/Users/Dhafer/Downloads/gestion_peche/gestion_peche/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/CMakeFiles/list_install_components.dir
-C:/Users/Dhafer/Downloads/gestion_peche/gestion_peche/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/CMakeFiles/install.dir
-C:/Users/Dhafer/Downloads/gestion_peche/gestion_peche/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/CMakeFiles/install/local.dir
-C:/Users/Dhafer/Downloads/gestion_peche/gestion_peche/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/CMakeFiles/install/strip.dir
-C:/Users/Dhafer/Downloads/gestion_peche/gestion_peche/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/CMakeFiles/gestion_peche_autogen_timestamp_deps.dir
-C:/Users/Dhafer/Downloads/gestion_peche/gestion_peche/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/CMakeFiles/gestion_peche_autogen.dir
