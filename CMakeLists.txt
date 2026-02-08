@@ -13,6 +13,20 @@ qt_add_executable(gestion_peche
     Pechewindow.ui
     Pechedialog.h
     Pechedialog.cpp
+    Employeedialog.cpp
+    Employeedialog.h
+    Employeewindow.cpp
+    Employeewindow.h
+    Frigowindow.cpp
+    Frigowindow.h
+    addfrigodialog.cpp
+    addfrigodialog.h
+    loginwindow.cpp
+    loginwindow.h
+    loginwindow.ui
+    mainwindow.cpp
+    mainwindow.h
+    mainwindow.ui
 )
 
 target_link_libraries(gestion_peche

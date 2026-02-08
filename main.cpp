@@ -1,4 +1,4 @@
-#include "pechewindow.h"
+#include "loginwindow.h"
 #include <QApplication>
 
 int main(int argc, char *argv[])
@@ -13,9 +13,9 @@ int main(int argc, char *argv[])
     // Set application style
     app.setStyle("Fusion");
 
-    // Create and show peche window
-    PecheWindow pecheWindow;
-    pecheWindow.show();
+    // Create and show login window
+    LoginWindow loginWindow;
+    loginWindow.show();
 
     return app.exec();
 }

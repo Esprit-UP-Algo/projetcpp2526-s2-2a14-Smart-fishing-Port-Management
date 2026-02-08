@@ -22,6 +22,7 @@ public:
 private slots:
     void onNavigateToEmployees();
     void onNavigateToFrigos();
+    void onNavigateToPeches();
     void onNavigateToDashboard();
     void onLogout();
 
@@ -36,10 +37,12 @@ private:
     QStackedWidget* stackedWidget;
     QPushButton* dashboardBtn;
     QPushButton* employeesBtn;
+    QPushButton* pechesBtn;
     QPushButton* frigosBtn;
     QPushButton* currentActiveBtn;
 
     QWidget* employeePage;
+    QWidget* pechePage;
     QWidget* frigoPage;
 };
 

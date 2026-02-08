@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "employeewindow.h"
 #include "Frigowindow.h"
+#include "pechewindow.h"
 #include "loginwindow.h"
 #include <QFont>
 #include <QPixmap>
@@ -9,7 +10,7 @@
 #include <QGraphicsOpacityEffect>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), frigoPage(nullptr)
+    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr)
 {
     setupUi();
 }
@@ -131,7 +132,9 @@ QFrame* MainWindow::createSidebar()
     navLayout->addWidget(dashboardBtn);
 
     navLayout->addWidget(createNavButton("⛵", "Bateaux"));
-    navLayout->addWidget(createNavButton("🐟", "Pêche"));
+    pechesBtn = createNavButton("🐟", "Pêche");
+    connect(pechesBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToPeches);
+    navLayout->addWidget(pechesBtn);
 
     employeesBtn = createNavButton("👥", "Employés");
     connect(employeesBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToEmployees);
@@ -354,6 +357,37 @@ void MainWindow::onNavigateToFrigos()
 
     if (frigoPage) {
         switchPage(stackedWidget->indexOf(frigoPage));
+    }
+}
+
+void MainWindow::onNavigateToPeches()
+{
+    setActiveButton(pechesBtn);
+
+    // Créer la page Pêches si elle n'existe pas
+    if (!pechePage) {
+        PecheWindow* pecheWindow = new PecheWindow();
+        pecheWindow->hide(); // Important : ne pas afficher la fenêtre complète
+
+        // Extraire SEULEMENT le widget de contenu (partie droite)
+        QWidget* centralWidget = pecheWindow->centralWidget();
+        QHBoxLayout* hLayout = qobject_cast<QHBoxLayout*>(centralWidget->layout());
+
+        if (hLayout && hLayout->count() >= 2) {
+            // Le deuxième élément est le contenu (après la sidebar)
+            QLayoutItem* contentItem = hLayout->itemAt(1);
+            if (contentItem) {
+                pechePage = contentItem->widget();
+                if (pechePage) {
+                    pechePage->setParent(nullptr); // Détacher du layout original
+                    stackedWidget->addWidget(pechePage);
+                }
+            }
+        }
+    }
+
+    if (pechePage) {
+        switchPage(stackedWidget->indexOf(pechePage));
     }
 }
 
