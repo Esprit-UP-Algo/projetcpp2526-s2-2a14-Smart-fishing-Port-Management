@@ -2,22 +2,20 @@
 #define DOCKSWINDOW_H
 
 #include <QMainWindow>
+#include <QTableWidget>
 
-QT_BEGIN_NAMESPACE
-namespace Ui {
-class MainWindow;
-}
-QT_END_NAMESPACE
-
-class MainWindow : public QMainWindow
+class DocksWindow : public QMainWindow
 {
     Q_OBJECT
-
 public:
-    MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
+    explicit DocksWindow(QWidget *parent = nullptr);
 
 private:
-    Ui::MainWindow *ui;
+    QTableWidget* dockTable;
+
+    void setupUI();
+    void setupDockTable();
+    void populateTable();
 };
+
 #endif // DOCKSWINDOW_H
