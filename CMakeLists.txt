@@ -11,6 +11,8 @@ qt_add_executable(projetcpp2526-s2-2a14-Smart-fishing-Port-Management
     dockswindow.cpp
     dockswindow.h
     mainwindow.ui
+    adddockdialog.h adddockdialog.cpp
+    dock.h dock.cpp
 )
 
 target_link_libraries(projetcpp2526-s2-2a14-Smart-fishing-Port-Management
