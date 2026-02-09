@@ -22,6 +22,17 @@ qt_add_executable(appPortFlow
 )
 
 target_link_libraries(appPortFlow
+qt_add_executable(projetcpp2526-s2-2a14-Smart-fishing-Port-Management
+    WIN32 MACOSX_BUNDLE
+    main.cpp
+    dockswindow.cpp
+    dockswindow.h
+    mainwindow.ui
+    adddockdialog.h adddockdialog.cpp
+    dock.h dock.cpp
+)
+
+target_link_libraries(projetcpp2526-s2-2a14-Smart-fishing-Port-Management
     PRIVATE
         Qt::Core
         Qt::Widgets
