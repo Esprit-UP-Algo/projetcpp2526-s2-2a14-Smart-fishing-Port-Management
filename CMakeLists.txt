@@ -19,20 +19,12 @@ qt_add_executable(appPortFlow
     Employeedialog.cpp Employeedialog.h
     Frigowindow.cpp Frigowindow.h
     addfrigodialog.cpp addfrigodialog.h
+    dockswindow.cpp dockswindow.h
+    adddockdialog.cpp adddockdialog.h
+    dock.cpp dock.h
 )
 
 target_link_libraries(appPortFlow
-qt_add_executable(projetcpp2526-s2-2a14-Smart-fishing-Port-Management
-    WIN32 MACOSX_BUNDLE
-    main.cpp
-    dockswindow.cpp
-    dockswindow.h
-    mainwindow.ui
-    adddockdialog.h adddockdialog.cpp
-    dock.h dock.cpp
-)
-
-target_link_libraries(projetcpp2526-s2-2a14-Smart-fishing-Port-Management
     PRIVATE
         Qt::Core
         Qt::Widgets
@@ -51,4 +43,5 @@ qt_generate_deploy_app_script(
     OUTPUT_SCRIPT deploy_script
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
+
 install(SCRIPT ${deploy_script})

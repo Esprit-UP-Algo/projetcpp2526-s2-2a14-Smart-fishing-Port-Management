@@ -8,13 +8,16 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <QGraphicsOpacityEffect>
+#include "dockswindow.h"
+
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr)
+    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr),
+    pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr), dockPage(nullptr)
 {
-
     setupUi();
 }
+
 
 MainWindow::~MainWindow()
 {
@@ -148,6 +151,10 @@ QFrame* MainWindow::createSidebar()
     frigosBtn = createNavButton("🧊", "Frigos");
     connect(frigosBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToFrigos);
     navLayout->addWidget(frigosBtn);
+
+    dockBtn = createNavButton("⚓", "Docks");
+    connect(dockBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToDock);
+    navLayout->addWidget(dockBtn);
 
     navLayout->addWidget(createNavButton("⚙️", "Paramètres"));
     navLayout->addStretch();
@@ -428,6 +435,36 @@ void MainWindow::onNavigateToBateaux()
 
     if (bateauPage) {
         switchPage(stackedWidget->indexOf(bateauPage));
+    }
+}
+void MainWindow::onNavigateToDock()
+{
+    setActiveButton(dockBtn);
+
+    // Créer la page Docks si elle n'existe pas
+    if (!dockPage) {
+        DocksWindow* dockWindow = new DocksWindow();
+        dockWindow->hide(); // Important : ne pas afficher la fenêtre complète
+
+        // Extraire SEULEMENT le widget de contenu (partie droite)
+        QWidget* centralWidget = dockWindow->centralWidget();
+        QHBoxLayout* hLayout = qobject_cast<QHBoxLayout*>(centralWidget->layout());
+
+        if (hLayout && hLayout->count() >= 2) {
+            // Le deuxième élément est le contenu (après la sidebar)
+            QLayoutItem* contentItem = hLayout->itemAt(1);
+            if (contentItem) {
+                dockPage = contentItem->widget();
+                if (dockPage) {
+                    dockPage->setParent(nullptr); // Détacher du layout original
+                    stackedWidget->addWidget(dockPage);
+                }
+            }
+        }
+    }
+
+    if (dockPage) {
+        switchPage(stackedWidget->indexOf(dockPage));
     }
 }
 

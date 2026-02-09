@@ -28,6 +28,7 @@ private slots:
     void onNavigateToPeches();
     void onNavigateToDashboard();
     void onNavigateToBateaux();
+    void onNavigateToDock();
     void onLogout();
 
 private:
@@ -46,11 +47,12 @@ private:
     QPushButton* frigosBtn;
     QPushButton* bateauxBtn;
     QPushButton* currentActiveBtn;
-
+    QPushButton* dockBtn;
     QWidget* employeePage;
     QWidget* pechePage;
     QWidget* frigoPage;
     QWidget* bateauPage;
+     QWidget* dockPage;
 
 };
 

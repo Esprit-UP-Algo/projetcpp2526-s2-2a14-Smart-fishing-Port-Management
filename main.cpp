@@ -1,47 +1,26 @@
-
 #include <QApplication>
-#include "bateauwindow.h"
-
+#include <QFont>
 #include "loginwindow.h"
-#include <QApplication>
-
+#include "dockswindow.h"
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
 
-
-    // Configuration de l'application
+    // Global application configuration
     app.setApplicationName("PortFlow - Gestion Bateaux");
     app.setOrganizationName("PortFlow");
-    app.setStyle("Fusion");
-
-
-
-    // Set application properties
-    app.setApplicationName("PortFlow");
-    app.setOrganizationName("PortFlow");
     app.setApplicationDisplayName("PortFlow - Gestion des Pêches");
-
-    // Set application style
     app.setStyle("Fusion");
+    QApplication::setFont(QFont("Times New Roman", 10));
 
-    // Create and show login window
+    // Choose which window to show first
     LoginWindow loginWindow;
     loginWindow.show();
 
+    // If you want to show DocksWindow instead, comment the above two lines and uncomment below:
+    // DocksWindow w;
+    // w.show();
 
     return app.exec();
-#include <QApplication>
-#include "dockswindow.h"
-
-int main(int argc, char *argv[])
-{
-    QApplication a(argc, argv);
-    QApplication::setFont(QFont("Times New Roman", 10));
-
-    DocksWindow w;
-    w.show();
-
-    return a.exec();
 }
