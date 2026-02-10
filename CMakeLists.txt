@@ -9,16 +9,18 @@ qt_standard_project_setup()
 qt_add_executable(appPortFlow
     WIN32 MACOSX_BUNDLE
     main.cpp
-    mainwindow.cpp mainwindow.h mainwindow.ui
-    loginwindow.cpp loginwindow.h loginwindow.ui
+    mainwindow.cpp mainwindow.h
+    loginwindow.cpp loginwindow.h
     Bateauwindow.cpp Bateauwindow.h
     Bateaudialog.cpp Bateaudialog.h
-    Pechewindow.cpp Pechewindow.h Pechewindow.ui
+    Pechewindow.cpp Pechewindow.h
     Pechedialog.cpp Pechedialog.h
     Employeewindow.cpp Employeewindow.h
     Employeedialog.cpp Employeedialog.h
     Frigowindow.cpp Frigowindow.h
     addfrigodialog.cpp addfrigodialog.h
+    Livraisonwindow.cpp Livraisonwindow.h
+    AddLivraisonDialog.cpp AddLivraisonDialog.h
 )
 
 target_link_libraries(appPortFlow

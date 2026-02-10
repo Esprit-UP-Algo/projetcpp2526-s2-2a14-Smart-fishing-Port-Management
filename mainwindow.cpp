@@ -10,7 +10,7 @@
 #include <QGraphicsOpacityEffect>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr)
+    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr), livraisonPage(nullptr)
 {
 
     setupUi();
@@ -148,6 +148,10 @@ QFrame* MainWindow::createSidebar()
     frigosBtn = createNavButton("🧊", "Frigos");
     connect(frigosBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToFrigos);
     navLayout->addWidget(frigosBtn);
+
+    livraisonBtn = createNavButton("🚚", "Livraison");
+    connect(livraisonBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToLivraison);
+    navLayout->addWidget(livraisonBtn);
 
     navLayout->addWidget(createNavButton("⚙️", "Paramètres"));
     navLayout->addStretch();
@@ -428,6 +432,27 @@ void MainWindow::onNavigateToBateaux()
 
     if (bateauPage) {
         switchPage(stackedWidget->indexOf(bateauPage));
+    }
+}
+
+void MainWindow::onNavigateToLivraison()
+{
+    setActiveButton(livraisonBtn);
+
+    if (!livraisonPage) {
+        LivraisonWindow* livWindow = new LivraisonWindow();
+        livWindow->hide();
+
+        QWidget* central = livWindow->centralWidget();
+        if (central) {
+            livraisonPage = central;
+            livraisonPage->setParent(nullptr);
+            stackedWidget->addWidget(livraisonPage);
+        }
+    }
+
+    if (livraisonPage) {
+        switchPage(stackedWidget->indexOf(livraisonPage));
     }
 }
 
