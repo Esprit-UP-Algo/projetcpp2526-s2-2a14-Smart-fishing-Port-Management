@@ -1,4 +1,5 @@
 #include "dockswindow.h"
+#include <algorithm>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>

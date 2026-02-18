@@ -2,12 +2,16 @@ cmake_minimum_required(VERSION 3.19)
 
 project(PortFlow LANGUAGES CXX)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
-qt_standard_project_setup()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
 qt_add_executable(appPortFlow
-    WIN32 MACOSX_BUNDLE
     main.cpp
     mainwindow.cpp mainwindow.h
     loginwindow.cpp loginwindow.h
@@ -21,23 +25,20 @@ qt_add_executable(appPortFlow
     addfrigodialog.cpp addfrigodialog.h
     Livraisonwindow.cpp Livraisonwindow.h
     AddLivraisonDialog.cpp AddLivraisonDialog.h
+    dockswindow.cpp dockswindow.h
+    adddockdialog.cpp adddockdialog.h
+    dock.cpp dock.h
 )
 
 target_link_libraries(appPortFlow
-qt_add_executable(projetcpp2526-s2-2a14-Smart-fishing-Port-Management
-    WIN32 MACOSX_BUNDLE
-    main.cpp
-    dockswindow.cpp
-    dockswindow.h
-    mainwindow.ui
-    adddockdialog.h adddockdialog.cpp
-    dock.h dock.cpp
-)
-
-target_link_libraries(projetcpp2526-s2-2a14-Smart-fishing-Port-Management
     PRIVATE
         Qt::Core
         Qt::Widgets
+)
+
+set_target_properties(appPortFlow PROPERTIES
+    WIN32_EXECUTABLE ON
+    MACOSX_BUNDLE ON
 )
 
 include(GNUInstallDirs)

@@ -1,16 +1,4 @@
-#ifndef DOCK_H
-#define DOCK_H
+#include "dock.h"
 
-#include <QString>
-
-struct Dock {
-    QString id;
-    QString nom;
-    QString capacite;
-    QString tailleMax;
-    QString statut;
-    QString tarif;
-    QString client;
-};
-
-#endif // DOCK_H
+// Implementation of any Dock-related functions would go here.
+// For now, it's a simple struct defined in the header.

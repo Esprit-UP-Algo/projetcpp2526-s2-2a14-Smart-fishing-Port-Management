@@ -18,10 +18,11 @@ public:
 
 private:
     void setupUi();
+    void loadStyleSheet();
     void populateFields();
-    QString getInputStyle() const;
 
     QLineEdit* adresseEdit;
+
     QLineEdit* transportEdit;
     QLineEdit* prixEdit;
     QComboBox* statusBox;

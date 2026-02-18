@@ -1,5 +1,5 @@
 /********************************************************************************
-** Form generated from reading UI file 'adddeliverydialog.ui'
+** Form generated from reading UI file 'AddDeliveryDialog.ui'
 **
 ** Created by: Qt User Interface Compiler version 6.7.3
 **
@@ -13,12 +13,14 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialog>
+#include <QtWidgets/QFrame>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpacerItem>
 #include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QWidget>
 
 QT_BEGIN_NAMESPACE
 
@@ -26,112 +28,164 @@ class Ui_AddDeliveryDialog
 {
 public:
     QVBoxLayout *mainLayout;
-    QLabel *labelId;
-    QLineEdit *idEdit;
-    QLabel *labelCap;
-    QLineEdit *capEdit;
-    QLabel *labelHum;
-    QLineEdit *humEdit;
-    QLabel *labelStatut;
+    QFrame *dialogHeader;
+    QHBoxLayout *headerLayout;
+    QLabel *dialogTitle;
+    QSpacerItem *horizontalSpacer;
+    QPushButton *dialogCloseBtn;
+    QWidget *dialogContent;
+    QVBoxLayout *formLayout;
+    QLabel *label_adresse;
+    QLineEdit *adresseEdit;
+    QHBoxLayout *row2;
+    QVBoxLayout *transCol;
+    QLabel *label_transport;
+    QLineEdit *transportEdit;
+    QVBoxLayout *prixCol;
+    QLabel *label_prix;
+    QLineEdit *prixEdit;
+    QLabel *label_statut;
     QComboBox *statusBox;
-    QLabel *labelFish;
-    QComboBox *fishBox;
-    QLabel *labelTemp;
-    QLineEdit *tempEdit;
     QSpacerItem *verticalSpacer;
-    QHBoxLayout *buttonLayout;
-    QPushButton *btnCancelDialog;
-    QPushButton *btnAddDialog;
+    QHBoxLayout *btnRow;
+    QSpacerItem *horizontalSpacer_2;
+    QPushButton *dialogCancelBtn;
+    QPushButton *dialogSaveBtn;
 
     void setupUi(QDialog *AddDeliveryDialog)
     {
         if (AddDeliveryDialog->objectName().isEmpty())
             AddDeliveryDialog->setObjectName("AddDeliveryDialog");
-        AddDeliveryDialog->resize(450, 750);
+        AddDeliveryDialog->resize(600, 550);
+        AddDeliveryDialog->setStyleSheet(QString::fromUtf8("#AddDeliveryDialog {\n"
+"    background-color: #F0F4F8;\n"
+"}"));
         mainLayout = new QVBoxLayout(AddDeliveryDialog);
-        mainLayout->setSpacing(15);
+        mainLayout->setSpacing(0);
         mainLayout->setObjectName("mainLayout");
-        mainLayout->setContentsMargins(20, 20, 20, 20);
-        labelId = new QLabel(AddDeliveryDialog);
-        labelId->setObjectName("labelId");
+        mainLayout->setContentsMargins(0, 0, 0, 0);
+        dialogHeader = new QFrame(AddDeliveryDialog);
+        dialogHeader->setObjectName("dialogHeader");
+        dialogHeader->setMinimumSize(QSize(0, 80));
+        dialogHeader->setMaximumSize(QSize(16777215, 80));
+        headerLayout = new QHBoxLayout(dialogHeader);
+        headerLayout->setObjectName("headerLayout");
+        headerLayout->setContentsMargins(30, 20, 30, 20);
+        dialogTitle = new QLabel(dialogHeader);
+        dialogTitle->setObjectName("dialogTitle");
 
-        mainLayout->addWidget(labelId);
+        headerLayout->addWidget(dialogTitle);
 
-        idEdit = new QLineEdit(AddDeliveryDialog);
-        idEdit->setObjectName("idEdit");
+        horizontalSpacer = new QSpacerItem(40, 20, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
-        mainLayout->addWidget(idEdit);
+        headerLayout->addItem(horizontalSpacer);
 
-        labelCap = new QLabel(AddDeliveryDialog);
-        labelCap->setObjectName("labelCap");
+        dialogCloseBtn = new QPushButton(dialogHeader);
+        dialogCloseBtn->setObjectName("dialogCloseBtn");
+        dialogCloseBtn->setMinimumSize(QSize(40, 40));
+        dialogCloseBtn->setMaximumSize(QSize(40, 40));
 
-        mainLayout->addWidget(labelCap);
+        headerLayout->addWidget(dialogCloseBtn);
 
-        capEdit = new QLineEdit(AddDeliveryDialog);
-        capEdit->setObjectName("capEdit");
 
-        mainLayout->addWidget(capEdit);
+        mainLayout->addWidget(dialogHeader);
 
-        labelHum = new QLabel(AddDeliveryDialog);
-        labelHum->setObjectName("labelHum");
+        dialogContent = new QWidget(AddDeliveryDialog);
+        dialogContent->setObjectName("dialogContent");
+        formLayout = new QVBoxLayout(dialogContent);
+        formLayout->setSpacing(20);
+        formLayout->setObjectName("formLayout");
+        formLayout->setContentsMargins(40, 30, 40, 30);
+        label_adresse = new QLabel(dialogContent);
+        label_adresse->setObjectName("label_adresse");
 
-        mainLayout->addWidget(labelHum);
+        formLayout->addWidget(label_adresse);
 
-        humEdit = new QLineEdit(AddDeliveryDialog);
-        humEdit->setObjectName("humEdit");
+        adresseEdit = new QLineEdit(dialogContent);
+        adresseEdit->setObjectName("adresseEdit");
+        adresseEdit->setMinimumSize(QSize(0, 45));
 
-        mainLayout->addWidget(humEdit);
+        formLayout->addWidget(adresseEdit);
 
-        labelStatut = new QLabel(AddDeliveryDialog);
-        labelStatut->setObjectName("labelStatut");
+        row2 = new QHBoxLayout();
+        row2->setObjectName("row2");
+        transCol = new QVBoxLayout();
+        transCol->setObjectName("transCol");
+        label_transport = new QLabel(dialogContent);
+        label_transport->setObjectName("label_transport");
 
-        mainLayout->addWidget(labelStatut);
+        transCol->addWidget(label_transport);
 
-        statusBox = new QComboBox(AddDeliveryDialog);
+        transportEdit = new QLineEdit(dialogContent);
+        transportEdit->setObjectName("transportEdit");
+        transportEdit->setMinimumSize(QSize(0, 45));
+
+        transCol->addWidget(transportEdit);
+
+
+        row2->addLayout(transCol);
+
+        prixCol = new QVBoxLayout();
+        prixCol->setObjectName("prixCol");
+        label_prix = new QLabel(dialogContent);
+        label_prix->setObjectName("label_prix");
+
+        prixCol->addWidget(label_prix);
+
+        prixEdit = new QLineEdit(dialogContent);
+        prixEdit->setObjectName("prixEdit");
+        prixEdit->setMinimumSize(QSize(0, 45));
+
+        prixCol->addWidget(prixEdit);
+
+
+        row2->addLayout(prixCol);
+
+
+        formLayout->addLayout(row2);
+
+        label_statut = new QLabel(dialogContent);
+        label_statut->setObjectName("label_statut");
+
+        formLayout->addWidget(label_statut);
+
+        statusBox = new QComboBox(dialogContent);
+        statusBox->addItem(QString());
+        statusBox->addItem(QString());
+        statusBox->addItem(QString());
         statusBox->setObjectName("statusBox");
+        statusBox->setMinimumSize(QSize(0, 45));
 
-        mainLayout->addWidget(statusBox);
-
-        labelFish = new QLabel(AddDeliveryDialog);
-        labelFish->setObjectName("labelFish");
-
-        mainLayout->addWidget(labelFish);
-
-        fishBox = new QComboBox(AddDeliveryDialog);
-        fishBox->setObjectName("fishBox");
-
-        mainLayout->addWidget(fishBox);
-
-        labelTemp = new QLabel(AddDeliveryDialog);
-        labelTemp->setObjectName("labelTemp");
-
-        mainLayout->addWidget(labelTemp);
-
-        tempEdit = new QLineEdit(AddDeliveryDialog);
-        tempEdit->setObjectName("tempEdit");
-
-        mainLayout->addWidget(tempEdit);
+        formLayout->addWidget(statusBox);
 
         verticalSpacer = new QSpacerItem(20, 40, QSizePolicy::Policy::Minimum, QSizePolicy::Policy::Expanding);
 
-        mainLayout->addItem(verticalSpacer);
+        formLayout->addItem(verticalSpacer);
 
-        buttonLayout = new QHBoxLayout();
-        buttonLayout->setObjectName("buttonLayout");
-        btnCancelDialog = new QPushButton(AddDeliveryDialog);
-        btnCancelDialog->setObjectName("btnCancelDialog");
-        btnCancelDialog->setCursor(QCursor(Qt::CursorShape::PointingHandCursor));
+        btnRow = new QHBoxLayout();
+        btnRow->setSpacing(15);
+        btnRow->setObjectName("btnRow");
+        horizontalSpacer_2 = new QSpacerItem(40, 20, QSizePolicy::Policy::Expanding, QSizePolicy::Policy::Minimum);
 
-        buttonLayout->addWidget(btnCancelDialog);
+        btnRow->addItem(horizontalSpacer_2);
 
-        btnAddDialog = new QPushButton(AddDeliveryDialog);
-        btnAddDialog->setObjectName("btnAddDialog");
-        btnAddDialog->setCursor(QCursor(Qt::CursorShape::PointingHandCursor));
+        dialogCancelBtn = new QPushButton(dialogContent);
+        dialogCancelBtn->setObjectName("dialogCancelBtn");
+        dialogCancelBtn->setMinimumSize(QSize(120, 45));
 
-        buttonLayout->addWidget(btnAddDialog);
+        btnRow->addWidget(dialogCancelBtn);
+
+        dialogSaveBtn = new QPushButton(dialogContent);
+        dialogSaveBtn->setObjectName("dialogSaveBtn");
+        dialogSaveBtn->setMinimumSize(QSize(150, 45));
+
+        btnRow->addWidget(dialogSaveBtn);
 
 
-        mainLayout->addLayout(buttonLayout);
+        formLayout->addLayout(btnRow);
+
+
+        mainLayout->addWidget(dialogContent);
 
 
         retranslateUi(AddDeliveryDialog);
@@ -141,19 +195,22 @@ public:
 
     void retranslateUi(QDialog *AddDeliveryDialog)
     {
-        AddDeliveryDialog->setWindowTitle(QCoreApplication::translate("AddDeliveryDialog", "Add Delivery", nullptr));
-        labelId->setText(QCoreApplication::translate("AddDeliveryDialog", "Delivery ID:", nullptr));
-        idEdit->setPlaceholderText(QCoreApplication::translate("AddDeliveryDialog", "LIV00X", nullptr));
-        labelCap->setText(QCoreApplication::translate("AddDeliveryDialog", "Date:", nullptr));
-        capEdit->setPlaceholderText(QCoreApplication::translate("AddDeliveryDialog", "YYYY-MM-DD", nullptr));
-        labelHum->setText(QCoreApplication::translate("AddDeliveryDialog", "Address:", nullptr));
-        humEdit->setPlaceholderText(QCoreApplication::translate("AddDeliveryDialog", "Full Address", nullptr));
-        labelStatut->setText(QCoreApplication::translate("AddDeliveryDialog", "Status:", nullptr));
-        labelFish->setText(QCoreApplication::translate("AddDeliveryDialog", "Transport Type:", nullptr));
-        labelTemp->setText(QCoreApplication::translate("AddDeliveryDialog", "Price:", nullptr));
-        tempEdit->setPlaceholderText(QCoreApplication::translate("AddDeliveryDialog", "Ex: 1500 USD", nullptr));
-        btnCancelDialog->setText(QCoreApplication::translate("AddDeliveryDialog", "\342\235\214 Cancel", nullptr));
-        btnAddDialog->setText(QCoreApplication::translate("AddDeliveryDialog", "\342\234\205 Add", nullptr));
+        AddDeliveryDialog->setWindowTitle(QCoreApplication::translate("AddDeliveryDialog", "Ajouter Livraison", nullptr));
+        dialogTitle->setText(QCoreApplication::translate("AddDeliveryDialog", "Ajouter Livraison", nullptr));
+        dialogCloseBtn->setText(QCoreApplication::translate("AddDeliveryDialog", "\342\234\225", nullptr));
+        label_adresse->setText(QCoreApplication::translate("AddDeliveryDialog", "Adresse de livraison", nullptr));
+        adresseEdit->setPlaceholderText(QCoreApplication::translate("AddDeliveryDialog", "Ex: 123 Rue de la Marine, Tunis", nullptr));
+        label_transport->setText(QCoreApplication::translate("AddDeliveryDialog", "Moyen de Transport", nullptr));
+        transportEdit->setPlaceholderText(QCoreApplication::translate("AddDeliveryDialog", "Ex: Camion", nullptr));
+        label_prix->setText(QCoreApplication::translate("AddDeliveryDialog", "Prix (DT)", nullptr));
+        prixEdit->setPlaceholderText(QCoreApplication::translate("AddDeliveryDialog", "Ex: 150", nullptr));
+        label_statut->setText(QCoreApplication::translate("AddDeliveryDialog", "Statut", nullptr));
+        statusBox->setItemText(0, QCoreApplication::translate("AddDeliveryDialog", "En attente", nullptr));
+        statusBox->setItemText(1, QCoreApplication::translate("AddDeliveryDialog", "En cours", nullptr));
+        statusBox->setItemText(2, QCoreApplication::translate("AddDeliveryDialog", "Livr\303\251", nullptr));
+
+        dialogCancelBtn->setText(QCoreApplication::translate("AddDeliveryDialog", "Annuler", nullptr));
+        dialogSaveBtn->setText(QCoreApplication::translate("AddDeliveryDialog", "Enregistrer", nullptr));
     } // retranslateUi
 
 };

@@ -11,6 +11,7 @@
 #include <QFrame>
 #include <QLabel>
 #include <QVector>
+#include <QComboBox>
 
 struct Livraison {
     QString id;
@@ -34,21 +35,30 @@ private slots:
     void onAddLivraison();
     void onEditLivraison(int row);
     void onDeleteLivraison(int row);
+    void onSort(int index);
+    void onExportPDF(int row);
 
 private:
     void setupUi();
     QWidget* createContentArea();
     QFrame* createHeader();
     QFrame* createTableCard();
+    QFrame* createStatsArea();
+    void updateStats();
     void setupTable();
     void populateTable(const QString& filterText = "");
     QWidget* createStatusBadge(const QString& status);
     QWidget* createActionButtons(int row);
+    void loadStyleSheet();
     QString generateLivraisonId();
+
 
     QVector<Livraison> livraisons;
     QTableWidget* table;
     QLineEdit* searchInput;
+    QComboBox* sortCombo;
+    QLabel* totalDeliveriesLabel;
+    QLabel* efficiencyLabel;
 };
 
 #endif // LIVRAISONWINDOW_H

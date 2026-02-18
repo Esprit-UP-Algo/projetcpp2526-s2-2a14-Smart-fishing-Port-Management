@@ -3,6 +3,7 @@
 
 #include "pechewindow.h"
 #include "Livraisonwindow.h"
+#include "dockswindow.h"
 #include "Bateaudialog.h"
 #include "Bateauwindow.h"
 #include <QMainWindow>
@@ -30,6 +31,7 @@ private slots:
     void onNavigateToDashboard();
     void onNavigateToBateaux();
     void onNavigateToLivraison();
+    void onNavigateToDocks();
     void onLogout();
 
 private:
@@ -48,6 +50,7 @@ private:
     QPushButton* frigosBtn;
     QPushButton* bateauxBtn;
     QPushButton* livraisonBtn;
+    QPushButton* docksBtn;
     QPushButton* currentActiveBtn;
 
     QWidget* employeePage;
@@ -55,6 +58,7 @@ private:
     QWidget* frigoPage;
     QWidget* bateauPage;
     QWidget* livraisonPage;
+    QWidget* docksPage;
 
 };
 

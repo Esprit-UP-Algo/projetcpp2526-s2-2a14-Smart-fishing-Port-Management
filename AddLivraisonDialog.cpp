@@ -6,6 +6,10 @@
 #include <QFrame>
 #include <QFont>
 #include <QScrollArea>
+#include <QFile>
+#include <QTextStream>
+#include <QStyle>
+
 
 AddLivraisonDialog::AddLivraisonDialog(QWidget *parent, Livraison* livraisonData)
     : QDialog(parent), livraisonData(livraisonData), isEdit(livraisonData != nullptr)
@@ -14,7 +18,19 @@ AddLivraisonDialog::AddLivraisonDialog(QWidget *parent, Livraison* livraisonData
     if (isEdit) {
         populateFields();
     }
+    loadStyleSheet();
 }
+
+void AddLivraisonDialog::loadStyleSheet()
+{
+    QFile file(":/style/livraison.css");
+    if (file.open(QFile::ReadOnly | QFile::Text)) {
+        QTextStream stream(&file);
+        this->setStyleSheet(stream.readAll());
+    }
+}
+
+
 
 AddLivraisonDialog::~AddLivraisonDialog()
 {
@@ -26,7 +42,8 @@ void AddLivraisonDialog::setupUi()
     setFixedSize(600, 550);
     setModal(true);
 
-    setStyleSheet("QDialog { background-color: #F0F4F8; }");
+    setObjectName("addLivraisonDialog");
+
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
@@ -35,33 +52,24 @@ void AddLivraisonDialog::setupUi()
     // Header
     QFrame* header = new QFrame();
     header->setFixedHeight(80);
-    header->setStyleSheet("QFrame { background-color: #5D9CEC; padding: 20px; }");
+    header->setObjectName("dialogHeader");
+
     QHBoxLayout* headerLayout = new QHBoxLayout(header);
     headerLayout->setContentsMargins(30, 20, 30, 20);
 
     QLabel* title = new QLabel(isEdit ? "Modifier Livraison" : "Ajouter Livraison");
     title->setFont(QFont("Segoe UI", 18, QFont::Bold));
-    title->setStyleSheet("color: white;");
+    title->setObjectName("dialogTitle");
     headerLayout->addWidget(title);
+
 
     headerLayout->addStretch();
 
     QPushButton* closeBtn = new QPushButton("✕");
     closeBtn->setFixedSize(40, 40);
     closeBtn->setCursor(Qt::PointingHandCursor);
-    closeBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: transparent;
-            color: white;
-            border: none;
-            font-size: 24px;
-            font-weight: bold;
-        }
-        QPushButton:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-        }
-    )");
+    closeBtn->setObjectName("dialogCloseBtn");
+
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
     headerLayout->addWidget(closeBtn);
 
@@ -69,8 +77,9 @@ void AddLivraisonDialog::setupUi()
 
     // Form
     QWidget* content = new QWidget();
-    content->setStyleSheet("background-color: white;");
+    content->setObjectName("dialogContent");
     QVBoxLayout* formLayout = new QVBoxLayout(content);
+
     formLayout->setSpacing(20);
     formLayout->setContentsMargins(40, 30, 40, 30);
 
@@ -79,56 +88,60 @@ void AddLivraisonDialog::setupUi()
 
     // Adresse
     QLabel* adresseLabel = new QLabel("Adresse de livraison");
-    adresseLabel->setFont(labelFont);
-    adresseLabel->setStyleSheet(labelStyle);
+    adresseLabel->setProperty("class", "form-label");
     formLayout->addWidget(adresseLabel);
+
 
     adresseEdit = new QLineEdit();
     adresseEdit->setPlaceholderText("Ex: 123 Rue de la Marine, Tunis");
     adresseEdit->setFixedHeight(45);
-    adresseEdit->setStyleSheet(getInputStyle());
+    adresseEdit->setProperty("class", "form-input");
     formLayout->addWidget(adresseEdit);
+
 
     // Transport et Prix
     QHBoxLayout* row2 = new QHBoxLayout();
     
     QVBoxLayout* transCol = new QVBoxLayout();
     QLabel* transLabel = new QLabel("Moyen de Transport");
-    transLabel->setFont(labelFont);
-    transLabel->setStyleSheet(labelStyle);
+    transLabel->setProperty("class", "form-label");
     transCol->addWidget(transLabel);
+
     transportEdit = new QLineEdit();
     transportEdit->setPlaceholderText("Ex: Camion");
     transportEdit->setFixedHeight(45);
-    transportEdit->setStyleSheet(getInputStyle());
+    transportEdit->setProperty("class", "form-input");
     transCol->addWidget(transportEdit);
+
     row2->addLayout(transCol);
 
     QVBoxLayout* prixCol = new QVBoxLayout();
     QLabel* prixLabel = new QLabel("Prix (DT)");
-    prixLabel->setFont(labelFont);
-    prixLabel->setStyleSheet(labelStyle);
+    prixLabel->setProperty("class", "form-label");
     prixCol->addWidget(prixLabel);
+
     prixEdit = new QLineEdit();
     prixEdit->setPlaceholderText("Ex: 150");
     prixEdit->setFixedHeight(45);
-    prixEdit->setStyleSheet(getInputStyle());
+    prixEdit->setProperty("class", "form-input");
     prixCol->addWidget(prixEdit);
+
     row2->addLayout(prixCol);
 
     formLayout->addLayout(row2);
 
     // Statut
     QLabel* statusLabel = new QLabel("Statut");
-    statusLabel->setFont(labelFont);
-    statusLabel->setStyleSheet(labelStyle);
+    statusLabel->setProperty("class", "form-label");
     formLayout->addWidget(statusLabel);
+
 
     statusBox = new QComboBox();
     statusBox->addItems({"En attente", "En cours", "Livré"});
     statusBox->setFixedHeight(45);
-    statusBox->setStyleSheet(getInputStyle());
+    statusBox->setProperty("class", "form-input");
     formLayout->addWidget(statusBox);
+
 
     formLayout->addStretch();
 
@@ -140,32 +153,16 @@ void AddLivraisonDialog::setupUi()
     QPushButton* cancelBtn = new QPushButton("Annuler");
     cancelBtn->setFixedSize(120, 45);
     cancelBtn->setCursor(Qt::PointingHandCursor);
-    cancelBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: #E8EEF5;
-            color: #5A6C7D;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-        }
-        QPushButton:hover { background-color: #D8DEE5; }
-    )");
+    cancelBtn->setObjectName("dialogCancelBtn");
+
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
     btnRow->addWidget(cancelBtn);
 
     QPushButton* saveBtn = new QPushButton(isEdit ? "Mettre à jour" : "Enregistrer");
     saveBtn->setFixedSize(150, 45);
     saveBtn->setCursor(Qt::PointingHandCursor);
-    saveBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: #5D9CEC;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 700;
-        }
-        QPushButton:hover { background-color: #4A89DC; }
-    )");
+    saveBtn->setObjectName("dialogSaveBtn");
+
     connect(saveBtn, &QPushButton::clicked, this, &QDialog::accept);
     btnRow->addWidget(saveBtn);
 
@@ -174,23 +171,7 @@ void AddLivraisonDialog::setupUi()
     mainLayout->addWidget(content);
 }
 
-QString AddLivraisonDialog::getInputStyle() const
-{
-    return R"(
-        QLineEdit, QComboBox {
-            background-color: #F8F9FA;
-            border: 2px solid #E1E8ED;
-            border-radius: 8px;
-            padding: 8px 15px;
-            color: #2C3E50;
-            font-size: 11pt;
-        }
-        QLineEdit:focus, QComboBox:focus {
-            border: 2px solid #5D9CEC;
-            background-color: white;
-        }
-    )";
-}
+
 
 void AddLivraisonDialog::populateFields()
 {

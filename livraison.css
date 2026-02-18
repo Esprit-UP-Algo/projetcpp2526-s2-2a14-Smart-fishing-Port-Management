@@ -1,0 +1,286 @@
+/* Main Content Area */
+#livraisonContentArea,
+#centralWidget {
+    background-color: #F0F4F8;
+}
+
+
+/* Header Section */
+#livraisonHeader {
+    background: transparent;
+}
+
+#livraisonTitle {
+    color: #2C3E50 !important;
+    font-family: 'Segoe UI';
+    font-size: 28pt;
+    font-weight: bold;
+}
+
+
+/* Search Input */
+#livraisonSearchInput {
+    background-color: white;
+    border: 2px solid #d1d5db;
+    border-radius: 12px;
+    padding: 12px 20px;
+    color: #2C3E50;
+    font-family: 'Segoe UI';
+    font-size: 12pt;
+}
+
+#livraisonSearchInput:focus {
+    border: 2px solid #5D9CEC;
+}
+
+/* Sort Combo Box */
+#livraisonSortCombo {
+    border: 2px solid #d1d5db;
+    border-radius: 12px;
+    padding: 5px 15px;
+    background-color: white;
+    color: #2C3E50;
+    font-family: 'Segoe UI';
+    font-size: 12pt;
+}
+
+#livraisonSortCombo:focus {
+    border: 2px solid #5D9CEC;
+}
+
+/* Add Button */
+#livraisonAddBtn {
+    background-color: #5D9CEC;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 30px;
+    font-family: 'Segoe UI';
+    font-size: 13pt;
+    font-weight: bold;
+}
+
+#livraisonAddBtn:hover {
+    background-color: #4A89DC;
+}
+
+/* Table Card */
+#livraisonTableCard {
+    background-color: #5D9CEC;
+    border-radius: 20px;
+    padding: 3px;
+}
+
+#livraisonWhiteContainer {
+    background-color: white;
+    border-radius: 17px;
+}
+
+/* Table */
+#livraisonTable {
+    background-color: white;
+    border: 2px solid #d1d5db;
+    border-radius: 16px;
+    font-family: 'Segoe UI';
+}
+
+
+#livraisonTable QHeaderView::section {
+    background-color: #d1d5db;
+    color: #1f2937;
+    padding: 12px;
+    border: none;
+    font-weight: 600;
+    font-family: 'Segoe UI';
+    font-size: 11pt;
+}
+
+#livraisonTable QHeaderView::section:first {
+    border-top-left-radius: 14px;
+}
+
+#livraisonTable QHeaderView::section:last {
+    border-top-right-radius: 14px;
+}
+
+#livraisonTable::item {
+    padding: 12px;
+    border-right: 1px solid #d1d5db;
+    border-bottom: 1px solid #d1d5db;
+    color: #1f2937;
+    background-color: white;
+    font-family: 'Segoe UI';
+    font-size: 11pt;
+}
+
+#livraisonTable::item:selected {
+    background-color: #EBF5FF;
+    color: #2563EB;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 0 15px;
+    border-radius: 15px;
+    font-weight: bold;
+    font-size: 10pt;
+}
+
+.status-livre {
+    background-color: #dcfce7;
+    color: #15803d;
+}
+
+.status-en-cours {
+    background-color: #fef9c3;
+    color: #a16207;
+}
+
+.status-en-attente {
+    background-color: #f1f5f9;
+    color: #475569;
+}
+
+/* Action Buttons */
+.action-btn {
+    border: none;
+    border-radius: 8px;
+    font-size: 14pt;
+}
+
+.edit-btn {
+    background-color: #fef3c7;
+}
+
+.edit-btn:hover {
+    background-color: #fde68a;
+}
+
+.edit-btn:pressed {
+    background-color: #fcd34d;
+}
+
+.delete-btn {
+    background-color: #fee2e2;
+}
+
+.delete-btn:hover {
+    background-color: #fecaca;
+}
+
+.delete-btn:pressed {
+    background-color: #fca5a5;
+}
+
+.pdf-btn {
+    background-color: #dcfce7;
+}
+
+.pdf-btn:hover {
+    background-color: #bbf7d0;
+}
+
+.pdf-btn:pressed {
+    background-color: #86efac;
+}
+
+/* Dialog Styles */
+#addLivraisonDialog {
+    background-color: #F0F4F8;
+}
+
+#dialogHeader {
+    background-color: #5D9CEC;
+}
+
+#dialogTitle {
+    color: white;
+    font-family: 'Segoe UI';
+    font-size: 18pt;
+    font-weight: bold;
+}
+
+#dialogCloseBtn {
+    background-color: transparent;
+    color: white;
+    border: none;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+#dialogCloseBtn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+}
+
+#dialogContent {
+    background-color: white;
+}
+
+.form-label {
+    color: #2C3E50;
+    font-family: 'Segoe UI';
+    font-size: 11pt;
+    font-weight: bold;
+}
+
+.form-input {
+    background-color: #F8F9FA;
+    border: 2px solid #E1E8ED;
+    border-radius: 8px;
+    padding: 8px 15px;
+    color: #2C3E50;
+    font-family: 'Segoe UI';
+    font-size: 11pt;
+}
+
+.form-input:focus {
+    border: 2px solid #5D9CEC;
+    background-color: white;
+}
+
+#dialogCancelBtn {
+    background-color: #E8EEF5;
+    color: #5A6C7D;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+#dialogCancelBtn:hover {
+    background-color: #D8DEE5;
+}
+
+#dialogSaveBtn {
+    background-color: #5D9CEC;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+}
+
+
+/* Stats Cards */
+.stats-card {
+    background-color: white;
+    border: 2px solid #5D9CEC;
+    border-radius: 20px;
+}
+
+.stats-label {
+    color: #5A6C7D;
+    font-family: 'Segoe UI';
+    font-size: 11pt;
+    font-weight: 600;
+}
+
+.stats-value {
+    color: #2C3E50;
+    font-family: 'Segoe UI';
+    font-size: 24pt;
+    font-weight: bold;
+}
+
+.stats-icon {
+    font-size: 28pt;
+}

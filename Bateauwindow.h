@@ -52,7 +52,6 @@ private:
     QWidget* createStatusBadge(const QString& etat);
     QWidget* createDisponibleBadge(const QString& disponible);
     QWidget* createActionButtons(int row);
-    QWidget* createDeleteButton(int row);
     QString generateBateauId();
 
     QVector<Bateau> bateaux;

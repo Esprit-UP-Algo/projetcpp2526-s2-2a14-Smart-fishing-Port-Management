@@ -1,5 +1,5 @@
 #include "mainwindow.h"
-#include "employeewindow.h"
+#include "Employeewindow.h"
 #include "Frigowindow.h"
 #include "pechewindow.h"
 #include "loginwindow.h"
@@ -10,7 +10,7 @@
 #include <QGraphicsOpacityEffect>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr), livraisonPage(nullptr)
+    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr), livraisonPage(nullptr), docksPage(nullptr)
 {
 
     setupUi();
@@ -85,25 +85,25 @@ QFrame* MainWindow::createSidebar()
     logoLayout->setContentsMargins(20, 15, 20, 15);
 
     QFrame* logoContainer = new QFrame();
-    logoContainer->setFixedSize(180, 100);
+    logoContainer->setFixedSize(220, 100);
     logoContainer->setStyleSheet(R"(
         QFrame {
-            background-color: #d1d5db;
-            border-radius: 22px;
+            background-color: transparent;
+            border-radius: 0px;
         }
     )");
 
     QVBoxLayout* containerLayout = new QVBoxLayout(logoContainer);
-    containerLayout->setContentsMargins(10, 10, 10, 10);
+    containerLayout->setContentsMargins(5, 5, 5, 5);
     containerLayout->setAlignment(Qt::AlignCenter);
 
     QLabel* logoLabel = new QLabel();
-    QPixmap logoPix("C:/images/logo.png");
+    QPixmap logoPix(":/images/images/logo.png");
 
     if (!logoPix.isNull()) {
-        logoLabel->setPixmap(logoPix.scaled(100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        logoLabel->setPixmap(logoPix.scaled(200, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         logoLabel->setAlignment(Qt::AlignCenter);
-        qDebug() << "Logo chargé depuis: C:/images/logo.png";
+        qDebug() << "Logo chargé depuis: :/images/images/logo.png";
     } else {
         logoLabel->setText("🚢");
         logoLabel->setStyleSheet(R"(
@@ -113,7 +113,7 @@ QFrame* MainWindow::createSidebar()
             }
         )");
         logoLabel->setAlignment(Qt::AlignCenter);
-        qDebug() << "Attention: Logo non trouvé à C:/images/logo.png - utilisation emoji";
+        qDebug() << "Attention: Logo non trouvé à :/images/images/logo.png - utilisation emoji";
     }
 
     logoLabel->setStyleSheet("background: transparent;");
@@ -152,6 +152,10 @@ QFrame* MainWindow::createSidebar()
     livraisonBtn = createNavButton("🚚", "Livraison");
     connect(livraisonBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToLivraison);
     navLayout->addWidget(livraisonBtn);
+
+    docksBtn = createNavButton("⚓", "Docks");
+    connect(docksBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToDocks);
+    navLayout->addWidget(docksBtn);
 
     navLayout->addWidget(createNavButton("⚙️", "Paramètres"));
     navLayout->addStretch();
@@ -453,6 +457,35 @@ void MainWindow::onNavigateToLivraison()
 
     if (livraisonPage) {
         switchPage(stackedWidget->indexOf(livraisonPage));
+    }
+}
+
+void MainWindow::onNavigateToDocks()
+{
+    setActiveButton(docksBtn);
+
+    if (!docksPage) {
+        DocksWindow* docksWindow = new DocksWindow();
+        docksWindow->hide();
+
+        QWidget* central = docksWindow->centralWidget();
+        QHBoxLayout* hLayout = qobject_cast<QHBoxLayout*>(central->layout());
+
+        if (hLayout && hLayout->count() >= 2) {
+            // Index 0 is sidebar, index 1 is content
+            QLayoutItem* contentItem = hLayout->itemAt(1);
+            if (contentItem) {
+                docksPage = contentItem->widget();
+                if (docksPage) {
+                    docksPage->setParent(nullptr);
+                    stackedWidget->addWidget(docksPage);
+                }
+            }
+        }
+    }
+
+    if (docksPage) {
+        switchPage(stackedWidget->indexOf(docksPage));
     }
 }
 
