@@ -1,5 +1,5 @@
-#ifndef EMPLOYEEWINDOW_H
-#define EMPLOYEEWINDOW_H
+#ifndef LIVRAISONWINDOW_H
+#define LIVRAISONWINDOW_H
 
 #include <QMainWindow>
 #include <QWidget>
@@ -13,50 +13,52 @@
 #include <QVector>
 #include <QComboBox>
 
-struct Employee {
+struct Livraison {
     QString id;
-    QString firstName;
-    QString lastName;
-    QString position;
-    QString salary;
     QString date;
-    QString status;  // Actif / Congé / Inactif
+    QString adresse;
+    QString statut; // En attente / En cours / Livré
+    QString transport;
+    QString prix;
 };
 
-class EmployeeWindow : public QMainWindow
+class LivraisonWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    explicit EmployeeWindow(QWidget *parent = nullptr);
-    ~EmployeeWindow();
+    explicit LivraisonWindow(QWidget *parent = nullptr);
+    ~LivraisonWindow();
 
 private slots:
     void onSearch(const QString& text);
-    void onAddEmployee();
-    void onEditEmployee(int row);
-    void onDeleteEmployee(int row);
-    void onLogout();
+    void onAddLivraison();
+    void onEditLivraison(int row);
+    void onDeleteLivraison(int row);
     void onSort(int index);
+    void onExportPDF(int row);
 
 private:
     void setupUi();
-    QFrame* createSidebar();
     QWidget* createContentArea();
     QFrame* createHeader();
     QFrame* createToolbar();
     QFrame* createTableCard();
-    QPushButton* createNavButton(const QString& icon, const QString& text, bool isActive = false, bool isLogout = false);
+    QFrame* createStatsArea();
+    void updateStats();
     void setupTable();
     void populateTable(const QString& filterText = "");
     QWidget* createStatusBadge(const QString& status);
     QWidget* createActionButtons(int row);
-    QString generateEmployeeId();
+    QString generateLivraisonId();
 
-    QVector<Employee> employees;
+
+    QVector<Livraison> livraisons;
     QTableWidget* table;
     QLineEdit* searchInput;
     QComboBox* sortCombo;
+    QLabel* totalDeliveriesLabel;
+    QLabel* efficiencyLabel;
 };
 
-#endif // EMPLOYEEWINDOW_H
+#endif // LIVRAISONWINDOW_H

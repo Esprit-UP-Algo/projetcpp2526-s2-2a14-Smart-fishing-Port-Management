@@ -11,6 +11,7 @@
 #include <QFrame>
 #include <QLabel>
 #include <QVector>
+#include <QComboBox>
 
 struct Frigo {
     QString id;
@@ -35,12 +36,14 @@ private slots:
     void onEditFrigo(int row);
     void onDeleteFrigo(int row);
     void onLogout();
+    void onSort(int index);
 
 private:
     void setupUi();
     QFrame* createSidebar();
     QWidget* createContentArea();
     QFrame* createHeader();
+    QFrame* createToolbar();
     QFrame* createTableCard();
     QPushButton* createNavButton(const QString& icon, const QString& text, bool isActive = false, bool isLogout = false);
     void setupTable();
@@ -52,6 +55,7 @@ private:
     QVector<Frigo> frigos;
     QTableWidget* table;
     QLineEdit* searchInput;
+    QComboBox* sortCombo;
 };
 
 #endif // FRIGOWINDOW_H

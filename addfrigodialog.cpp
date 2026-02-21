@@ -57,25 +57,6 @@ void AddFrigoDialog::setupUi()
 
     headerLayout->addStretch();
 
-    QPushButton* closeBtn = new QPushButton("✕");
-    closeBtn->setFixedSize(40, 40);
-    closeBtn->setCursor(Qt::PointingHandCursor);
-    closeBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: transparent;
-            color: white;
-            border: none;
-            font-size: 24px;
-            font-weight: bold;
-        }
-        QPushButton:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-        }
-    )");
-    connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
-    headerLayout->addWidget(closeBtn);
-
     mainLayout->addWidget(header);
 
     // Scroll Area pour le formulaire

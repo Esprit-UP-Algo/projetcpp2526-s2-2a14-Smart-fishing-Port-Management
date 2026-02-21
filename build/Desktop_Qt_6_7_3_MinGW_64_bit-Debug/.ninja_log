@@ -1,10 +1,17 @@
 # ninja log v6
-4	582	7922495860568881	gestion_peche_autogen/timestamp	e242d22cc7ac9b9b
-4	582	7922495860568881	gestion_peche_autogen/mocs_compilation.cpp	e242d22cc7ac9b9b
-4	582	7922495860568881	C:/Users/Dhafer/Documents/gestiondespeches/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/gestion_peche_autogen/timestamp	e242d22cc7ac9b9b
-4	582	7922495860568881	C:/Users/Dhafer/Documents/gestiondespeches/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/gestion_peche_autogen/mocs_compilation.cpp	e242d22cc7ac9b9b
-588	1964	7922495861279272	CMakeFiles/gestion_peche.dir/main.cpp.obj	3f8c6a4462c910c0
-586	2056	7922495861259261	CMakeFiles/gestion_peche.dir/gestion_peche_autogen/mocs_compilation.cpp.obj	f9ab7c46618b2a6b
-593	2070	7922495861329658	CMakeFiles/gestion_peche.dir/Pechedialog.cpp.obj	4d6702025b34f8aa
-590	2337	7922495861309341	CMakeFiles/gestion_peche.dir/Pechewindow.cpp.obj	e0a8d43e3a7c582c
+35	897	7922519354853707	gestion_peche_autogen/timestamp	e242d22cc7ac9b9b
+35	897	7922519354853707	gestion_peche_autogen/mocs_compilation.cpp	e242d22cc7ac9b9b
+35	897	7922519354853707	C:/Users/Dhafer/Documents/gestiondespeches/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/gestion_peche_autogen/mocs_compilation.cpp	e242d22cc7ac9b9b
+35	897	7922519354853707	C:/Users/Dhafer/Documents/gestiondespeches/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/gestion_peche_autogen/timestamp	e242d22cc7ac9b9b
+905	2957	7922519355575590	CMakeFiles/gestion_peche.dir/Pechedialog.cpp.obj	4d6702025b34f8aa
+903	3402	7922519355555502	CMakeFiles/gestion_peche.dir/Pechewindow.cpp.obj	e0a8d43e3a7c582c
+900	2599	7922519355536388	CMakeFiles/gestion_peche.dir/main.cpp.obj	3f8c6a4462c910c0
+898	3182	7922519355511281	CMakeFiles/gestion_peche.dir/gestion_peche_autogen/mocs_compilation.cpp.obj	f9ab7c46618b2a6b
 2337	2584	7922495878772790	gestion_peche.exe	ea421855077e9f2e
+917	2907	7922519355705272	CMakeFiles/gestion_peche.dir/loginwindow.cpp.obj	6ac30ce2d006505
+914	3034	7922519355675268	CMakeFiles/gestion_peche.dir/addfrigodialog.cpp.obj	2a9e382efef70b2e
+907	3116	7922519355605586	CMakeFiles/gestion_peche.dir/Employeedialog.cpp.obj	8b518873bc80459e
+912	3216	7922519355655282	CMakeFiles/gestion_peche.dir/Frigowindow.cpp.obj	d45ed50c11aee34d
+910	3434	7922519355620135	CMakeFiles/gestion_peche.dir/Employeewindow.cpp.obj	4895debcb78e788a
+123	6815	7932876328558660	CMakeFiles/gestion_peche.dir/mainwindow.cpp.obj	bac625d67874571f
+6815	11638	7932876395477223	gestion_peche.exe	8e9aab46053d395e

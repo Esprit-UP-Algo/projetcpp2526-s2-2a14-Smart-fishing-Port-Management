@@ -1,5 +1,5 @@
 #include "mainwindow.h"
-#include "employeewindow.h"
+#include "Employeewindow.h"
 #include "Frigowindow.h"
 #include "pechewindow.h"
 #include "loginwindow.h"
@@ -10,8 +10,9 @@
 #include <QGraphicsOpacityEffect>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr)
+    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr), livraisonPage(nullptr), docksPage(nullptr)
 {
+
     setupUi();
 }
 
@@ -84,25 +85,25 @@ QFrame* MainWindow::createSidebar()
     logoLayout->setContentsMargins(20, 15, 20, 15);
 
     QFrame* logoContainer = new QFrame();
-    logoContainer->setFixedSize(180, 100);
+    logoContainer->setFixedSize(220, 100);
     logoContainer->setStyleSheet(R"(
         QFrame {
-            background-color: #d1d5db;
-            border-radius: 22px;
+            background-color: transparent;
+            border-radius: 0px;
         }
     )");
 
     QVBoxLayout* containerLayout = new QVBoxLayout(logoContainer);
-    containerLayout->setContentsMargins(10, 10, 10, 10);
+    containerLayout->setContentsMargins(5, 5, 5, 5);
     containerLayout->setAlignment(Qt::AlignCenter);
 
     QLabel* logoLabel = new QLabel();
-    QPixmap logoPix("C:/images/logo.png");
+    QPixmap logoPix(":/images/images/logo.png");
 
     if (!logoPix.isNull()) {
-        logoLabel->setPixmap(logoPix.scaled(100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        logoLabel->setPixmap(logoPix.scaled(200, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         logoLabel->setAlignment(Qt::AlignCenter);
-        qDebug() << "Logo chargé depuis: C:/images/logo.png";
+        qDebug() << "Logo chargé depuis: :/images/images/logo.png";
     } else {
         logoLabel->setText("🚢");
         logoLabel->setStyleSheet(R"(
@@ -112,7 +113,7 @@ QFrame* MainWindow::createSidebar()
             }
         )");
         logoLabel->setAlignment(Qt::AlignCenter);
-        qDebug() << "Attention: Logo non trouvé à C:/images/logo.png - utilisation emoji";
+        qDebug() << "Attention: Logo non trouvé à :/images/images/logo.png - utilisation emoji";
     }
 
     logoLabel->setStyleSheet("background: transparent;");
@@ -131,8 +132,12 @@ QFrame* MainWindow::createSidebar()
     connect(dashboardBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToDashboard);
     navLayout->addWidget(dashboardBtn);
 
-    navLayout->addWidget(createNavButton("⛵", "Bateaux"));
+    bateauxBtn = createNavButton("⛵", "Bateaux");
+    connect(bateauxBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToBateaux);
+    navLayout->addWidget(bateauxBtn);
+
     pechesBtn = createNavButton("🐟", "Pêche");
+
     connect(pechesBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToPeches);
     navLayout->addWidget(pechesBtn);
 
@@ -143,6 +148,14 @@ QFrame* MainWindow::createSidebar()
     frigosBtn = createNavButton("🧊", "Frigos");
     connect(frigosBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToFrigos);
     navLayout->addWidget(frigosBtn);
+
+    livraisonBtn = createNavButton("🚚", "Livraison");
+    connect(livraisonBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToLivraison);
+    navLayout->addWidget(livraisonBtn);
+
+    docksBtn = createNavButton("⚓", "Docks");
+    connect(docksBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToDocks);
+    navLayout->addWidget(docksBtn);
 
     navLayout->addWidget(createNavButton("⚙️", "Paramètres"));
     navLayout->addStretch();
@@ -390,6 +403,92 @@ void MainWindow::onNavigateToPeches()
         switchPage(stackedWidget->indexOf(pechePage));
     }
 }
+
+void MainWindow::onNavigateToBateaux()
+{
+    setActiveButton(bateauxBtn);
+
+    // Créer la page Bateaux si elle n'existe pas
+    if (!bateauPage) {
+        BateauWindow* batWindow = new BateauWindow();
+        batWindow->hide(); // Important : ne pas afficher la fenêtre complète
+
+        // Extraire SEULEMENT le widget de contenu (partie droite)
+        QWidget* centralWidget = batWindow->centralWidget();
+        QHBoxLayout* hLayout = qobject_cast<QHBoxLayout*>(centralWidget->layout());
+
+        if (hLayout && hLayout->count() >= 2) {
+            // Le deuxième élément est le contenu (après la sidebar)
+            QLayoutItem* contentItem = hLayout->itemAt(1);
+            if (contentItem) {
+                bateauPage = contentItem->widget();
+                if (bateauPage) {
+                    bateauPage->setParent(nullptr); // Détacher du layout original
+                    stackedWidget->addWidget(bateauPage);
+                }
+            }
+        }
+        // Nettoyer la fenêtre temporaire
+        // batWindow->deleteLater(); // Attention: cela pourrait supprimer le widget enfant si mal géré
+        // Dans ce cas, comme on a reparenté le widget, on peut supprimer la fenêtre conteneur vide
+        // Mais par sécurité on peut le garder en mémoire ou le supprimer après
+    }
+
+    if (bateauPage) {
+        switchPage(stackedWidget->indexOf(bateauPage));
+    }
+}
+
+void MainWindow::onNavigateToLivraison()
+{
+    setActiveButton(livraisonBtn);
+
+    if (!livraisonPage) {
+        LivraisonWindow* livWindow = new LivraisonWindow();
+        livWindow->hide();
+
+        QWidget* central = livWindow->centralWidget();
+        if (central) {
+            livraisonPage = central;
+            livraisonPage->setParent(nullptr);
+            stackedWidget->addWidget(livraisonPage);
+        }
+    }
+
+    if (livraisonPage) {
+        switchPage(stackedWidget->indexOf(livraisonPage));
+    }
+}
+
+void MainWindow::onNavigateToDocks()
+{
+    setActiveButton(docksBtn);
+
+    if (!docksPage) {
+        DocksWindow* docksWindow = new DocksWindow();
+        docksWindow->hide();
+
+        QWidget* central = docksWindow->centralWidget();
+        QHBoxLayout* hLayout = qobject_cast<QHBoxLayout*>(central->layout());
+
+        if (hLayout && hLayout->count() >= 2) {
+            // Index 0 is sidebar, index 1 is content
+            QLayoutItem* contentItem = hLayout->itemAt(1);
+            if (contentItem) {
+                docksPage = contentItem->widget();
+                if (docksPage) {
+                    docksPage->setParent(nullptr);
+                    stackedWidget->addWidget(docksPage);
+                }
+            }
+        }
+    }
+
+    if (docksPage) {
+        switchPage(stackedWidget->indexOf(docksPage));
+    }
+}
+
 
 void MainWindow::onLogout()
 {

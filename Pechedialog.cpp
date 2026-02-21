@@ -24,7 +24,7 @@ PecheDialog::~PecheDialog()
 
 void PecheDialog::setupUi()
 {
-    setWindowTitle("Ajouter / Modifier Lot de Pêche");
+    setWindowTitle(isEdit ? "Modifier un Lot de Pêche" : "Ajouter un Lot de Pêche");
     setFixedSize(700, 600);
     setModal(true);
 
@@ -40,42 +40,27 @@ void PecheDialog::setupUi()
 
     // Header
     QFrame* header = new QFrame();
-    header->setFixedHeight(80);
+    header->setFixedHeight(100);
     header->setStyleSheet(R"(
         QFrame {
             background-color: #5D9CEC;
             padding: 20px;
         }
     )");
-    QHBoxLayout* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(30, 20, 30, 20);
+    QVBoxLayout* headerVLayout = new QVBoxLayout(header);
+    headerVLayout->setContentsMargins(30, 10, 30, 10);
+    headerVLayout->setSpacing(5);
 
     QLabel* title = new QLabel(isEdit ? "Modifier Lot de Pêche" : "Ajouter Lot de Pêche");
     QFont titleFont("Segoe UI", 18, QFont::Bold);
     title->setFont(titleFont);
     title->setStyleSheet("color: white;");
-    headerLayout->addWidget(title);
+    headerVLayout->addWidget(title);
 
-    headerLayout->addStretch();
-
-    QPushButton* closeBtn = new QPushButton("✕");
-    closeBtn->setFixedSize(40, 40);
-    closeBtn->setCursor(Qt::PointingHandCursor);
-    closeBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: transparent;
-            color: white;
-            border: none;
-            font-size: 24px;
-            font-weight: bold;
-        }
-        QPushButton:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-        }
-    )");
-    connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
-    headerLayout->addWidget(closeBtn);
+    QLabel* subTitle = new QLabel(isEdit ? "✏️  Modifier les informations du lot" : "📋  Informations du lot de pêche");
+    subTitle->setFont(QFont("Segoe UI", 11));
+    subTitle->setStyleSheet("color: rgba(255, 255, 255, 0.9);");
+    headerVLayout->addWidget(subTitle);
 
     mainLayout->addWidget(header);
 
@@ -91,6 +76,8 @@ void PecheDialog::setupUi()
     QVBoxLayout* formLayout = new QVBoxLayout(content);
     formLayout->setSpacing(25);
     formLayout->setContentsMargins(40, 40, 40, 40);
+
+    formLayout->addSpacing(5);
 
     QFont labelFont("Segoe UI", 12, QFont::Medium);
     QFont inputFont("Segoe UI", 12);

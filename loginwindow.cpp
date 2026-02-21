@@ -107,14 +107,14 @@ QFrame* LoginWindow::createLoginCard()
     // Mac: "/Users/username/Pictures/logo.png"
     // Relative: "./images/logo.png"
 
-    QString logoPath = "C:/Users/manne/OneDrive/Documents/logo3.png";  // ← CHANGE THIS PATH
+    QString logoPath = ":/images/images/logo.png";  // Loaded from resources
 
     // ============================================
     // LOGO DISPLAY OPTIONS
     // ============================================
     // Set this to true if your logo already includes the "PortFlow" text
     // Set this to false if your logo is just an icon and needs text below
-    bool logoHasText = false;  // ← CHANGED TO FALSE: logo is icon only, add text below
+    bool logoHasText = true;  // ← CHANGED TO TRUE: logo includes text
 
     QPixmap logoPix(logoPath);
     if (!logoPix.isNull()) {

@@ -1,5 +1,5 @@
-#include "pechewindow.h"
-#include "pechedialog.h"
+#include "bateauwindow.h"
+#include "bateaudialog.h"
 #include "StatisticsDialog.h"
 #include <QDebug>
 #include <QMessageBox>
@@ -13,30 +13,25 @@
 #include <QDateTime>
 #include <QScrollArea>
 #include <QSizePolicy>
-#include <QSet>
 #include <algorithm>
 
-PecheWindow::PecheWindow(QWidget *parent)
+BateauWindow::BateauWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     setupUi();
-
-    peches.append({"LOT001", "REF-2025-001", "Sardine",  "450", "15/01/2025"});
-    peches.append({"LOT002", "REF-2025-002", "Thon",     "280", "16/01/2025"});
-    peches.append({"LOT003", "REF-2025-003", "Merlan",   "320", "17/01/2025"});
-    peches.append({"LOT004", "REF-2025-004", "Crevette", "150", "18/01/2025"});
-
+    bateaux.append({"B001","Neptune",  "TN-001","50","20","Ahmed Ben Ali",   "Au port",       "15/01/2025","Oui"});
+    bateaux.append({"B002","Poséidon","TN-002","70","25","Mohamed Trabelsi","En mer",         "10/01/2025","Oui"});
+    bateaux.append({"B003","Triton",  "TN-003","45","18","Karim Gharbi",    "En maintenance","20/12/2024","Non"});
     populateTable();
 }
-
-PecheWindow::~PecheWindow() {}
+BateauWindow::~BateauWindow() {}
 
 // ═══════════════════════════════════════════════════════════
 //  Top-level UI
 // ═══════════════════════════════════════════════════════════
-void PecheWindow::setupUi()
+void BateauWindow::setupUi()
 {
-    setWindowTitle("PortFlow - Gestion des Pêches");
+    setWindowTitle("PortFlow - Gestion des Bateaux");
     setMinimumSize(1000, 650);
     setStyleSheet("QMainWindow { background-color: #F0F4F8; }");
 
@@ -53,7 +48,7 @@ void PecheWindow::setupUi()
 // ═══════════════════════════════════════════════════════════
 //  Sidebar
 // ═══════════════════════════════════════════════════════════
-QFrame* PecheWindow::createSidebar()
+QFrame* BateauWindow::createSidebar()
 {
     QFrame* sidebar = new QFrame();
     sidebar->setFixedWidth(240);
@@ -88,7 +83,7 @@ QFrame* PecheWindow::createSidebar()
     if (!px.isNull())
         logoLbl->setPixmap(px.scaled(80,80,Qt::KeepAspectRatio,Qt::SmoothTransformation));
     else {
-        logoLbl->setText("🐟");
+        logoLbl->setText("⛵");
         logoLbl->setStyleSheet("font-size:42px;");
     }
     logoLbl->setAlignment(Qt::AlignCenter);
@@ -112,8 +107,8 @@ QFrame* PecheWindow::createSidebar()
     navLay->setContentsMargins(12, 12, 12, 12);
 
     navLay->addWidget(createNavButton("🏠", "Tableau de bord"));
-    navLay->addWidget(createNavButton("⛵", "Bateaux"));
-    navLay->addWidget(createNavButton("🐟", "Pêche", true));
+    navLay->addWidget(createNavButton("⛵", "Bateaux", true));
+    navLay->addWidget(createNavButton("🐟", "Pêche"));
     navLay->addWidget(createNavButton("👥", "Employés"));
     navLay->addWidget(createNavButton("🧊", "Frigos"));
     navLay->addWidget(createNavButton("⚙️", "Paramètres"));
@@ -124,8 +119,8 @@ QFrame* PecheWindow::createSidebar()
     return sidebar;
 }
 
-QPushButton* PecheWindow::createNavButton(const QString& icon, const QString& text,
-                                          bool isActive, bool isLogout)
+QPushButton* BateauWindow::createNavButton(const QString& icon, const QString& text,
+                                           bool isActive, bool isLogout)
 {
     QPushButton* btn = new QPushButton(icon + "  " + text);
     btn->setFont(QFont("Segoe UI", 11, isActive ? QFont::Bold : QFont::Medium));
@@ -139,7 +134,7 @@ QPushButton* PecheWindow::createNavButton(const QString& icon, const QString& te
                 border-radius:10px;text-align:left;padding-left:16px;}
             QPushButton:hover{background:rgba(239,68,68,0.75);}
         )");
-        connect(btn, &QPushButton::clicked, this, &PecheWindow::onLogout);
+        connect(btn, &QPushButton::clicked, this, &BateauWindow::onLogout);
     } else if (isActive) {
         btn->setStyleSheet(R"(
             QPushButton{background:rgba(255,255,255,0.22);color:white;border:none;
@@ -158,8 +153,9 @@ QPushButton* PecheWindow::createNavButton(const QString& icon, const QString& te
 // ═══════════════════════════════════════════════════════════
 //  Content area (scrollable)
 // ═══════════════════════════════════════════════════════════
-QWidget* PecheWindow::createContentArea()
+QWidget* BateauWindow::createContentArea()
 {
+    /* Outer scroll area so nothing clips when window is small */
     QScrollArea* scroll = new QScrollArea();
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
@@ -183,7 +179,7 @@ QWidget* PecheWindow::createContentArea()
 }
 
 // ─── Title row ────────────────────────────────────────────
-QFrame* PecheWindow::createHeader()
+QFrame* BateauWindow::createHeader()
 {
     QFrame* hdr = new QFrame();
     hdr->setStyleSheet("background:transparent;");
@@ -194,10 +190,10 @@ QFrame* PecheWindow::createHeader()
 
     /* Title + subtitle */
     QVBoxLayout* titleCol = new QVBoxLayout();
-    QLabel* title = new QLabel("Gestion des Pêches");
+    QLabel* title = new QLabel("Gestion des Bateaux");
     title->setFont(QFont("Segoe UI", 26, QFont::Bold));
     title->setStyleSheet("color:#1e3a5f;");
-    QLabel* sub = new QLabel("Journal des captures, lots et catégories");
+    QLabel* sub = new QLabel("Suivi de la flotte, états et disponibilités");
     sub->setFont(QFont("Segoe UI", 10));
     sub->setStyleSheet("color:#6b7280;");
     titleCol->addWidget(title);
@@ -221,11 +217,11 @@ QFrame* PecheWindow::createHeader()
 
     QPushButton* statsBtn = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
     QPushButton* pdfBtn   = makeBtn("📄  Exporter PDF",  "#059669", "#047857");
-    QPushButton* addBtn   = makeBtn("➕  Nouveau Lot",     "#2563EB", "#1D4ED8");
+    QPushButton* addBtn   = makeBtn("➕  Nouveau Bateau",  "#2563EB", "#1D4ED8");
 
-    connect(statsBtn, &QPushButton::clicked, this, &PecheWindow::onShowStatistics);
-    connect(pdfBtn,   &QPushButton::clicked, this, &PecheWindow::onGeneratePDF);
-    connect(addBtn,   &QPushButton::clicked, this, &PecheWindow::onAddPeche);
+    connect(statsBtn, &QPushButton::clicked, this, &BateauWindow::onShowStatistics);
+    connect(pdfBtn,   &QPushButton::clicked, this, &BateauWindow::onGeneratePDF);
+    connect(addBtn,   &QPushButton::clicked, this, &BateauWindow::onAddBateau);
 
     lay->addWidget(statsBtn);
     lay->addWidget(pdfBtn);
@@ -234,7 +230,7 @@ QFrame* PecheWindow::createHeader()
 }
 
 // ─── Filter / Sort toolbar ─────────────────────────────────
-QFrame* PecheWindow::createToolbar()
+QFrame* BateauWindow::createToolbar()
 {
     QFrame* bar = new QFrame();
     bar->setStyleSheet(R"(
@@ -253,7 +249,7 @@ QFrame* PecheWindow::createToolbar()
 
     /* Search input */
     searchInput = new QLineEdit();
-    searchInput->setPlaceholderText("Rechercher un lot par catégorie, référence...");
+    searchInput->setPlaceholderText("Rechercher un bateau par nom, immatriculation...");
     searchInput->setFont(QFont("Segoe UI", 11));
     searchInput->setFixedHeight(45);
     searchInput->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -270,7 +266,7 @@ QFrame* PecheWindow::createToolbar()
             background:white;
         }
     )");
-    connect(searchInput, &QLineEdit::textChanged, this, &PecheWindow::onSearch);
+    connect(searchInput, &QLineEdit::textChanged, this, &BateauWindow::onSearch);
     lay->addWidget(searchInput, 3);
 
     /* Divider */
@@ -291,12 +287,10 @@ QFrame* PecheWindow::createToolbar()
     sortCombo->setMinimumWidth(200);
     sortCombo->addItems({
         "Défaut",
-        "Quantité ↑",
-        "Quantité ↓",
-        "Date ↑ (ancienne)",
-        "Date ↓ (récente)",
-        "Catégorie ↑ (A→Z)",
-        "Catégorie ↓ (Z→A)"
+        "État (Croissant)",
+        "État (Décroissant)",
+        "Capacité (Croissante)",
+        "Capacité (Décroissante)"
     });
     sortCombo->setStyleSheet(R"(
         QComboBox{
@@ -323,14 +317,15 @@ QFrame* PecheWindow::createToolbar()
             padding: 8px;
         }
     )");
-    connect(sortCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PecheWindow::onSort);
+    connect(sortCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &BateauWindow::onSort);
     lay->addWidget(sortCombo, 2);
 
     return bar;
 }
 
 // ─── Table card ────────────────────────────────────────────
-QFrame* PecheWindow::createTableCard()
+QFrame* BateauWindow::createTableCard()
 {
     QFrame* card = new QFrame();
     card->setStyleSheet(R"(
@@ -365,17 +360,22 @@ QFrame* PecheWindow::createTableCard()
     return card;
 }
 
-void PecheWindow::setupTable()
+void BateauWindow::setupTable()
 {
     table = new QTableWidget();
-    table->setColumnCount(5);
+    table->setColumnCount(9);
     table->setHorizontalHeaderLabels({
-        "Référence", "Catégorie", "Quantité (Kg)", "Date de Capture", "Actions"
+        "Nom","Immatriculation","Capacité (t)","Longueur (m)",
+        "Propriétaire","État","Dernière Maint.","Disponible","Actions"
     });
 
+    /* Responsive columns */
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     table->horizontalHeader()->setStretchLastSection(false);
+
+    // Let Nom and Propriétaire stretch, others fixed ratio
     table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
 
     table->verticalHeader()->setVisible(false);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -384,9 +384,12 @@ void PecheWindow::setupTable()
     table->setShowGrid(true);
     table->setAlternatingRowColors(false);
     table->setFrameShape(QFrame::NoFrame);
+    table->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    table->horizontalHeader()->setFont(QFont("Segoe UI", 11, QFont::Bold));
+    QFont hFont("Segoe UI", 11, QFont::Bold);
+    table->horizontalHeader()->setFont(hFont);
     table->horizontalHeader()->setFixedHeight(50);
+    table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     table->setStyleSheet(R"(
         QTableWidget {
@@ -419,112 +422,135 @@ void PecheWindow::setupTable()
         }
     )");
 
-    table->setColumnWidth(1, 160);
-    table->setColumnWidth(2, 160);
-    table->setColumnWidth(3, 180);
-    table->setColumnWidth(4, 100);
+    table->setColumnWidth(1, 130);
+    table->setColumnWidth(2, 100);
+    table->setColumnWidth(3, 100);
+    table->setColumnWidth(5, 140);
+    table->setColumnWidth(6, 130);
+    table->setColumnWidth(7, 110);
+    table->setColumnWidth(8, 100);
 }
 
 // ═══════════════════════════════════════════════════════════
 //  Populate
 // ═══════════════════════════════════════════════════════════
-void PecheWindow::populateTable(const QString& filterText)
+void BateauWindow::populateTable(const QString& filterText)
 {
     table->setRowCount(0);
     QFont cellFont("Segoe UI", 11);
 
     QVector<int> idx;
-    for (int i = 0; i < peches.size(); ++i) {
-        const Peche& p = peches[i];
+    for (int i = 0; i < bateaux.size(); ++i) {
+        const Bateau& b = bateaux[i];
         if (!filterText.isEmpty()) {
             QString f = filterText.toLower();
-            if (!p.reference.toLower().contains(f) &&
-                !p.espece.toLower().contains(f) &&
-                !p.dateCapture.toLower().contains(f))
+            if (!b.nomBateau.toLower().contains(f) &&
+                !b.immatriculation.toLower().contains(f) &&
+                !b.proprietaire.toLower().contains(f))
                 continue;
         }
         idx.append(i);
     }
 
     int si = sortCombo ? sortCombo->currentIndex() : 0;
-    auto parseD = [](const QString& d) { return QDate::fromString(d, "dd/MM/yyyy"); };
-
-    if (si == 1) std::sort(idx.begin(),idx.end(),[this](int a,int b){ return peches[a].quantiteKg.toDouble()<peches[b].quantiteKg.toDouble(); });
-    else if (si==2) std::sort(idx.begin(),idx.end(),[this](int a,int b){ return peches[a].quantiteKg.toDouble()>peches[b].quantiteKg.toDouble(); });
-    else if (si==3) std::sort(idx.begin(),idx.end(),[this,parseD](int a,int b){ return parseD(peches[a].dateCapture)<parseD(peches[b].dateCapture); });
-    else if (si==4) std::sort(idx.begin(),idx.end(),[this,parseD](int a,int b){ return parseD(peches[a].dateCapture)>parseD(peches[b].dateCapture); });
-    else if (si==5) std::sort(idx.begin(),idx.end(),[this](int a,int b){ return peches[a].espece < peches[b].espece; });
-    else if (si==6) std::sort(idx.begin(),idx.end(),[this](int a,int b){ return peches[a].espece > peches[b].espece; });
+    if (si == 1) std::sort(idx.begin(),idx.end(),[this](int a,int b){ return bateaux[a].etatBateau < bateaux[b].etatBateau; });
+    else if (si==2) std::sort(idx.begin(),idx.end(),[this](int a,int b){ return bateaux[a].etatBateau > bateaux[b].etatBateau; });
+    else if (si==3) std::sort(idx.begin(),idx.end(),[this](int a,int b){ return bateaux[a].capacitePeche.toInt()<bateaux[b].capacitePeche.toInt(); });
+    else if (si==4) std::sort(idx.begin(),idx.end(),[this](int a,int b){ return bateaux[a].capacitePeche.toInt()>bateaux[b].capacitePeche.toInt(); });
 
     for (int i : idx) {
-        const Peche& p = peches[i];
+        const Bateau& b = bateaux[i];
         int r = table->rowCount();
         table->insertRow(r);
         table->setRowHeight(r, 58);
 
-        auto it = [&](const QString& t) { QTableWidgetItem* item = new QTableWidgetItem(t); item->setFont(cellFont); return item; };
-        table->setItem(r,0,it(p.reference));
+        auto item = [&](const QString& t) {
+            QTableWidgetItem* it = new QTableWidgetItem(t);
+            it->setFont(cellFont);
+            return it;
+        };
+        table->setItem(r,0,item(b.nomBateau));
         table->item(r,0)->setData(Qt::UserRole, i);
-        table->setCellWidget(r, 1, createEspeceBadge(p.espece));
-        
-        QTableWidgetItem* qItem = it(p.quantiteKg + " Kg");
-        qItem->setFont(QFont("Segoe UI", 10, QFont::Bold));
-        qItem->setForeground(QBrush(QColor("#166534")));
-        table->setItem(r, 2, qItem);
-
-        table->setItem(r, 3, it(p.dateCapture));
-        table->setCellWidget(r, 4, createActionButtons(i));
+        table->setItem(r,1,item(b.immatriculation));
+        table->setItem(r,2,item(b.capacitePeche+" t"));
+        table->setItem(r,3,item(b.longueur+" m"));
+        table->setItem(r,4,item(b.proprietaire));
+        table->setCellWidget(r,5,createStatusBadge(b.etatBateau));
+        table->setItem(r,6,item(b.dateDerniereMaintenance));
+        table->setCellWidget(r,7,createDisponibleBadge(b.disponible));
+        table->setCellWidget(r,8,createActionButtons(i));
     }
 }
 
-QWidget* PecheWindow::createEspeceBadge(const QString& esp)
+// ═══════════════════════════════════════════════════════════
+//  Badges & action buttons
+// ═══════════════════════════════════════════════════════════
+QWidget* BateauWindow::createStatusBadge(const QString& etat)
 {
     QWidget* w = new QWidget(); QHBoxLayout* l = new QHBoxLayout(w);
     l->setContentsMargins(4,0,4,0); l->setAlignment(Qt::AlignCenter);
-    QLabel* b = new QLabel(esp);
+    QLabel* b = new QLabel(etat);
     b->setFont(QFont("Segoe UI",9,QFont::Medium));
     b->setFixedHeight(28); b->setAlignment(Qt::AlignCenter);
-    
-    static const QMap<QString, QString> ss = {
-        {"Sardine",  "background:#dbeafe;color:#1e40af;"},
-        {"Thon",     "background:#fee2e2;color:#991b1b;"},
-        {"Merlan",   "background:#fef9c3;color:#854d0e;"},
-        {"Crevette", "background:#fce7f3;color:#9f1239;"},
-        {"Saumon",   "background:#ffedd5;color:#9a3412;"},
-    };
-    b->setStyleSheet(QString("QLabel{%1 border-radius:7px; padding:2px 12px;}").arg(ss.value(esp, "background:#f1f5f9;color:#475569;")));
+    if (etat=="En mer")
+        b->setStyleSheet("QLabel{background:#dbeafe;color:#1e40af;border-radius:7px;padding:2px 12px;}");
+    else if (etat=="Au port")
+        b->setStyleSheet("QLabel{background:#dcfce7;color:#166534;border-radius:7px;padding:2px 12px;}");
+    else
+        b->setStyleSheet("QLabel{background:#fef9c3;color:#854d0e;border-radius:7px;padding:2px 12px;}");
     l->addWidget(b); return w;
 }
 
-QWidget* PecheWindow::createActionButtons(int row)
+QWidget* BateauWindow::createDisponibleBadge(const QString& dispo)
+{
+    QWidget* w = new QWidget(); QHBoxLayout* l = new QHBoxLayout(w);
+    l->setContentsMargins(4,0,4,0); l->setAlignment(Qt::AlignCenter);
+    QLabel* b = new QLabel(dispo=="Oui" ? "✔  Oui" : "✘  Non");
+    b->setFont(QFont("Segoe UI",9,QFont::Medium));
+    b->setFixedHeight(28); b->setAlignment(Qt::AlignCenter);
+    b->setStyleSheet(dispo=="Oui"
+        ? "QLabel{background:#dcfce7;color:#166534;border-radius:7px;padding:2px 12px;}"
+        : "QLabel{background:#fee2e2;color:#991b1b;border-radius:7px;padding:2px 12px;}");
+    l->addWidget(b); return w;
+}
+
+QWidget* BateauWindow::createActionButtons(int row)
 {
     QWidget* w = new QWidget(); QHBoxLayout* l = new QHBoxLayout(w);
     l->setContentsMargins(4,0,4,0); l->setSpacing(6); l->setAlignment(Qt::AlignCenter);
+
     auto mk = [](const QString& ic, const QString& bg, const QString& hov) {
         QPushButton* b = new QPushButton(ic);
         b->setFixedSize(32,32); b->setCursor(Qt::PointingHandCursor);
-        b->setStyleSheet(QString("QPushButton{background:%1;border:none;border-radius:8px;font-size:14px;} QPushButton:hover{background:%2;}").arg(bg,hov));
+        b->setStyleSheet(QString(
+            "QPushButton{background:%1;border:none;border-radius:8px;font-size:14px;}"
+            "QPushButton:hover{background:%2;}").arg(bg,hov));
         return b;
     };
     QPushButton* e = mk("✏️","#fef9c3","#fde68a");
     QPushButton* d = mk("🗑️","#fee2e2","#fecaca");
-    connect(e,&QPushButton::clicked,[this,row](){ onEditPeche(row); });
-    connect(d,&QPushButton::clicked,[this,row](){ onDeletePeche(row); });
+    connect(e,&QPushButton::clicked,[this,row](){ onEditBateau(row); });
+    connect(d,&QPushButton::clicked,[this,row](){ onDeleteBateau(row); });
     l->addWidget(e); l->addWidget(d);
     return w;
 }
 
-QString PecheWindow::generatePecheId() {
-    int mx=0; for(const Peche&p:peches){ int n=p.idLot.mid(3).toInt(); if(n>mx)mx=n; }
-    return QString("LOT%1").arg(mx+1, 3, 10, QChar('0'));
+// ═══════════════════════════════════════════════════════════
+//  Slots
+// ═══════════════════════════════════════════════════════════
+QString BateauWindow::generateBateauId()
+{
+    int mx=0;
+    for(const Bateau&b:bateaux){ int n=b.idBateau.mid(1).toInt(); if(n>mx)mx=n; }
+    return QString("B%1").arg(mx+1,3,10,QChar('0'));
 }
 
-void PecheWindow::onSearch(const QString& t) { populateTable(t); }
-void PecheWindow::onSort(int) { populateTable(searchInput->text()); }
+void BateauWindow::onSearch(const QString& t){ populateTable(t); }
+void BateauWindow::onSort(int){ populateTable(searchInput ? searchInput->text() : ""); }
 
-void PecheWindow::onGeneratePDF()
+void BateauWindow::onGeneratePDF()
 {
-    QString path = QFileDialog::getSaveFileName(this,"Exporter PDF","justificatif_peches.pdf","PDF (*.pdf)");
+    QString path = QFileDialog::getSaveFileName(this,"Enregistrer PDF","rapport_bateaux.pdf","PDF (*.pdf)");
     if(path.isEmpty()) return;
 
     QPdfWriter w(path);
@@ -537,67 +563,95 @@ void PecheWindow::onGeneratePDF()
     const int W=w.width();
     int y=40;
 
-    p.setPen(QColor("#1e40af")); p.setFont(QFont("Segoe UI",20,QFont::Bold));
-    p.drawText(0,y,W,50,Qt::AlignHCenter,"Justificatif de Pêche"); y+=55;
-    p.setPen(QColor("#6b7280")); p.drawText(0,y,W,20,Qt::AlignHCenter,"Généré le "+QDateTime::currentDateTime().toString("dd/MM/yyyy HH:mm")); y+=35;
-    p.setPen(QPen(QColor("#3b82f6"),3)); p.drawLine(0,y,W,y); y+=24;
+    /* Title */
+    p.setPen(QColor("#1e40af")); p.setFont(QFont("Segoe UI",22,QFont::Bold));
+    p.drawText(0,y,W,50,Qt::AlignHCenter,"Rapport — Bateaux en Maintenance");
+    y+=55;
+    p.setPen(QColor("#6b7280")); p.setFont(QFont("Segoe UI",10));
+    p.drawText(0,y,W,20,Qt::AlignHCenter,
+        "Généré le "+QDateTime::currentDateTime().toString("dd/MM/yyyy à hh:mm"));
+    y+=35;
+    p.setPen(QPen(QColor("#3b82f6"),3)); p.drawLine(0,y,W,y); y+=22;
 
-    /* Stats summary */
-    double tot=0; QSet<QString> dts; for(const Peche&cp:peches){ tot+=cp.quantiteKg.toDouble(); dts.insert(cp.dateCapture); }
-    p.setPen(QColor("#1e3a5f")); p.setFont(QFont("Segoe UI",12,QFont::Bold));
-    p.drawText(0, y, W, 30, Qt::AlignLeft, "  📊  Statistiques Globales :"); y+=35;
-    p.setPen(QColor("#1f2937")); p.setFont(QFont("Segoe UI",10));
-    p.drawText(20, y, "Total captures : " + QString::number(peches.size()));
-    p.drawText(W/2, y, "Poids total : " + QString::number(tot,'f',1) + " Kg"); y+=25;
-    p.drawText(20, y, "Moyenne/jour : " + QString::number(tot/qMax(1,dts.size()),'f',1) + " Kg"); y+=30;
-
-    /* Table */
-    QStringList hd={"Référence","Catégorie","Quantité","Date"};
-    QList<int> cw={W/3, W/4, W/5, W/4};
-    int rh=34; p.setBrush(QColor("#1e40af")); p.setPen(Qt::NoPen); p.drawRect(0,y,W,rh);
+    /* Header row */
+    QStringList hd={"Nom","Immatriculation","Capacité (t)","État","Disponible","Dernière Maint."};
+    QList<int> cw={ W/5, W/5, W/8, W/6, W/7, W/6 };
+    {
+        int left=W; for(int c:cw) left-=c;
+        cw[0]+=left;
+    }
+    int rh=34;
+    p.setBrush(QColor("#1e40af")); p.setPen(Qt::NoPen); p.drawRect(0,y,W,rh);
     p.setPen(Qt::white); p.setFont(QFont("Segoe UI",10,QFont::Bold));
-    int cx=0; for(int c=0;c<hd.size();++c){ p.drawText(cx+8,y,cw[c]-8,rh,Qt::AlignVCenter,hd[c]);cx+=cw[c]; }
+    int cx=0;
+    for(int c=0;c<hd.size();++c){ p.drawText(cx+8,y,cw[c]-8,rh,Qt::AlignVCenter,hd[c]);cx+=cw[c]; }
     y+=rh;
 
+    /* Rows */
     p.setFont(QFont("Segoe UI",10)); bool alt=false;
-    for(const Peche&pe:peches){
+    int count = 0;
+    for(const Bateau&b:bateaux){
+        if (b.etatBateau != "En maintenance") continue;
+        count++;
+
         if(y+rh>w.height()-40){w.newPage();y=40;}
-        p.setBrush(alt?QColor("#f0f9ff"):Qt::white); p.setPen(Qt::NoPen); p.drawRect(0,y,W,rh);
+        p.setBrush(alt?QColor("#f0f9ff"):Qt::white); p.setPen(Qt::NoPen);
+        p.drawRect(0,y,W,rh);
         p.setPen(QColor("#1f2937"));
-        QStringList v={pe.reference, pe.espece, pe.quantiteKg+" Kg", pe.dateCapture};
-        cx=0; for(int c=0;c<v.size();++c){p.drawText(cx+8,y,cw[c]-8,rh,Qt::AlignVCenter,v[c]);cx+=cw[c];}
-        p.setPen(QPen(QColor("#e5e7eb"),1)); p.drawLine(0,y+rh,W,y+rh); y+=rh; alt=!alt;
+        QStringList v={b.nomBateau,b.immatriculation,b.capacitePeche+" t",
+                       b.etatBateau,b.disponible,b.dateDerniereMaintenance};
+        cx=0;
+        for(int c=0;c<v.size();++c){p.drawText(cx+8,y,cw[c]-8,rh,Qt::AlignVCenter,v[c]);cx+=cw[c];}
+        p.setPen(QPen(QColor("#e5e7eb"),1)); p.drawLine(0,y+rh,W,y+rh);
+        y+=rh; alt=!alt;
+    }
+
+    if (count == 0) {
+        p.setPen(QColor("#6b7280"));
+        p.drawText(0, y + 20, W, 30, Qt::AlignHCenter, "Aucun bateau en maintenance actuellement.");
     }
     p.end();
     QMessageBox::information(this,"PDF généré","Enregistré : "+path);
 }
 
-void PecheWindow::onShowStatistics()
+void BateauWindow::onShowStatistics()
 {
-    QMap<QString,int> cat,qty;
-    for(const Peche&p:peches){
-        cat[p.espece]++;
-        qty[p.espece] += (int)p.quantiteKg.toDouble();
+    QMap<QString,int> st,dp;
+    st["En mer"]=0;st["Au port"]=0;st["En maintenance"]=0;
+    dp["Oui"]=0;dp["Non"]=0;
+    for(const Bateau&b:bateaux){
+        if(st.contains(b.etatBateau))st[b.etatBateau]++;else st[b.etatBateau]++;
+        if(dp.contains(b.disponible))dp[b.disponible]++;else dp[b.disponible]++;
     }
-    StatisticsDialog dlg(cat,qty,this);
-    dlg.setWindowTitle("Statistiques des Pêches");
-    dlg.exec();
+    StatisticsDialog dlg(st,dp,this); dlg.exec();
 }
 
-void PecheWindow::onAddPeche() {
-    PecheDialog d(this);
-    if(d.exec()==QDialog::Accepted){ Peche np=d.getData(); np.idLot=generatePecheId(); peches.append(np); populateTable(searchInput->text()); }
+void BateauWindow::onAddBateau()
+{
+    BateauDialog d(this);
+    if(d.exec()==QDialog::Accepted){
+        Bateau nb=d.getData(); nb.idBateau=generateBateauId();
+        bateaux.append(nb); populateTable(searchInput->text());
+    }
 }
-void PecheWindow::onEditPeche(int row) {
-    if(row<0||row>=peches.size()) return;
-    PecheDialog d(this,&peches[row]);
-    if(d.exec()==QDialog::Accepted){ Peche u=d.getData(); u.idLot=peches[row].idLot; peches[row]=u; populateTable(searchInput->text()); }
+void BateauWindow::onEditBateau(int row)
+{
+    if(row<0||row>=bateaux.size()) return;
+    BateauDialog d(this,&bateaux[row]);
+    if(d.exec()==QDialog::Accepted){
+        Bateau u=d.getData(); u.idBateau=bateaux[row].idBateau;
+        bateaux[row]=u; populateTable(searchInput->text());
+    }
 }
-void PecheWindow::onDeletePeche(int row) {
-    if(row<0||row>=peches.size()) return;
-    if(QMessageBox::question(this,"Confirmation","Supprimer le lot '"+peches[row].reference+"' ?", QMessageBox::Yes|QMessageBox::No)==QMessageBox::Yes){ peches.removeAt(row); populateTable(searchInput->text()); }
+void BateauWindow::onDeleteBateau(int row)
+{
+    if(row<0||row>=bateaux.size()) return;
+    if(QMessageBox::question(this,"Confirmation","Supprimer '"+bateaux[row].nomBateau+"' ?",
+        QMessageBox::Yes|QMessageBox::No)==QMessageBox::Yes){
+        bateaux.removeAt(row); populateTable(searchInput->text());
+    }
 }
-void PecheWindow::onLogout()
+void BateauWindow::onLogout()
 {
     if (QMessageBox::question(this, "Quitter", "Voulez-vous vraiment quitter l'application ?", 
                               QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {

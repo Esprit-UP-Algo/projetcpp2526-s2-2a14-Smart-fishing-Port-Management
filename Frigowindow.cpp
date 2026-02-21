@@ -211,8 +211,10 @@ QWidget* FrigoWindow::createContentArea()
     layout->setContentsMargins(30, 30, 30, 30);
 
     // Header
-    QFrame* header = createHeader();
-    layout->addWidget(header);
+    layout->addWidget(createHeader());
+
+    // Toolbar
+    layout->addWidget(createToolbar());
 
     // Table card
     QFrame* tableCard = createTableCard();
@@ -223,74 +225,104 @@ QWidget* FrigoWindow::createContentArea()
 
 QFrame* FrigoWindow::createHeader()
 {
-    QFrame* header = new QFrame();
-    header->setStyleSheet("background: transparent;");
-    header->setFixedHeight(120);
+    QFrame* hdr = new QFrame();
+    hdr->setStyleSheet("background:transparent;");
 
-    QVBoxLayout* layout = new QVBoxLayout(header);
-    layout->setSpacing(15);
+    QHBoxLayout* lay = new QHBoxLayout(hdr);
+    lay->setContentsMargins(0, 0, 0, 0);
+    lay->setSpacing(12);
 
-    // Title
+    /* Title + subtitle */
+    QVBoxLayout* titleCol = new QVBoxLayout();
     QLabel* title = new QLabel("Gestion des Frigos");
-    QFont titleFont("Segoe UI", 28, QFont::Bold);
-    title->setFont(titleFont);
-    title->setStyleSheet("color: #2C3E50;");
-    layout->addWidget(title);
+    title->setFont(QFont("Segoe UI", 26, QFont::Bold));
+    title->setStyleSheet("color:#1e3a5f;");
+    QLabel* sub = new QLabel("Surveillance des stocks froids et températures");
+    sub->setFont(QFont("Segoe UI", 10));
+    sub->setStyleSheet("color:#6b7280;");
+    titleCol->addWidget(title);
+    titleCol->addWidget(sub);
+    lay->addLayout(titleCol, 1);
 
-    // Search and Add button row
-    QHBoxLayout* actionRow = new QHBoxLayout();
+    /* Actions */
+    auto makeBtn = [&](const QString& label, const QString& bg, const QString& hover) {
+        QPushButton* btn = new QPushButton(label);
+        btn->setFont(QFont("Segoe UI", 10, QFont::Bold));
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFixedHeight(45);
+        btn->setMinimumWidth(160);
+        btn->setStyleSheet(QString(
+            "QPushButton{ background:%1; color:white; border:none; border-radius:12px; padding:0 20px; }"
+            "QPushButton:hover{ background:%2; }").arg(bg, hover));
+        return btn;
+    };
 
-    // Search
+    QPushButton* statsBtn = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
+    QPushButton* pdfBtn   = makeBtn("📄  Exporter PDF",  "#059669", "#047857");
+    QPushButton* addBtn   = makeBtn("➕  Nouveau Frigo", "#2563EB", "#1D4ED8");
+
+    connect(addBtn, &QPushButton::clicked, this, &FrigoWindow::onAddFrigo);
+
+    lay->addWidget(statsBtn);
+    lay->addWidget(pdfBtn);
+    lay->addWidget(addBtn);
+    return hdr;
+}
+
+QFrame* FrigoWindow::createToolbar()
+{
+    QFrame* bar = new QFrame();
+    bar->setStyleSheet(R"(
+        QFrame { background: white; border-radius: 14px; border: 1.5px solid #e2e8f0; }
+    )");
+    bar->setFixedHeight(62);
+
+    QHBoxLayout* lay = new QHBoxLayout(bar);
+    lay->setContentsMargins(16, 0, 16, 0);
+    lay->setSpacing(12);
+
+    /* Search Input */
     searchInput = new QLineEdit();
-    searchInput->setPlaceholderText("🔍  Rechercher un frigo...");
-    QFont searchFont("Segoe UI", 12);
-    searchInput->setFont(searchFont);
-    searchInput->setFixedHeight(50);
-    searchInput->setFixedWidth(400);
+    searchInput->setPlaceholderText("Rechercher un frigo par statut, contenu...");
+    searchInput->setFont(QFont("Segoe UI", 11));
+    searchInput->setFixedHeight(45);
     searchInput->setStyleSheet(R"(
-        QLineEdit {
-            background-color: white;
-            border: 2px solid #d1d5db;
-            border-radius: 12px;
-            padding: 12px 20px;
-            color: #2C3E50;
-        }
-        QLineEdit:focus {
-            border: 2px solid #5D9CEC;
-        }
+        QLineEdit{ background:#ffffff; border:2px solid #e2e8f0; border-radius:12px; padding:4px 16px; color:#1f2937; }
+        QLineEdit:focus{ border:2px solid #2563EB; background:white; }
     )");
     connect(searchInput, &QLineEdit::textChanged, this, &FrigoWindow::onSearch);
-    actionRow->addWidget(searchInput);
+    lay->addWidget(searchInput, 3);
 
-    actionRow->addStretch();
+    /* Divider */
+    QFrame* div = new QFrame(); div->setFrameShape(QFrame::VLine);
+    div->setStyleSheet("color:#e2e8f0;"); div->setFixedWidth(1);
+    lay->addWidget(div);
 
-    // Add button
-    QPushButton* addBtn = new QPushButton("➕  Ajouter un frigo");
-    QFont btnFont("Segoe UI", 13, QFont::Bold);
-    addBtn->setFont(btnFont);
-    addBtn->setCursor(Qt::PointingHandCursor);
-    addBtn->setFixedHeight(50);
-    addBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: #5D9CEC;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            padding: 12px 30px;
-        }
-        QPushButton:hover {
-            background-color: #4A89DC;
-        }
-        QPushButton:pressed {
-            background-color: #3B77C4;
+    /* Sort label */
+    QLabel* sortLabel = new QLabel("Trier par :");
+    sortLabel->setFont(QFont("Segoe UI", 10, QFont::Medium));
+    sortLabel->setStyleSheet("color:#64748b; margin-left:10px;");
+    lay->addWidget(sortLabel);
+
+    /* Sort combo */
+    sortCombo = new QComboBox();
+    sortCombo->setFont(QFont("Segoe UI", 10));
+    sortCombo->setFixedHeight(45);
+    sortCombo->setMinimumWidth(200);
+    sortCombo->addItems({"Défaut", "Capacité ↑", "Capacité ↓", "Température ↑", "Température ↓"});
+    sortCombo->setStyleSheet(R"(
+        QComboBox{ background:transparent; border:none; padding:4px 12px; color:#1f2937; font-weight:600; }
+        QComboBox:hover { color:#2563EB; }
+        QComboBox::drop-down{ border:none; width:30px; }
+        QComboBox QAbstractItemView{
+            background:white; border:1px solid #e2e8f0; border-radius:12px;
+            selection-background-color:#eff6ff; selection-color:#2563EB; outline:none; padding:8px;
         }
     )");
-    connect(addBtn, &QPushButton::clicked, this, &FrigoWindow::onAddFrigo);
-    actionRow->addWidget(addBtn);
+    connect(sortCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &FrigoWindow::onSort);
+    lay->addWidget(sortCombo, 2);
 
-    layout->addLayout(actionRow);
-
-    return header;
+    return bar;
 }
 
 QFrame* FrigoWindow::createTableCard()
@@ -566,6 +598,20 @@ void FrigoWindow::onSearch(const QString& text)
     populateTable(text);
 }
 
+void FrigoWindow::onSort(int index)
+{
+    Q_UNUSED(index);
+    // TODO: Implement sorting logic for Frigo
+}
+
+void FrigoWindow::onLogout()
+{
+    if (QMessageBox::question(this, "Quitter", "Voulez-vous vraiment quitter l'application ?", 
+                              QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+        this->close();
+    }
+}
+
 void FrigoWindow::onAddFrigo()
 {
     AddFrigoDialog dialog(this);
@@ -605,18 +651,5 @@ void FrigoWindow::onDeleteFrigo(int row)
         qDebug() << "Frigo supprimé:" << frigos[row].id;
         frigos.removeAt(row);
         populateTable(searchInput->text());
-    }
-}
-
-void FrigoWindow::onLogout()
-{
-    QMessageBox::StandardButton reply;
-    reply = QMessageBox::question(this, "Quitter",
-                                  "Voulez-vous vraiment quitter l'application ?",
-                                  QMessageBox::Yes | QMessageBox::No);
-
-    if (reply == QMessageBox::Yes) {
-        qDebug() << "Fermeture de l'application";
-        this->close();
     }
 }
