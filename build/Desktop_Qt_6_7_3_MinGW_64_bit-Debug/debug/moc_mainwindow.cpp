@@ -44,7 +44,7 @@ constexpr auto qt_meta_stringdata_CLASSMainWindowENDCLASS = QtMocHelpers::string
     "onNavigateToDashboard",
     "onNavigateToBateaux",
     "onNavigateToLivraison",
-    "onNavigateToDocks",
+    "onNavigateToQuais",
     "onLogout"
 );
 #else  // !QT_MOC_HAS_STRINGDATA
@@ -109,7 +109,7 @@ Q_CONSTINIT const QMetaObject MainWindow::staticMetaObject = { {
         QtPrivate::TypeAndForceComplete<void, std::false_type>,
         // method 'onNavigateToLivraison'
         QtPrivate::TypeAndForceComplete<void, std::false_type>,
-        // method 'onNavigateToDocks'
+        // method 'onNavigateToQuais'
         QtPrivate::TypeAndForceComplete<void, std::false_type>,
         // method 'onLogout'
         QtPrivate::TypeAndForceComplete<void, std::false_type>
@@ -129,7 +129,7 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 3: _t->onNavigateToDashboard(); break;
         case 4: _t->onNavigateToBateaux(); break;
         case 5: _t->onNavigateToLivraison(); break;
-        case 6: _t->onNavigateToDocks(); break;
+        case 6: _t->onNavigateToQuais(); break;
         case 7: _t->onLogout(); break;
         default: ;
         }

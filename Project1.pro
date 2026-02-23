@@ -1,4 +1,4 @@
-QT       += core gui sql printsupport
+QT       += core gui sql printsupport charts
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -22,7 +22,8 @@ SOURCES += \
     quaiswindow.cpp \
     addquaidialog.cpp \
     quai.cpp \
-    StatisticsDialog.cpp
+    StatisticsDialog.cpp \
+    LivraisonStatisticsDialog.cpp
 
 HEADERS += \
     connection.h \
@@ -41,7 +42,8 @@ HEADERS += \
     quaiswindow.h \
     addquaidialog.h \
     quai.h \
-    StatisticsDialog.h
+    StatisticsDialog.h \
+    LivraisonStatisticsDialog.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

@@ -1,3 +1,4 @@
+#define LIVRAISONWINDOW_CPP
 #include "Livraisonwindow.h"
 #include <algorithm>
 #include "AddLivraisonDialog.h"
@@ -12,6 +13,7 @@
 #include <QFileDialog>
 #include <QFile>
 #include <QTextStream>
+#include "LivraisonStatisticsDialog.h"
 
 
 LivraisonWindow::LivraisonWindow(QWidget *parent)
@@ -20,9 +22,13 @@ LivraisonWindow::LivraisonWindow(QWidget *parent)
     setupUi();
 
     // Sample data
-    livraisons.append({"LIV001", "2024-02-10", "123 Rue de la Marine, Tunis", "En cours", "Camion", "150 DT"});
-    livraisons.append({"LIV002", "2024-02-11", "Port de Sfax, Zone Industrielle", "Livré", "Bateau", "500 DT"});
-    livraisons.append({"LIV003", "2024-02-12", "Marché Central, Sousse", "En attente", "Camion Frigo", "200 DT"});
+    livraisons.append({"LIV001", "2024-02-10", "123 Rue de la Marine, Tunis", "En cours", "Camion", "Van Agile-01", "150 DT", 45});
+    livraisons.append({"LIV002", "2024-02-11", "Port de Sfax, Zone Industrielle", "Livré", "Bateau", "Navire-Swift", "500 DT", 120});
+    livraisons.append({"LIV003", "2024-02-12", "Marché Central, Sousse", "En attente", "Camion Frigo", "Frigo-Master", "200 DT", 60});
+    livraisons.append({"LIV004", "2024-02-13", "Zone Franche, Bizerte", "Annulé", "Camion", "Van Agile-01", "100 DT", 30});
+    livraisons.append({"LIV005", "2024-02-14", "Centre Urbain Nord, Tunis", "Livré", "Camion", "Van Agile-02", "180 DT", 55});
+    livraisons.append({"LIV006", "2024-02-15", "Port de Rades", "Livré", "Camion", "Van Agile-01", "220 DT", 40});
+    livraisons.append({"LIV007", "2024-02-16", "Zone Ind. Gabes", "En attente", "Camion Frigo", "Frigo-Master", "350 DT", 90});
 
     updateStats();
     populateTable();
@@ -83,6 +89,9 @@ QWidget* LivraisonWindow::createContentArea()
     QFrame* header = createHeader();
     layout->addWidget(header);
 
+    // Filter Toolbar (restored)
+    layout->addWidget(createToolbar());
+
     // Stats Area
     QFrame* statsArea = createStatsArea();
     layout->addWidget(statsArea);
@@ -129,13 +138,12 @@ QFrame* LivraisonWindow::createHeader()
     };
 
     QPushButton* statsBtn = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
-    QPushButton* pdfBtn   = makeBtn("📄  Exporter PDF",  "#059669", "#047857");
     QPushButton* addBtn   = makeBtn("➕  Nouvelle Livraison", "#2563EB", "#1D4ED8");
 
+    connect(statsBtn, &QPushButton::clicked, this, &LivraisonWindow::onShowStatistics);
     connect(addBtn, &QPushButton::clicked, this, &LivraisonWindow::onAddLivraison);
 
     lay->addWidget(statsBtn);
-    lay->addWidget(pdfBtn);
     lay->addWidget(addBtn);
     return hdr;
 }
@@ -154,7 +162,7 @@ QFrame* LivraisonWindow::createToolbar()
 
     /* Search */
     searchInput = new QLineEdit();
-    searchInput->setPlaceholderText("Rechercher une livraison par adresse, statut...");
+    searchInput->setPlaceholderText("Rechercher par date, adresse ou statut...");
     searchInput->setFont(QFont("Segoe UI", 11));
     searchInput->setFixedHeight(45);
     searchInput->setStyleSheet(R"(
@@ -185,11 +193,23 @@ QFrame* LivraisonWindow::createToolbar()
         QComboBox{ background:transparent; border:none; padding:4px 12px; color:#1f2937; font-weight:600; }
         QComboBox:hover { color:#2563EB; }
         QComboBox::drop-down{ border:none; width:30px; }
-        QComboBox QAbstractItemView{
-            background:white; border:1px solid #e2e8f0; border-radius:12px;
-            selection-background-color:#eff6ff; selection-color:#2563EB; outline:none; padding:8px;
+        QComboBox QAbstractItemView {
+            background-color: white;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
+            selection-background-color: #eff6ff;
+            selection-color: #2563EB;
+            outline: none;
         }
     )");
+
+    /* CRITICAL FIX for black corners on rounded popups */
+    if (sortCombo->view() && sortCombo->view()->window()) {
+        sortCombo->view()->window()->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+        sortCombo->view()->window()->setAttribute(Qt::WA_TranslucentBackground);
+        sortCombo->view()->setAttribute(Qt::WA_TranslucentBackground);
+    }
+
     connect(sortCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &LivraisonWindow::onSort);
     lay->addWidget(sortCombo, 2);
 
@@ -303,19 +323,26 @@ void LivraisonWindow::setupTable()
 {
     table = new QTableWidget();
     table->setColumnCount(6);
-    table->setHorizontalHeaderLabels({"ID", "Date", "Adresse", "Statut", "Transport", "Actions"});
+    table->setHorizontalHeaderLabels({"Date", "Adresse", "Statut", "Transport", "Prix", "Actions"});
 
-    table->horizontalHeader()->setStretchLastSection(true);
+    /* Responsive columns (matching Bateau styling) */
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    table->horizontalHeader()->setStretchLastSection(false);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch); // Adresse stretch
+
     table->verticalHeader()->setVisible(false);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::SingleSelection);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setShowGrid(true);
     table->setAlternatingRowColors(false);
+    table->setFrameShape(QFrame::NoFrame);
+    table->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-    QFont headerFont("Segoe UI", 11, QFont::Bold);
-    table->horizontalHeader()->setFont(headerFont);
+    QFont hFont("Segoe UI", 11, QFont::Bold);
+    table->horizontalHeader()->setFont(hFont);
     table->horizontalHeader()->setFixedHeight(50);
+    table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     table->setStyleSheet(R"(
         QTableWidget {
@@ -350,14 +377,11 @@ void LivraisonWindow::setupTable()
 
     table->setObjectName("livraisonTable");
 
-    table->setColumnWidth(0, 90);    // ID
-
-
-    table->setColumnWidth(0, 90);    // ID
-    table->setColumnWidth(1, 130);   // Date
-    table->setColumnWidth(2, 280);   // Adresse
-    table->setColumnWidth(3, 140);   // Statut
-    table->setColumnWidth(4, 150);   // Transport
+    table->setColumnWidth(0, 130);   // Date
+    table->setColumnWidth(2, 140);   // Statut
+    table->setColumnWidth(3, 140);   // Transport
+    table->setColumnWidth(4, 120);   // Prix
+    table->setColumnWidth(5, 100);   // Actions
 }
 
 void LivraisonWindow::populateTable(const QString& filterText)
@@ -369,7 +393,7 @@ void LivraisonWindow::populateTable(const QString& filterText)
 
         if (!filterText.isEmpty()) {
             QString searchLower = filterText.toLower();
-            if (!liv.id.toLower().contains(searchLower) &&
+            if (!liv.date.toLower().contains(searchLower) &&
                 !liv.adresse.toLower().contains(searchLower) &&
                 !liv.statut.toLower().contains(searchLower)) {
                 continue;
@@ -380,11 +404,11 @@ void LivraisonWindow::populateTable(const QString& filterText)
         table->insertRow(row);
         table->setRowHeight(row, 60);
 
-        table->setItem(row, 0, new QTableWidgetItem(liv.id));
-        table->setItem(row, 1, new QTableWidgetItem(liv.date));
-        table->setItem(row, 2, new QTableWidgetItem(liv.adresse));
-        table->setCellWidget(row, 3, createStatusBadge(liv.statut));
-        table->setItem(row, 4, new QTableWidgetItem(liv.transport));
+        table->setItem(row, 0, new QTableWidgetItem(liv.date));
+        table->setItem(row, 1, new QTableWidgetItem(liv.adresse));
+        table->setCellWidget(row, 2, createStatusBadge(liv.statut));
+        table->setItem(row, 3, new QTableWidgetItem(liv.transport));
+        table->setItem(row, 4, new QTableWidgetItem(liv.prix));
         table->setCellWidget(row, 5, createActionButtons(i));
     }
 }
@@ -405,6 +429,8 @@ QWidget* LivraisonWindow::createStatusBadge(const QString& status)
         badge->setProperty("class", "status-badge status-livre");
     } else if (status == "En cours") {
         badge->setProperty("class", "status-badge status-en-cours");
+    } else if (status == "Annulé" || status == "Canceled") {
+        badge->setProperty("class", "status-badge status-annule");
     } else {
         badge->setProperty("class", "status-badge status-en-attente");
     }
@@ -469,7 +495,7 @@ void LivraisonWindow::onAddLivraison()
     if (dialog.exec() == QDialog::Accepted) {
         Livraison newLiv = dialog.getData();
         newLiv.id = generateLivraisonId();
-        newLiv.date = QDate::currentDate().toString("yyyy-MM-dd");
+        if (newLiv.vehicule.isEmpty()) newLiv.vehicule = "Inconnu";
         livraisons.append(newLiv);
         updateStats();
         populateTable(searchInput->text());
@@ -484,7 +510,6 @@ void LivraisonWindow::onEditLivraison(int row)
     if (dialog.exec() == QDialog::Accepted) {
         Livraison updatedData = dialog.getData();
         updatedData.id = livraisons[row].id;
-        updatedData.date = livraisons[row].date;
         livraisons[row] = updatedData;
         updateStats();
         populateTable(searchInput->text());
@@ -531,20 +556,129 @@ void LivraisonWindow::onExportPDF(int row)
 
     QPainter painter(&writer);
     painter.setPen(Qt::black);
-    painter.setFont(QFont("Segoe UI", 16, QFont::Bold));
-
-    painter.drawText(100, 100, "CONFIRMATION DE LIVRAISON");
     
+    // Header
+    painter.setFont(QFont("Segoe UI", 20, QFont::Bold));
+    painter.drawText(QRect(0, 50, 5000, 100), Qt::AlignCenter, "REÇU DE LIVRAISON");
+    
+    painter.setPen(QPen(Qt::black, 2));
+    painter.drawLine(100, 200, 4900, 200);
+
+    // Content
     painter.setFont(QFont("Segoe UI", 12));
-    int y = 250;
-    painter.drawText(100, y, "ID Livraison: " + liv.id); y += 150;
-    painter.drawText(100, y, "Date: " + liv.date); y += 150;
-    painter.drawText(100, y, "Adresse: " + liv.adresse); y += 150;
-    painter.drawText(100, y, "Transport: " + liv.transport); y += 150;
-    painter.drawText(100, y, "Statut: " + liv.statut); y += 150;
-    painter.drawText(100, y, "Prix Total: " + liv.prix);
+    int y = 400;
+    painter.drawText(500, y, "ID Livraison :");
+    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
+    painter.drawText(2000, y, liv.id);
+    
+    y += 200;
+    painter.setFont(QFont("Segoe UI", 12));
+    painter.drawText(500, y, "Date :");
+    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
+    painter.drawText(2000, y, liv.date);
+    
+    y += 200;
+    painter.setFont(QFont("Segoe UI", 12));
+    painter.drawText(500, y, "Adresse :");
+    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
+    painter.drawText(2000, y, liv.adresse);
+
+    painter.setPen(QPen(Qt::gray, 1, Qt::DashLine));
+    painter.drawLine(100, y + 200, 4900, y + 200);
 
     painter.end();
 
-    QMessageBox::information(this, "Export PDF", "La confirmation de livraison a été exportée avec succès !");
+    QMessageBox::information(this, "Export PDF", "Le reçu de livraison a été exporté avec succès !");
+}
+
+void LivraisonWindow::onShowStatistics()
+{
+    QMap<QString, int> statusData;
+    QMap<QString, int> vanTripsData;
+    QMap<QString, QPair<int, int>> vanTimeMetrics; // vehicle -> {totalDuration, tripCount}
+
+    for (const auto& liv : livraisons) {
+        statusData[liv.statut]++;
+        
+        QString van = liv.vehicule.isEmpty() ? "Inconnu" : liv.vehicule;
+        vanTripsData[van]++;
+        
+        vanTimeMetrics[van].first += liv.dureeMinutes;
+        vanTimeMetrics[van].second++;
+    }
+
+    QMap<QString, double> avgTimeData;
+    for (auto it = vanTimeMetrics.begin(); it != vanTimeMetrics.end(); ++it) {
+        if (it.value().second > 0) {
+            avgTimeData[it.key()] = (double)it.value().first / it.value().second;
+        }
+    }
+
+    LivraisonStatisticsDialog dialog(statusData, vanTripsData, avgTimeData, this);
+    dialog.exec();
+}
+
+void LivraisonWindow::onExportAllPDF()
+{
+    QString fileName = QFileDialog::getSaveFileName(this, "Exporter tout en PDF", 
+                                                    "Rapport_Livraisons.pdf",
+                                                    "PDF Files (*.pdf)");
+    if (fileName.isEmpty()) return;
+
+    QPdfWriter writer(fileName);
+    writer.setPageSize(QPageSize(QPageSize::A4));
+    writer.setPageMargins(QMarginsF(30, 30, 30, 30));
+
+    QPainter painter(&writer);
+    painter.setPen(Qt::black);
+    painter.setFont(QFont("Segoe UI", 16, QFont::Bold));
+
+    // Header
+    painter.setFont(QFont("Segoe UI", 20, QFont::Bold));
+    painter.drawText(QRect(0, 50, 6000, 100), Qt::AlignCenter, "RAPPORT GLOBAL DES LIVRAISONS");
+    
+    painter.setPen(QPen(Qt::black, 2));
+    painter.drawLine(100, 200, 5900, 200);
+
+    painter.setFont(QFont("Segoe UI", 10));
+    int y = 350;
+    
+    // Column Headers
+    painter.setFont(QFont("Segoe UI", 10, QFont::Bold));
+    painter.setPen(QColor("#475569"));
+    painter.drawText(200, y, "ID");
+    painter.drawText(800, y, "Date");
+    painter.drawText(1600, y, "Adresse");
+    painter.drawText(3600, y, "Statut");
+    painter.drawText(4400, y, "Van");
+    painter.drawText(5200, y, "Prix");
+    y += 150;
+    
+    painter.setPen(QPen(QColor("#e2e8f0"), 1));
+    painter.drawLine(200, y, 5800, y);
+    y += 150;
+
+    painter.setFont(QFont("Segoe UI", 9));
+    painter.setPen(Qt::black);
+    for (const auto& liv : livraisons) {
+        if (y > 9000) { 
+            writer.newPage();
+            y = 100;
+        }
+        painter.drawText(200, y, liv.id);
+        painter.drawText(800, y, liv.date);
+        painter.drawText(1600, y, liv.adresse.left(35));
+        painter.drawText(3600, y, liv.statut);
+        painter.drawText(4400, y, liv.vehicule.left(15));
+        painter.drawText(5200, y, liv.prix);
+        y += 200;
+        
+        painter.setPen(QPen(QColor("#f1f5f9"), 1));
+        painter.drawLine(200, y - 50, 5800, y - 50);
+        painter.setPen(Qt::black);
+    }
+
+    painter.end();
+
+    QMessageBox::information(this, "Export PDF", "Le rapport global a été exporté avec succès !");
 }

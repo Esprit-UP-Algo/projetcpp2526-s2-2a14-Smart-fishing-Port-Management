@@ -17,9 +17,11 @@ struct Livraison {
     QString id;
     QString date;
     QString adresse;
-    QString statut; // En attente / En cours / Livré
+    QString statut; // En attente / En cours / Livré / Canceled
     QString transport;
+    QString vehicule; // Specific Van/Vehicle name
     QString prix;
+    int dureeMinutes; // Trip duration in minutes
 };
 
 class LivraisonWindow : public QMainWindow
@@ -37,6 +39,8 @@ private slots:
     void onDeleteLivraison(int row);
     void onSort(int index);
     void onExportPDF(int row);
+    void onShowStatistics();
+    void onExportAllPDF();
 
 private:
     void setupUi();

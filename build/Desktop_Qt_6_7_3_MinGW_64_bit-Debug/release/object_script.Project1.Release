@@ -12,10 +12,11 @@ release/Frigowindow.o
 release/addfrigodialog.o
 release/Livraisonwindow.o
 release/AddLivraisonDialog.o
-release/dockswindow.o
-release/adddockdialog.o
-release/dock.o
+release/quaiswindow.o
+release/addquaidialog.o
+release/quai.o
 release/StatisticsDialog.o
+release/LivraisonStatisticsDialog.o
 release/qrc_resources.o
 release/moc_mainwindow.o
 release/moc_loginwindow.o
@@ -29,6 +30,7 @@ release/moc_Frigowindow.o
 release/moc_addfrigodialog.o
 release/moc_Livraisonwindow.o
 release/moc_AddLivraisonDialog.o
-release/moc_dockswindow.o
-release/moc_adddockdialog.o
+release/moc_quaiswindow.o
+release/moc_addquaidialog.o
 release/moc_StatisticsDialog.o
+release/moc_LivraisonStatisticsDialog.o
