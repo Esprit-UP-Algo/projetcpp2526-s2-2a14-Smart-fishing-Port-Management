@@ -1,19 +1,19 @@
 cmake_minimum_required(VERSION 3.19)
-project(gestion_quai LANGUAGES CXX)
+project(docks LANGUAGES CXX)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
 
 qt_standard_project_setup()
 
-qt_add_executable(gestion_quai
+qt_add_executable(docks
     WIN32 MACOSX_BUNDLE
-    docks.cpp
+    main.cpp
     dockswindow.cpp
     dockswindow.h
-    dockswindow.ui
+    mainwindow.ui
 )
 
-target_link_libraries(gestion_quai
+target_link_libraries(docks
     PRIVATE
         Qt::Core
         Qt::Widgets
@@ -21,14 +21,14 @@ target_link_libraries(gestion_quai
 
 include(GNUInstallDirs)
 
-install(TARGETS gestion_quai
+install(TARGETS docks
     BUNDLE  DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
 qt_generate_deploy_app_script(
-    TARGET gestion_quai
+    TARGET docks
     OUTPUT_SCRIPT deploy_script
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
