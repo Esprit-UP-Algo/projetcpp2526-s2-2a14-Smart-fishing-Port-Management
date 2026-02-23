@@ -527,13 +527,33 @@ void LivraisonWindow::onDeleteLivraison(int row)
 
 void LivraisonWindow::onSort(int index)
 {
+    auto parseDate = [](const QString& s) {
+        QDate d = QDate::fromString(s, "dd/MM/yyyy");
+        if (!d.isValid()) d = QDate::fromString(s, "yyyy-MM-dd");
+        return d;
+    };
+
+    auto parsePrice = [](const QString& s) {
+        QString clean = s;
+        clean.remove(" DT").remove("DT").trimmed();
+        return clean.toDouble();
+    };
+
     if (index == 1) { // Date (Récent)
-        std::sort(livraisons.begin(), livraisons.end(), [](const Livraison &a, const Livraison &b) {
-            return QDate::fromString(a.date, "yyyy-MM-dd") > QDate::fromString(b.date, "yyyy-MM-dd");
+        std::sort(livraisons.begin(), livraisons.end(), [&](const Livraison &a, const Livraison &b) {
+            return parseDate(a.date) > parseDate(b.date);
         });
     } else if (index == 2) { // Date (Ancien)
-        std::sort(livraisons.begin(), livraisons.end(), [](const Livraison &a, const Livraison &b) {
-            return QDate::fromString(a.date, "yyyy-MM-dd") < QDate::fromString(b.date, "yyyy-MM-dd");
+        std::sort(livraisons.begin(), livraisons.end(), [&](const Livraison &a, const Livraison &b) {
+            return parseDate(a.date) < parseDate(b.date);
+        });
+    } else if (index == 3) { // Prix ↑
+        std::sort(livraisons.begin(), livraisons.end(), [&](const Livraison &a, const Livraison &b) {
+            return parsePrice(a.prix) < parsePrice(b.prix);
+        });
+    } else if (index == 4) { // Prix ↓
+        std::sort(livraisons.begin(), livraisons.end(), [&](const Livraison &a, const Livraison &b) {
+            return parsePrice(a.prix) > parsePrice(b.prix);
         });
     }
 
