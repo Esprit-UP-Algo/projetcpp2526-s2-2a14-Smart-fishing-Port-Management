@@ -22,7 +22,7 @@ AddQuaiDialog::AddQuaiDialog(QWidget *parent)
     QFrame* header = new QFrame();
     header->setFixedHeight(100);
     header->setStyleSheet("background-color: #5D9CEC;");
-    
+
     QVBoxLayout* headerVLayout = new QVBoxLayout(header);
     headerVLayout->setContentsMargins(30, 10, 30, 10);
     headerVLayout->setSpacing(5);
@@ -117,11 +117,11 @@ AddQuaiDialog::AddQuaiDialog(QWidget *parent)
 Quai AddQuaiDialog::getData() const
 {
     Quai d;
-    d.nom = nomInput->text();
-    d.capacite = capaciteInput->text();
-    d.tailleMax = tailleMaxInput->text();
-    d.tarif = tarifInput->text();
-    d.client = clientInput->text();
-    d.statut = statutInput->currentText();
+    d.setNom(nomInput->text());
+    d.setCapacite(capaciteInput->text().toInt());       // QString → int
+    d.setTailleMax(tailleMaxInput->text().toDouble());  // QString → double
+    d.setTarif(tarifInput->text().toDouble());          // QString → double
+    d.setClient(clientInput->text());
+    d.setStatut(statutInput->currentText());
     return d;
 }

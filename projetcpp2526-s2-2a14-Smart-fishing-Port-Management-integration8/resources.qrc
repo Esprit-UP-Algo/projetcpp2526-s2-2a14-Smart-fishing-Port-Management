@@ -1,6 +1,7 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
     <qresource prefix="/style">
+        <file>style/livraison.css</file>
     </qresource>
     <qresource prefix="/images">
         <file>images/logo.png</file>
