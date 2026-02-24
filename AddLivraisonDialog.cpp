@@ -245,33 +245,35 @@ void AddLivraisonDialog::populateFields()
     if (!livraisonData) return;
     
     // Set Date
-    QDate d = QDate::fromString(livraisonData->date, "dd/MM/yyyy");
+    QDate d = QDate::fromString(livraisonData->getDate(), "dd/MM/yyyy");
     if (d.isValid()) dateEdit->setDate(d);
     else dateEdit->setDate(QDate::currentDate());
 
-    adresseEdit->setPlainText(livraisonData->adresse);
-    vehiculeEdit->setText(livraisonData->vehicule);
-    transportEdit->setCurrentText(livraisonData->transport);
-    prixEdit->setText(livraisonData->prix);
-    statusBox->setCurrentText(livraisonData->statut);
+    adresseEdit->setPlainText(livraisonData->getAdresse());
+    vehiculeEdit->setText(livraisonData->getVehicule());
+    transportEdit->setCurrentText(livraisonData->getTransport());
+    prixEdit->setText(livraisonData->getPrix());
+    statusBox->setCurrentText(livraisonData->getStatut());
 }
 
 Livraison AddLivraisonDialog::getData() const
 {
     Livraison data;
-    data.date = dateEdit->date().toString("dd/MM/yyyy");
-    data.adresse = adresseEdit->toPlainText();
-    data.vehicule = vehiculeEdit->text();
-    data.transport = transportEdit->currentText();
-    data.prix = prixEdit->text();
-    if (!data.prix.contains("DT")) data.prix += " DT";
-    data.statut = statusBox->currentText();
+    data.setDate(dateEdit->date().toString("dd/MM/yyyy"));
+    data.setAdresse(adresseEdit->toPlainText());
+    data.setVehicule(vehiculeEdit->text());
+    data.setTransport(transportEdit->currentText());
+    
+    QString prix = prixEdit->text();
+    data.setPrix(prix.replace("DT", "").trimmed());
+    
+    data.setStatut(statusBox->currentText());
     
     // Automatic duration calculation (randomized for demo/completeness)
     if (isEdit && livraisonData) {
-        data.dureeMinutes = livraisonData->dureeMinutes;
+        data.setDuree(livraisonData->getDuree());
     } else {
-        data.dureeMinutes = 15 + (rand() % 45); // 15 to 60 mins
+        data.setDuree(15 + (rand() % 45)); // 15 to 60 mins
     }
     
     return data;

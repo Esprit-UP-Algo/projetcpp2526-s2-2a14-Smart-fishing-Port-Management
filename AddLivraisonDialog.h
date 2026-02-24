@@ -6,9 +6,7 @@
 #include <QComboBox>
 #include <QTextEdit>
 #include <QDateEdit>
-#include "Livraisonwindow.h"
-
-struct Livraison;
+#include "livraison.h"
 
 class AddLivraisonDialog : public QDialog
 {

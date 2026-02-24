@@ -12,15 +12,7 @@
 #include <QLabel>
 #include <QVector>
 #include <QComboBox>
-
-struct Livraison {
-    QString id;
-    QString date;
-    QString adresse;
-    QString statut; // En attente / En cours / Livré
-    QString transport;
-    QString prix;
-};
+#include "livraison.h"
 
 class LivraisonWindow : public QMainWindow
 {
@@ -37,6 +29,8 @@ private slots:
     void onDeleteLivraison(int row);
     void onSort(int index);
     void onExportPDF(int row);
+    void onShowStatistics();
+    void onExportAllPDF();
 
 private:
     void setupUi();
@@ -47,14 +41,14 @@ private:
     QFrame* createStatsArea();
     void updateStats();
     void setupTable();
-    void populateTable(const QString& filterText = "");
+    void populateTable(const QString& filterText = "", const QString& sortCritere = "", const QString& sortOrdre = "");
     QWidget* createStatusBadge(const QString& status);
     QWidget* createActionButtons(int row);
     void loadStyleSheet();
     QString generateLivraisonId();
 
 
-    QVector<Livraison> livraisons;
+    Livraison livraisons;
     QTableWidget* table;
     QLineEdit* searchInput;
     QComboBox* sortCombo;

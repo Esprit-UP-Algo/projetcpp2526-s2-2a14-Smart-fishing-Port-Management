@@ -50,23 +50,34 @@
 .action-btn {
     border: none;
     border-radius: 8px;
-    background-color: #f1f5f9;
+    font-size: 16px;
 }
 
-.action-btn:hover {
-    background-color: #e2e8f0;
+.edit-btn {
+    background-color: #FEF3C7;
+    color: #92400E;
 }
 
 .edit-btn:hover {
-    color: #2563EB;
+    background-color: #FDE68A;
+}
+
+.delete-btn {
+    background-color: #FEE2E2;
+    color: #991B1B;
 }
 
 .delete-btn:hover {
-    color: #EF4444;
+    background-color: #FECACA;
+}
+
+.pdf-btn {
+    background-color: #D1FAE5;
+    color: #065F46;
 }
 
 .pdf-btn:hover {
-    color: #059669;
+    background-color: #A7F3D0;
 }
 
 /* Stats Cards */

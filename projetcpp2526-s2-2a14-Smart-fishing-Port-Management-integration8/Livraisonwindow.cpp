@@ -1,3 +1,4 @@
+#define LIVRAISONWINDOW_CPP
 #include "Livraisonwindow.h"
 #include <algorithm>
 #include "AddLivraisonDialog.h"
@@ -11,7 +12,9 @@
 #include <QPainter>
 #include <QFileDialog>
 #include <QFile>
-#include <QTextStream>
+#include <QSqlRecord>
+#include <QSqlError>
+#include "LivraisonStatisticsDialog.h"
 
 
 LivraisonWindow::LivraisonWindow(QWidget *parent)
@@ -19,13 +22,11 @@ LivraisonWindow::LivraisonWindow(QWidget *parent)
 {
     setupUi();
 
-    // Sample data
-    livraisons.append({"LIV001", "2024-02-10", "123 Rue de la Marine, Tunis", "En cours", "Camion", "150 DT"});
-    livraisons.append({"LIV002", "2024-02-11", "Port de Sfax, Zone Industrielle", "Livré", "Bateau", "500 DT"});
-    livraisons.append({"LIV003", "2024-02-12", "Marché Central, Sousse", "En attente", "Camion Frigo", "200 DT"});
+    // Initial load from database
+    populateTable();
 
     updateStats();
-    populateTable();
+    // populateTable(); // REMOVED redundant call
     loadStyleSheet();
 }
 
@@ -83,6 +84,9 @@ QWidget* LivraisonWindow::createContentArea()
     QFrame* header = createHeader();
     layout->addWidget(header);
 
+    // Filter Toolbar (restored)
+    layout->addWidget(createToolbar());
+
     // Stats Area
     QFrame* statsArea = createStatsArea();
     layout->addWidget(statsArea);
@@ -129,13 +133,12 @@ QFrame* LivraisonWindow::createHeader()
     };
 
     QPushButton* statsBtn = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
-    QPushButton* pdfBtn   = makeBtn("📄  Exporter PDF",  "#059669", "#047857");
     QPushButton* addBtn   = makeBtn("➕  Nouvelle Livraison", "#2563EB", "#1D4ED8");
 
+    connect(statsBtn, &QPushButton::clicked, this, &LivraisonWindow::onShowStatistics);
     connect(addBtn, &QPushButton::clicked, this, &LivraisonWindow::onAddLivraison);
 
     lay->addWidget(statsBtn);
-    lay->addWidget(pdfBtn);
     lay->addWidget(addBtn);
     return hdr;
 }
@@ -154,7 +157,7 @@ QFrame* LivraisonWindow::createToolbar()
 
     /* Search */
     searchInput = new QLineEdit();
-    searchInput->setPlaceholderText("Rechercher une livraison par adresse, statut...");
+    searchInput->setPlaceholderText("Rechercher par date, adresse ou statut...");
     searchInput->setFont(QFont("Segoe UI", 11));
     searchInput->setFixedHeight(45);
     searchInput->setStyleSheet(R"(
@@ -185,11 +188,23 @@ QFrame* LivraisonWindow::createToolbar()
         QComboBox{ background:transparent; border:none; padding:4px 12px; color:#1f2937; font-weight:600; }
         QComboBox:hover { color:#2563EB; }
         QComboBox::drop-down{ border:none; width:30px; }
-        QComboBox QAbstractItemView{
-            background:white; border:1px solid #e2e8f0; border-radius:12px;
-            selection-background-color:#eff6ff; selection-color:#2563EB; outline:none; padding:8px;
+        QComboBox QAbstractItemView {
+            background-color: white;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
+            selection-background-color: #eff6ff;
+            selection-color: #2563EB;
+            outline: none;
         }
     )");
+
+    /* CRITICAL FIX for black corners on rounded popups */
+    if (sortCombo->view() && sortCombo->view()->window()) {
+        sortCombo->view()->window()->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+        sortCombo->view()->window()->setAttribute(Qt::WA_TranslucentBackground);
+        sortCombo->view()->setAttribute(Qt::WA_TranslucentBackground);
+    }
+
     connect(sortCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &LivraisonWindow::onSort);
     lay->addWidget(sortCombo, 2);
 
@@ -275,7 +290,7 @@ QFrame* LivraisonWindow::createStatsArea()
     effLayout->addLayout(effLabels);
     effLayout->addStretch();
     effLayout->addWidget(effIcon);
-
+ 
     layout->addWidget(totalCard);
     layout->addWidget(efficiencyCard);
 
@@ -284,12 +299,17 @@ QFrame* LivraisonWindow::createStatsArea()
 
 void LivraisonWindow::updateStats()
 {
-    int total = livraisons.size();
+    int total = 0;
     int delivered = 0;
     
-    for (const auto& liv : livraisons) {
-        if (liv.statut == "Livré") {
-            delivered++;
+    // Scoping the query ensures the handle is released immediately
+    {
+        QSqlQuery query("SELECT STATUT FROM LIVRAISONS");
+        while (query.next()) {
+            total++;
+            if (query.value(0).toString() == "Livré") {
+                delivered++;
+            }
         }
     }
     
@@ -303,19 +323,28 @@ void LivraisonWindow::setupTable()
 {
     table = new QTableWidget();
     table->setColumnCount(6);
-    table->setHorizontalHeaderLabels({"ID", "Date", "Adresse", "Statut", "Transport", "Actions"});
+    table->setHorizontalHeaderLabels({"Date", "Adresse", "Statut", "Transport", "Prix", "Actions"});
 
-    table->horizontalHeader()->setStretchLastSection(true);
+    /* Responsive columns (matching Bateau styling) */
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    table->horizontalHeader()->setStretchLastSection(false);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch); // Adresse stretch
+
     table->verticalHeader()->setVisible(false);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::SingleSelection);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setShowGrid(true);
     table->setAlternatingRowColors(false);
+    table->setFrameShape(QFrame::NoFrame);
+    table->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    table->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    table->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
-    QFont headerFont("Segoe UI", 11, QFont::Bold);
-    table->horizontalHeader()->setFont(headerFont);
+    QFont hFont("Segoe UI", 11, QFont::Bold);
+    table->horizontalHeader()->setFont(hFont);
     table->horizontalHeader()->setFixedHeight(50);
+    table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     table->setStyleSheet(R"(
         QTableWidget {
@@ -350,43 +379,50 @@ void LivraisonWindow::setupTable()
 
     table->setObjectName("livraisonTable");
 
-    table->setColumnWidth(0, 90);    // ID
-
-
-    table->setColumnWidth(0, 90);    // ID
-    table->setColumnWidth(1, 130);   // Date
-    table->setColumnWidth(2, 280);   // Adresse
-    table->setColumnWidth(3, 140);   // Statut
-    table->setColumnWidth(4, 150);   // Transport
+    table->setColumnWidth(0, 130);   // Date
+    table->setColumnWidth(2, 140);   // Statut
+    table->setColumnWidth(3, 160);   // Transport
+    table->setColumnWidth(4, 120);   // Prix
+    table->setColumnWidth(5, 160);   // Actions (Widened for buttons)
 }
 
-void LivraisonWindow::populateTable(const QString& filterText)
+void LivraisonWindow::populateTable(const QString& filterText, const QString& sortCritere, const QString& sortOrdre)
 {
     table->setRowCount(0);
+    QSqlQueryModel* model;
+    
+    if (!sortCritere.isEmpty()) {
+        model = livraisons.trier(sortCritere, sortOrdre);
+    } else if (filterText.isEmpty()) {
+        model = livraisons.afficher();
+    } else {
+        model = livraisons.rechercher(filterText);
+    }
 
-    for (int i = 0; i < livraisons.size(); ++i) {
-        const Livraison& liv = livraisons[i];
-
-        if (!filterText.isEmpty()) {
-            QString searchLower = filterText.toLower();
-            if (!liv.id.toLower().contains(searchLower) &&
-                !liv.adresse.toLower().contains(searchLower) &&
-                !liv.statut.toLower().contains(searchLower)) {
-                continue;
-            }
-        }
-
+    for (int i = 0; i < model->rowCount(); ++i) {
         int row = table->rowCount();
         table->insertRow(row);
         table->setRowHeight(row, 60);
 
-        table->setItem(row, 0, new QTableWidgetItem(liv.id));
-        table->setItem(row, 1, new QTableWidgetItem(liv.date));
-        table->setItem(row, 2, new QTableWidgetItem(liv.adresse));
-        table->setCellWidget(row, 3, createStatusBadge(liv.statut));
-        table->setItem(row, 4, new QTableWidgetItem(liv.transport));
-        table->setCellWidget(row, 5, createActionButtons(i));
+        QString id = model->record(i).value("ID").toString();
+        QString date = model->record(i).value("Date").toDate().toString("dd/MM/yyyy");
+        QString adresse = model->record(i).value("Adresse").toString();
+        QString statut = model->record(i).value("STATUT").toString();
+        QString transport = model->record(i).value("Transport").toString();
+        QString prix = model->record(i).value("Prix").toString();
+        if (!prix.endsWith(" DT")) prix += " DT";
+
+        table->setItem(row, 0, new QTableWidgetItem(date));
+        table->setItem(row, 1, new QTableWidgetItem(adresse));
+        table->setCellWidget(row, 2, createStatusBadge(statut));
+        table->setItem(row, 3, new QTableWidgetItem(transport));
+        table->setItem(row, 4, new QTableWidgetItem(prix));
+        // We store the ID in the first column's toolTip or data for easy access
+        table->item(row, 0)->setData(Qt::UserRole, id); 
+        table->setCellWidget(row, 5, createActionButtons(row)); 
     }
+    delete model;
+    updateStats();
 }
 
 QWidget* LivraisonWindow::createStatusBadge(const QString& status)
@@ -405,6 +441,8 @@ QWidget* LivraisonWindow::createStatusBadge(const QString& status)
         badge->setProperty("class", "status-badge status-livre");
     } else if (status == "En cours") {
         badge->setProperty("class", "status-badge status-en-cours");
+    } else if (status == "Annulé" || status == "Canceled") {
+        badge->setProperty("class", "status-badge status-annule");
     } else {
         badge->setProperty("class", "status-badge status-en-attente");
     }
@@ -429,9 +467,9 @@ QWidget* LivraisonWindow::createActionButtons(int row)
     QPushButton* deleteBtn = new QPushButton("🗑️");
     QPushButton* pdfBtn = new QPushButton("📄");
 
-    editBtn->setFixedSize(35, 35);
-    deleteBtn->setFixedSize(35, 35);
-    pdfBtn->setFixedSize(35, 35);
+    editBtn->setFixedSize(36, 36);
+    deleteBtn->setFixedSize(36, 36);
+    pdfBtn->setFixedSize(36, 36);
     
     editBtn->setCursor(Qt::PointingHandCursor);
     deleteBtn->setCursor(Qt::PointingHandCursor);
@@ -440,6 +478,12 @@ QWidget* LivraisonWindow::createActionButtons(int row)
     editBtn->setProperty("class", "action-btn edit-btn");
     deleteBtn->setProperty("class", "action-btn delete-btn");
     pdfBtn->setProperty("class", "action-btn pdf-btn");
+
+    // Force style refresh for dynamic buttons
+    for (QPushButton* btn : {editBtn, deleteBtn, pdfBtn}) {
+        btn->style()->unpolish(btn);
+        btn->style()->polish(btn);
+    }
 
 
     connect(editBtn, &QPushButton::clicked, [this, row]() { onEditLivraison(row); });
@@ -455,7 +499,15 @@ QWidget* LivraisonWindow::createActionButtons(int row)
 
 QString LivraisonWindow::generateLivraisonId()
 {
-    return QString("LIV%1").arg(livraisons.size() + 1, 3, 10, QChar('0'));
+    int maxId = 0;
+    // Explicit scoping for the query
+    {
+        QSqlQuery query("SELECT MAX(IDLIVRAISON) FROM LIVRAISONS");
+        if (query.next()) {
+            maxId = query.value(0).toInt();
+        }
+    }
+    return QString("LIV%1").arg(maxId + 1, 3, 10, QChar('0'));
 }
 
 void LivraisonWindow::onSearch(const QString& text)
@@ -467,61 +519,192 @@ void LivraisonWindow::onAddLivraison()
 {
     AddLivraisonDialog dialog(this);
     if (dialog.exec() == QDialog::Accepted) {
-        Livraison newLiv = dialog.getData();
-        newLiv.id = generateLivraisonId();
-        newLiv.date = QDate::currentDate().toString("yyyy-MM-dd");
-        livraisons.append(newLiv);
-        updateStats();
-        populateTable(searchInput->text());
+        Livraison data = dialog.getData(); 
+        data.setID(generateLivraisonId());
+        
+        if (data.ajouter()) {
+            populateTable(searchInput->text());
+        } else {
+            QString errorMsg = "Impossible d'ajouter la livraison.\n\nErreur Base de Données: " + Livraison::getLastError();
+            QMessageBox::critical(this, "Erreur", errorMsg);
+        }
     }
 }
 
 void LivraisonWindow::onEditLivraison(int row)
 {
-    if (row < 0 || row >= livraisons.size()) return;
+    if (row < 0 || row >= table->rowCount()) return;
+    QString id = table->item(row, 0)->data(Qt::UserRole).toString();
 
-    AddLivraisonDialog dialog(this, &livraisons[row]);
+    // We need to fetch current data to pass to dialog
+    QSqlQuery query;
+    query.prepare("SELECT * FROM LIVRAISONS WHERE IDLIVRAISON = :id");
+    int idNum = id.startsWith("LIV") ? id.mid(3).toInt() : id.toInt();
+    query.bindValue(":id", idNum);
+    
+    if (!query.exec() || !query.next()) return;
+
+    ::Livraison currentData; // The struct used by dialog
+    currentData.setID(id);
+    currentData.setDate(query.value("DATELIVRAISON").toDate().toString("dd/MM/yyyy"));
+    currentData.setAdresse(query.value("ADRESSELIVRAISON").toString());
+    currentData.setStatut(query.value("STATUT").toString());
+    currentData.setTransport(query.value("TYPETRANSPORT").toString());
+    currentData.setVehicule(query.value("VEHICULE").toString());
+    currentData.setPrix(query.value("PRIXLIVRAISON").toString());
+    currentData.setDuree(query.value("DUREE").toInt());
+
+    AddLivraisonDialog dialog(this, &currentData);
     if (dialog.exec() == QDialog::Accepted) {
         Livraison updatedData = dialog.getData();
-        updatedData.id = livraisons[row].id;
-        updatedData.date = livraisons[row].date;
-        livraisons[row] = updatedData;
-        updateStats();
-        populateTable(searchInput->text());
+        updatedData.setID(id);
+        
+        if (updatedData.modifier(id)) {
+            populateTable(searchInput->text());
+        } else {
+            QString errorMsg = "Impossible de modifier la livraison.\n\nErreur Base de Données: " + Livraison::getLastError();
+            QMessageBox::critical(this, "Erreur", errorMsg);
+        }
     }
 }
 
 void LivraisonWindow::onDeleteLivraison(int row)
 {
+    if (row < 0 || row >= table->rowCount()) return;
+    QString id = table->item(row, 0)->data(Qt::UserRole).toString();
+
     if (QMessageBox::question(this, "Confirmation", "Supprimer cette livraison ?") == QMessageBox::Yes) {
-        livraisons.removeAt(row);
-        updateStats();
-        populateTable(searchInput->text());
+        if (livraisons.supprimer(id)) {
+            populateTable(searchInput->text());
+        } else {
+            QString errorMsg = "Impossible de supprimer la livraison.\n\nErreur Base de Données: " + Livraison::getLastError();
+            QMessageBox::critical(this, "Erreur", errorMsg);
+        }
     }
 }
 
 void LivraisonWindow::onSort(int index)
 {
+    QString critere = "";
+    QString ordre = "ASC";
+
     if (index == 1) { // Date (Récent)
-        std::sort(livraisons.begin(), livraisons.end(), [](const Livraison &a, const Livraison &b) {
-            return QDate::fromString(a.date, "yyyy-MM-dd") > QDate::fromString(b.date, "yyyy-MM-dd");
-        });
+        critere = "DATELIV"; ordre = "DESC";
     } else if (index == 2) { // Date (Ancien)
-        std::sort(livraisons.begin(), livraisons.end(), [](const Livraison &a, const Livraison &b) {
-            return QDate::fromString(a.date, "yyyy-MM-dd") < QDate::fromString(b.date, "yyyy-MM-dd");
-        });
+        critere = "DATELIV"; ordre = "ASC";
+    } else if (index == 3) { // Prix ↑
+        critere = "PRIX"; ordre = "ASC";
+    } else if (index == 4) { // Prix ↓
+        critere = "PRIX"; ordre = "DESC";
     }
 
-    populateTable(searchInput->text());
+    populateTable(searchInput->text(), critere, ordre);
 }
 
 void LivraisonWindow::onExportPDF(int row)
 {
-    if (row < 0 || row >= livraisons.size()) return;
-    const Livraison& liv = livraisons[row];
+    if (row < 0 || row >= table->rowCount()) return;
+    QString id = table->item(row, 0)->data(Qt::UserRole).toString();
+
+    QSqlQuery query;
+    query.prepare("SELECT * FROM LIVRAISONS WHERE IDLIVRAISON = :id");
+    int idNum = id.startsWith("LIV") ? id.mid(3).toInt() : id.toInt();
+    query.bindValue(":id", idNum);
+    
+    if (!query.exec() || !query.next()) return;
+
+    Livraison liv;
+    liv.setID(id);
+    liv.setDate(query.value("DATELIVRAISON").toDate().toString("dd/MM/yyyy"));
+    liv.setAdresse(query.value("ADRESSELIVRAISON").toString());
+    liv.setStatut(query.value("STATUT").toString());
+    liv.setTransport(query.value("TYPETRANSPORT").toString());
+    liv.setVehicule(query.value("VEHICULE").toString());
+    liv.setPrix(query.value("PRIXLIVRAISON").toString());
+    liv.setDuree(query.value("DUREE").toInt());
 
     QString fileName = QFileDialog::getSaveFileName(this, "Exporter en PDF", 
-                                                    QString("Livraison_%1.pdf").arg(liv.id),
+                                                    QString("Livraison_%1.pdf").arg(liv.getID()),
+                                                    "PDF Files (*.pdf)");
+    if (fileName.isEmpty()) return;
+
+    QPdfWriter writer(fileName);
+    writer.setPageSize(QPageSize(QPageSize::A4));
+    writer.setPageMargins(QMarginsF(30, 30, 30, 30));
+
+    QPainter painter(&writer);
+    painter.setPen(Qt::black);
+    
+    // Header
+    painter.setFont(QFont("Segoe UI", 20, QFont::Bold));
+    painter.drawText(QRect(0, 50, 5000, 100), Qt::AlignCenter, "REÇU DE LIVRAISON");
+    
+    painter.setPen(QPen(Qt::black, 2));
+    painter.drawLine(100, 200, 4900, 200);
+
+    // Content
+    painter.setFont(QFont("Segoe UI", 12));
+    int y = 400;
+    painter.drawText(500, y, "ID Livraison :");
+    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
+    painter.drawText(2000, y, liv.getID());
+    
+    y += 200;
+    painter.setFont(QFont("Segoe UI", 12));
+    painter.drawText(500, y, "Date :");
+    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
+    painter.drawText(2000, y, liv.getDate());
+    
+    y += 200;
+    painter.setFont(QFont("Segoe UI", 12));
+    painter.drawText(500, y, "Adresse :");
+    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
+    painter.drawText(2000, y, liv.getAdresse());
+
+    painter.setPen(QPen(Qt::gray, 1, Qt::DashLine));
+    painter.drawLine(100, y + 200, 4900, y + 200);
+
+    painter.end();
+
+    QMessageBox::information(this, "Export PDF", "Le reçu de livraison a été exporté avec succès !");
+}
+
+void LivraisonWindow::onShowStatistics()
+{
+    QMap<QString, int> statusData;
+    QMap<QString, int> vanTripsData;
+    QMap<QString, QPair<int, int>> vanTimeMetrics; // vehicle -> {totalDuration, tripCount}
+
+    QSqlQuery query("SELECT STATUT, VEHICULE, DUREE FROM LIVRAISONS");
+    while (query.next()) {
+        QString statut = query.value(0).toString();
+        QString vehicule = query.value(1).toString();
+        int duree = query.value(2).toInt();
+
+        statusData[statut]++;
+        
+        QString van = vehicule.isEmpty() ? "Inconnu" : vehicule;
+        vanTripsData[van]++;
+        
+        vanTimeMetrics[van].first += duree;
+        vanTimeMetrics[van].second++;
+    }
+
+    QMap<QString, double> avgTimeData;
+    for (auto it = vanTimeMetrics.begin(); it != vanTimeMetrics.end(); ++it) {
+        if (it.value().second > 0) {
+            avgTimeData[it.key()] = (double)it.value().first / it.value().second;
+        }
+    }
+
+    LivraisonStatisticsDialog dialog(statusData, vanTripsData, avgTimeData, this);
+    dialog.exec();
+}
+
+void LivraisonWindow::onExportAllPDF()
+{
+    QString fileName = QFileDialog::getSaveFileName(this, "Exporter tout en PDF", 
+                                                    "Rapport_Livraisons.pdf",
                                                     "PDF Files (*.pdf)");
     if (fileName.isEmpty()) return;
 
@@ -533,18 +716,54 @@ void LivraisonWindow::onExportPDF(int row)
     painter.setPen(Qt::black);
     painter.setFont(QFont("Segoe UI", 16, QFont::Bold));
 
-    painter.drawText(100, 100, "CONFIRMATION DE LIVRAISON");
+    // Header
+    painter.setFont(QFont("Segoe UI", 20, QFont::Bold));
+    painter.drawText(QRect(0, 50, 6000, 100), Qt::AlignCenter, "RAPPORT GLOBAL DES LIVRAISONS");
     
-    painter.setFont(QFont("Segoe UI", 12));
-    int y = 250;
-    painter.drawText(100, y, "ID Livraison: " + liv.id); y += 150;
-    painter.drawText(100, y, "Date: " + liv.date); y += 150;
-    painter.drawText(100, y, "Adresse: " + liv.adresse); y += 150;
-    painter.drawText(100, y, "Transport: " + liv.transport); y += 150;
-    painter.drawText(100, y, "Statut: " + liv.statut); y += 150;
-    painter.drawText(100, y, "Prix Total: " + liv.prix);
+    painter.setPen(QPen(Qt::black, 2));
+    painter.drawLine(100, 200, 5900, 200);
+
+    painter.setFont(QFont("Segoe UI", 10));
+    int y = 350;
+    
+    // Column Headers
+    painter.setFont(QFont("Segoe UI", 10, QFont::Bold));
+    painter.setPen(QColor("#475569"));
+    painter.drawText(200, y, "ID");
+    painter.drawText(800, y, "Date");
+    painter.drawText(1600, y, "Adresse");
+    painter.drawText(3600, y, "Statut");
+    painter.drawText(4400, y, "Van");
+    painter.drawText(5200, y, "Prix");
+    y += 150;
+    
+    painter.setPen(QPen(QColor("#e2e8f0"), 1));
+    painter.drawLine(200, y, 5800, y);
+    y += 150;
+
+    painter.setFont(QFont("Segoe UI", 9));
+    painter.setPen(Qt::black);
+    // Columns: IDLIVRAISON, DATELIVRAISON, ADRESSELIVRAISON, STATUT, VEHICULE, PRIXLIVRAISON
+    QSqlQuery query("SELECT 'LIV' || LPAD(IDLIVRAISON, 3, '0'), DATELIVRAISON, ADRESSELIVRAISON, STATUT, VEHICULE, PRIXLIVRAISON FROM LIVRAISONS");
+    while (query.next()) {
+        if (y > 9000) { 
+            writer.newPage();
+            y = 100;
+        }
+        painter.drawText(200, y, query.value(0).toString());
+        painter.drawText(800, y, query.value(1).toDate().toString("dd/MM/yyyy"));
+        painter.drawText(1600, y, query.value(2).toString().left(35));
+        painter.drawText(3600, y, query.value(3).toString());
+        painter.drawText(4400, y, query.value(4).toString().left(15));
+        painter.drawText(5200, y, query.value(5).toString());
+        y += 200;
+        
+        painter.setPen(QPen(QColor("#f1f5f9"), 1));
+        painter.drawLine(200, y - 50, 5800, y - 50);
+        painter.setPen(Qt::black);
+    }
 
     painter.end();
 
-    QMessageBox::information(this, "Export PDF", "La confirmation de livraison a été exportée avec succès !");
+    QMessageBox::information(this, "Export PDF", "Le rapport global a été exporté avec succès !");
 }

@@ -25,7 +25,8 @@ SOURCES += \
     StatisticsDialog.cpp \
     LivraisonStatisticsDialog.cpp \
     FrigoStatisticsDialog.cpp \
-    EmployeeStatsWindow.cpp
+    EmployeeStatsWindow.cpp \
+    livraison.cpp
 
 HEADERS += \
     connection.h \
@@ -47,7 +48,8 @@ HEADERS += \
     StatisticsDialog.h \
     LivraisonStatisticsDialog.h \
     FrigoStatisticsDialog.h \
-    EmployeeStatsWindow.h
+    EmployeeStatsWindow.h \
+    livraison.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

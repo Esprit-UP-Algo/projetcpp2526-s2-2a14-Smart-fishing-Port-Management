@@ -4,7 +4,9 @@
 #include <QDialog>
 #include <QLineEdit>
 #include <QComboBox>
-#include "Livraisonwindow.h"
+#include <QTextEdit>
+#include <QDateEdit>
+#include "livraison.h"
 
 class AddLivraisonDialog : public QDialog
 {
@@ -18,14 +20,14 @@ public:
 
 private:
     void setupUi();
-    void loadStyleSheet();
     void populateFields();
 
-    QLineEdit* adresseEdit;
-
-    QLineEdit* transportEdit;
+    QTextEdit* adresseEdit;
+    QLineEdit* vehiculeEdit;
+    QComboBox* transportEdit;
     QLineEdit* prixEdit;
     QComboBox* statusBox;
+    QDateEdit* dateEdit;
 
     Livraison* livraisonData;
     bool isEdit;
