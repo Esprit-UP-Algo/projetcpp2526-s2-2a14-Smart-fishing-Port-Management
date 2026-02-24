@@ -21,7 +21,10 @@ SOURCES += \
     LivraisonStatisticsDialog.cpp \
     Livraisonwindow.cpp \
     AddLivraisonDialog.cpp \
-    ../livraison.cpp
+    livraison.cpp \
+    quaiswindow.cpp \
+    quai.cpp \
+    addquaidialog.cpp
 
 HEADERS += \
     connection.h \
@@ -39,7 +42,10 @@ HEADERS += \
     LivraisonStatisticsDialog.h \
     Livraisonwindow.h \
     AddLivraisonDialog.h \
-    ../livraison.h
+    livraison.h \
+    quaiswindow.h \
+    quai.h \
+    addquaidialog.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

@@ -17,6 +17,7 @@ class QuaisWindow : public QMainWindow
 public:
     explicit QuaisWindow(QWidget *parent = nullptr);
 
+
 private:
     // UI
     QTableWidget* quaiTable;
@@ -49,6 +50,9 @@ private slots:
     void onUpdateQuai(int row);
     void onLogout();
     void onSort(int index);
+    void afficherStatistiques();
+    void onGenerateContract(int row);
+
 };
 
 #endif // QUAISWINDOW_H
