@@ -22,7 +22,10 @@ SOURCES += \
     quaiswindow.cpp \
     addquaidialog.cpp \
     quai.cpp \
-    StatisticsDialog.cpp
+    StatisticsDialog.cpp \
+    circularprogress.cpp \
+    contractgenerator.cpp \
+    contractdialog.cpp
 
 HEADERS += \
     connection.h \
@@ -41,7 +44,10 @@ HEADERS += \
     quaiswindow.h \
     addquaidialog.h \
     quai.h \
-    StatisticsDialog.h
+    StatisticsDialog.h \
+    circularprogress.h \
+    contractgenerator.h \
+    contractdialog.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
