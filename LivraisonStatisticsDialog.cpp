@@ -7,6 +7,17 @@
 #include <QPainter>
 #include <QLinearGradient>
 #include <QPaintEvent>
+#include <QPropertyAnimation>
+#include <QTimer>
+#include <QMap>
+#include <QFrame>
+#include <QList>
+#include <QPair>
+#include <QGraphicsDropShadowEffect>
+#include <QFont>
+#include <QEasingCurve>
+#include <QColor>
+#include <algorithm>
 
 LivraisonStatisticsDialog::LivraisonStatisticsDialog(
     const QMap<QString, int>& statusData, 
@@ -16,7 +27,7 @@ LivraisonStatisticsDialog::LivraisonStatisticsDialog(
     : QDialog(parent)
 {
     setWindowTitle("Statistiques de Livraison");
-    setMinimumSize(900, 700);
+    setMinimumSize(1000, 750);
     setStyleSheet("background-color: #f8fafc;");
     setupUi(statusData, vehicleData, avgTimeData);
 }
@@ -29,178 +40,262 @@ void LivraisonStatisticsDialog::setupUi(const QMap<QString, int>& statusData,
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Header
-    QFrame* header = new QFrame();
-    header->setFixedHeight(80);
-    header->setStyleSheet("background-color: #5D9CEC;");
-    QHBoxLayout* hl = new QHBoxLayout(header);
-    hl->setContentsMargins(30, 0, 30, 0);
+    // Header with Gradient
+    QFrame* headerFrame = new QFrame();
+    headerFrame->setStyleSheet(R"(
+        QFrame {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #1E3A8A, stop:1 #3B82F6);
+        }
+    )");
+    QHBoxLayout* headerLayout = new QHBoxLayout(headerFrame);
+    headerLayout->setContentsMargins(35, 0, 35, 0);
 
-    QLabel* title = new QLabel("Tableau de Bord Logistique");
-    title->setStyleSheet("color: white; font-size: 24px; font-weight: bold;");
-    hl->addWidget(title);
-    hl->addStretch();
+    QLabel* titleLbl = new QLabel("📊  Tableau de Bord Logistique");
+    titleLbl->setStyleSheet("color: white; font-size: 26px; font-weight: bold; font-family: 'Segoe UI';");
+    headerLayout->addWidget(titleLbl);
+    headerLayout->addStretch();
 
-    QPushButton* closeBtn = new QPushButton("Fermer");
+    QPushButton* closeBtn = new QPushButton("✕  Fermer");
     closeBtn->setCursor(Qt::PointingHandCursor);
+    closeBtn->setFixedSize(130, 44);
     closeBtn->setStyleSheet(R"(
         QPushButton {
-            background-color: rgba(255, 255, 255, 0.2);
+            background-color: rgba(255, 255, 255, 0.15);
             color: white;
-            border: 1px solid white;
-            border-radius: 8px;
-            padding: 8px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            font-size: 14px;
             font-weight: bold;
         }
-        QPushButton:hover { background-color: rgba(255, 255, 255, 0.3); }
+        QPushButton:hover { background-color: rgba(255, 255, 255, 0.25); border: 1px solid white; }
     )");
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
-    hl->addWidget(closeBtn);
+    headerLayout->addWidget(closeBtn);
 
-    mainLayout->addWidget(header);
+    mainLayout->addWidget(headerFrame);
 
     // Scroll Area for content
-    QScrollArea* scroll = new QScrollArea();
-    scroll->setWidgetResizable(true);
-    scroll->setStyleSheet("border: none; background: transparent;");
+    QScrollArea* scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setStyleSheet("QScrollArea { border: none; background-color: transparent; }");
     
-    QWidget* content = new QWidget();
-    QVBoxLayout* cl = new QVBoxLayout(content);
-    cl->setContentsMargins(30, 30, 30, 30);
-    cl->setSpacing(30);
+    QWidget* contentWidget = new QWidget();
+    contentWidget->setObjectName("contentWidget");
+    contentWidget->setStyleSheet("#contentWidget { background-color: #f8fafc; }");
+    QVBoxLayout* contentLayout = new QVBoxLayout(contentWidget);
+    contentLayout->setContentsMargins(35, 35, 35, 35);
+    contentLayout->setSpacing(35);
 
     // Metrics Row
     QHBoxLayout* metricsRow = new QHBoxLayout();
-    metricsRow->setSpacing(20);
+    metricsRow->setSpacing(24);
 
-    int total = 0;
-    for (int v : statusData.values()) total += v;
-    int completed = statusData.value("Livré", 0);
-    int pending   = statusData.value("En attente", 0) + statusData.value("En cours", 0);
-    int canceled  = statusData.value("Annulé", 0);
+    int totalDeliv = 0;
+    for (int v : statusData.values()) totalDeliv += v;
+    int completedNum = statusData.value("Livré", 0);
+    int pendingNum   = statusData.value("En attente", 0) + statusData.value("En cours", 0);
+    int canceledNum  = statusData.value("Annulé", 0);
 
-    auto makeMetric = [&](const QString& label, int val, const QString& color) {
-        QFrame* card = new QFrame();
-        card->setStyleSheet(QString(R"(
+    QList<QFrame*> animatedCards;
+    auto makeMetric = [&](const QString& icon, const QString& label, int val, const QString& color1, const QString& color2) {
+        QFrame* cardItem = new QFrame();
+        cardItem->setMinimumHeight(125);
+        cardItem->setStyleSheet(QString(R"(
             QFrame { 
-                background: %1; 
-                border-radius: 18px; 
-                border: none;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 %1, stop:1 %2);
+                border-radius: 20px; 
             }
-            QFrame:hover { 
-                background: %2; 
-            }
-        )").arg("#5D9CEC", "#4A89DC"));
+        )").arg(color1, color2));
         
-        card->setFixedHeight(110);
-        QVBoxLayout* l = new QVBoxLayout(card);
-        l->setContentsMargins(25, 15, 25, 15);
-        l->setSpacing(2);
+        QGraphicsDropShadowEffect* shadowEffect = new QGraphicsDropShadowEffect();
+        shadowEffect->setBlurRadius(20);
+        shadowEffect->setOffset(0, 8);
+        shadowEffect->setColor(QColor(0, 0, 0, 40));
+        cardItem->setGraphicsEffect(shadowEffect);
 
-        QLabel* lbl = new QLabel(label);
-        lbl->setFont(QFont("Segoe UI", 9, QFont::Bold));
-        lbl->setStyleSheet("color: rgba(255, 255, 255, 0.8); text-transform: uppercase; letter-spacing: 1px;");
+        QVBoxLayout* cardLayout = new QVBoxLayout(cardItem);
+        cardLayout->setContentsMargins(25, 20, 25, 20);
+        cardLayout->setSpacing(4);
+
+        QHBoxLayout* iconHeaderLayout = new QHBoxLayout();
+        QLabel* iconLabel = new QLabel(icon);
+        iconLabel->setStyleSheet("font-size: 24px; background: transparent;");
+        iconHeaderLayout->addWidget(iconLabel);
+        iconHeaderLayout->addStretch();
         
-        QLabel* valLbl = new QLabel(QString::number(val));
-        valLbl->setFont(QFont("Segoe UI", 24, QFont::Bold));
-        valLbl->setStyleSheet("color: white;");
-
-        l->addWidget(lbl);
-        l->addWidget(valLbl);
-        metricsRow->addWidget(card, 1);
+        QLabel* labelLabel = new QLabel(label);
+        labelLabel->setFont(QFont("Segoe UI", 9, QFont::Bold));
+        labelLabel->setStyleSheet("color: rgba(255, 255, 255, 0.9); text-transform: uppercase; letter-spacing: 1px;");
+        iconHeaderLayout->addWidget(labelLabel);
+        cardLayout->addLayout(iconHeaderLayout);
+        
+        QLabel* valueLabel = new QLabel(QString::number(val));
+        valueLabel->setFont(QFont("Segoe UI", 28, QFont::Bold));
+        valueLabel->setStyleSheet("color: white;");
+        cardLayout->addWidget(valueLabel);
+        
+        metricsRow->addWidget(cardItem, 1);
+        animatedCards.append(cardItem);
+        
+        // Initial state for animation
+        cardItem->setWindowOpacity(0);
     };
 
-    makeMetric("Total Livraisons", total, "#5D9CEC");
-    makeMetric("Terminées", completed, "#5D9CEC");
-    makeMetric("En cours", pending, "#5D9CEC");
-    makeMetric("Annulé", canceled, "#5D9CEC");
+    makeMetric("📦", "Total Livraisons", totalDeliv, "#1E3A8A", "#3B82F6");
+    makeMetric("✅", "Terminées", completedNum, "#2563EB", "#60A5FA");
+    makeMetric("⏳", "En attente", pendingNum, "#3B82F6", "#93C5FD");
+    makeMetric("❌", "Annulées", canceledNum, "#64748B", "#94A3B8");
 
-    cl->addLayout(metricsRow);
+    contentLayout->addLayout(metricsRow);
 
     // Charts Row
     QHBoxLayout* chartsRow = new QHBoxLayout();
-    chartsRow->setSpacing(25);
+    chartsRow->setSpacing(30);
 
-    // Top Vans (Horizontal Bar Chart)
+    // Top Vans Card
     QFrame* vanCard = new QFrame();
-    vanCard->setStyleSheet("background: white; border-radius: 16px; border: 1px solid #e2e8f0;");
-    QVBoxLayout* vl = new QVBoxLayout(vanCard);
-    vl->setContentsMargins(25, 25, 25, 25);
+    vanCard->setObjectName("vanCard");
+    vanCard->setStyleSheet(R"(
+        #vanCard { 
+            background: white; 
+            border-radius: 24px; 
+            border: 1px solid #e2e8f0;
+        }
+    )");
     
-    QLabel* vanTitle = new QLabel("Livraisons par Véhicule");
-    vanTitle->setStyleSheet("font-size: 18px; font-weight: bold; color: #1e293b; border: none;");
-    vl->addWidget(vanTitle);
+    QGraphicsDropShadowEffect* vanShadow = new QGraphicsDropShadowEffect();
+    vanShadow->setBlurRadius(25);
+    vanShadow->setOffset(0, 10);
+    vanShadow->setColor(QColor(0, 0, 0, 30));
+    vanCard->setGraphicsEffect(vanShadow);
+    
+    QVBoxLayout* vanLayout = new QVBoxLayout(vanCard);
+    vanLayout->setContentsMargins(30, 30, 30, 30);
+    
+    QLabel* vanTitle = new QLabel("Performance par Véhicule");
+    vanTitle->setStyleSheet("font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 20px;");
+    vanLayout->addWidget(vanTitle);
     
     QList<QPair<QString, double>> sortedData;
     for(auto it = vehicleData.begin(); it != vehicleData.end(); ++it)
         sortedData.append({it.key(), (double)it.value()});
     
-    // Sort descending by value (Best vehicle first)
     std::sort(sortedData.begin(), sortedData.end(), [](const QPair<QString, double>& a, const QPair<QString, double>& b) {
         return a.second > b.second;
     });
     
-    vl->addWidget(new HorizontalBarChartWidget(sortedData));
+    HorizontalBarChartWidget* barChart = new HorizontalBarChartWidget(sortedData);
+    vanLayout->addWidget(barChart);
     chartsRow->addWidget(vanCard, 3);
 
-    // Avg Time (List)
+    // Avg Time Card
     QFrame* timeCard = new QFrame();
-    timeCard->setStyleSheet("background: white; border-radius: 16px; border: 1px solid #e2e8f0;");
-    QVBoxLayout* tl = new QVBoxLayout(timeCard);
-    tl->setContentsMargins(25, 25, 25, 25);
+    timeCard->setObjectName("timeCard");
+    timeCard->setStyleSheet(R"(
+        #timeCard { 
+            background: white; 
+            border-radius: 24px; 
+            border: 1px solid #e2e8f0;
+        }
+    )");
     
-    QLabel* timeTitle = new QLabel("Temps Moyen par Van");
-    timeTitle->setStyleSheet("font-size: 18px; font-weight: bold; color: #1e293b; border: none;");
-    tl->addWidget(timeTitle);
+    QGraphicsDropShadowEffect* timeShadow = new QGraphicsDropShadowEffect();
+    timeShadow->setBlurRadius(25);
+    timeShadow->setOffset(0, 10);
+    timeShadow->setColor(QColor(0, 0, 0, 30));
+    timeCard->setGraphicsEffect(timeShadow);
+    
+    QVBoxLayout* timeLayout = new QVBoxLayout(timeCard);
+    timeLayout->setContentsMargins(30, 30, 30, 30);
+    
+    QLabel* timeTitle = new QLabel("Temps Moyen (min)");
+    timeTitle->setStyleSheet("font-size: 20px; font-weight: bold; color: #1e293b; margin-bottom: 20px;");
+    timeLayout->addWidget(timeTitle);
 
     QVBoxLayout* avgLayout = new QVBoxLayout();
+    avgLayout->setSpacing(12);
+    
     if (avgTimeData.isEmpty()) {
-        avgLayout->addWidget(new QLabel("Aucune donnée"), 0, Qt::AlignCenter);
+        avgLayout->addWidget(new QLabel("Aucune donnée disponible"), 0, Qt::AlignCenter);
     } else {
         for (auto it = avgTimeData.begin(); it != avgTimeData.end(); ++it) {
             QFrame* itemFrame = new QFrame();
             itemFrame->setStyleSheet(R"(
                 QFrame {
-                    background-color: #F0F7FF;
-                    border: 1px solid #C4E0FF;
-                    border-radius: 10px;
+                    background-color: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
                 }
                 QFrame:hover {
-                    background-color: #E1EFFF;
-                    border: 1px solid #5D9CEC;
+                    background-color: #f1f5f9;
+                    border: 1px solid #cbd5e1;
                 }
             )");
             
-            QHBoxLayout* il = new QHBoxLayout(itemFrame);
-            il->setContentsMargins(15, 8, 15, 8);
+            QHBoxLayout* itemLayout = new QHBoxLayout(itemFrame);
+            itemLayout->setContentsMargins(18, 12, 18, 12);
             
-            QLabel* name = new QLabel(it.key());
-            name->setFont(QFont("Segoe UI", 10, QFont::DemiBold));
-            name->setStyleSheet("color: #2C3E50;");
+            QLabel* nameLbl = new QLabel(it.key());
+            nameLbl->setStyleSheet("color: #475569; font-weight: 600; font-size: 14px;");
             
-            QLabel* time = new QLabel(QString::number(it.value(), 'f', 1) + " min");
-            time->setFont(QFont("Segoe UI", 10, QFont::Bold));
-            time->setStyleSheet("color: #5D9CEC;");
+            QLabel* timeValLbl = new QLabel(QString::number(it.value(), 'f', 1));
+            timeValLbl->setStyleSheet("color: #2563EB; font-weight: 800; font-size: 16px;");
             
-            il->addWidget(name);
-            il->addStretch();
-            il->addWidget(time);
+            itemLayout->addWidget(nameLbl);
+            itemLayout->addStretch();
+            itemLayout->addWidget(timeValLbl);
             avgLayout->addWidget(itemFrame);
         }
     }
     avgLayout->addStretch();
-    tl->addLayout(avgLayout);
+    timeLayout->addLayout(avgLayout);
     chartsRow->addWidget(timeCard, 2);
 
-    cl->addLayout(chartsRow);
-    scroll->setWidget(content);
-    mainLayout->addWidget(scroll);
+    contentLayout->addLayout(chartsRow);
+    scrollArea->setWidget(contentWidget);
+    mainLayout->addWidget(scrollArea);
+
+    // --- STAGGERED ENTRANCE ANIMATIONS ---
+    for (int idx = 0; idx < animatedCards.size(); ++idx) {
+        QFrame* card = animatedCards[idx];
+        QTimer::singleShot(150 * idx, [card]() {
+            QPropertyAnimation* anim = new QPropertyAnimation(card, "pos");
+            anim->setDuration(500);
+            QPoint originalPos = card->pos();
+            anim->setStartValue(originalPos + QPoint(0, 30));
+            anim->setEndValue(originalPos);
+            anim->setEasingCurve(QEasingCurve::OutCubic);
+            
+            QPropertyAnimation* fade = new QPropertyAnimation(card, "windowOpacity");
+            fade->setDuration(500);
+            fade->setStartValue(0.0);
+            fade->setEndValue(1.0);
+            
+            anim->start(QAbstractAnimation::DeleteWhenStopped);
+            fade->start(QAbstractAnimation::DeleteWhenStopped);
+        });
+    }
+
+    // Trigger bar chart animation
+    QTimer::singleShot(600, [barChart]() { barChart->animate(); });
 }
 
 HorizontalBarChartWidget::HorizontalBarChartWidget(const QList<QPair<QString, double>>& data, QWidget* parent)
-    : QFrame(parent), m_data(data)
+    : QFrame(parent), m_data(data), m_barProgress(0.0)
 {
-    setMinimumHeight(350);
+    setMinimumHeight(400);
+    setStyleSheet("background: transparent; border: none;");
+}
+
+void HorizontalBarChartWidget::animate()
+{
+    QPropertyAnimation* anim = new QPropertyAnimation(this, "barProgress");
+    anim->setDuration(1500);
+    anim->setStartValue(0.0);
+    anim->setEndValue(1.0);
+    anim->setEasingCurve(QEasingCurve::OutExpo);
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
 void HorizontalBarChartWidget::paintEvent(QPaintEvent* event)
@@ -211,60 +306,61 @@ void HorizontalBarChartWidget::paintEvent(QPaintEvent* event)
 
     if (m_data.isEmpty()) return;
 
-    int padding = 40;
-    int chartWidth = width() - padding * 2;
-    int chartHeight = height() - padding * 2;
+    int paddingLeft = 140;
+    int paddingRight = 60;
+    int paddingTop = 10;
+    int chartWidth = width() - paddingLeft - paddingRight;
+    int chartHeight = height() - paddingTop * 2;
     
-    // Premium proportions
-    int barHeight = 30; 
-    int spacing = (chartHeight - (m_data.count() * barHeight)) / (m_data.count() + 1);
-    if (spacing < 15) spacing = 15;
+    int barHeight = 32; 
+    int barSpacing = (chartHeight - (m_data.count() * barHeight)) / (m_data.count() + 1);
+    if (barSpacing < 10) barSpacing = 10;
 
-    double maxVal = 0;
-    for (const auto& pair : m_data) if (pair.second > maxVal) maxVal = pair.second;
-    if (maxVal == 0) maxVal = 1;
+    double maxValue = 0;
+    for (const auto& pair : m_data) if (pair.second > maxValue) maxValue = pair.second;
+    if (maxValue == 0) maxValue = 1;
 
-    for (int i = 0; i < m_data.count(); ++i) {
-        int y = padding + spacing + i * (barHeight + spacing);
+    for (int idx = 0; idx < m_data.count(); ++idx) {
+        int yPos = paddingTop + barSpacing + idx * (barHeight + barSpacing);
         
-        // Track Background (Glassmorphism effect)
-        int trackX = padding + 120;
-        int trackWidth = chartWidth - 170;
+        // Track Background
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor("#f1f5f9"));
-        painter.drawRoundedRect(trackX, y, trackWidth, barHeight, 15, 15);
+        painter.drawRoundedRect(paddingLeft, yPos, chartWidth, barHeight, 10, 10);
 
-        // Bar Fill with Vibrant Gradient
-        double barWidth = (m_data[i].second / maxVal) * trackWidth;
-        QRectF rect(trackX, y, barWidth, barHeight);
+        // Animated Bar Fill
+        double actualWidth = (m_data[idx].second / maxValue) * chartWidth;
+        double animatedWidth = actualWidth * m_barProgress;
         
-        QLinearGradient grad(rect.topLeft(), rect.topRight());
-        if (i == 0) {
-            grad.setColorAt(0, QColor("#F59E0B")); // Top vehicle - Amber
-            grad.setColorAt(1, QColor("#D97706"));
+        QRectF barRect(paddingLeft, yPos, animatedWidth, barHeight);
+        
+        QLinearGradient barGrad(barRect.topLeft(), barRect.topRight());
+        if (idx == 0) {
+            barGrad.setColorAt(0, QColor("#1E40AF")); // Sapphire Blue for #1
+            barGrad.setColorAt(1, QColor("#3B82F6"));
+        } else if (idx == 1) {
+            barGrad.setColorAt(0, QColor("#3B82F6")); // Medium Blue for #2
+            barGrad.setColorAt(1, QColor("#60A5FA"));
         } else {
-            grad.setColorAt(0, QColor("#60A5FA")); // Premium Light Blue
-            grad.setColorAt(1, QColor("#2563EB")); // Deep Royal Blue
+            barGrad.setColorAt(0, QColor("#60A5FA")); // Light Sky for others
+            barGrad.setColorAt(1, QColor("#93C5FD"));
         }
         
-        painter.setBrush(grad);
-        painter.drawRoundedRect(rect, 15, 15);
+        painter.setBrush(barGrad);
+        painter.drawRoundedRect(barRect, 10, 10);
 
-        // Vehicle Name
+        // Name
         painter.setPen(QColor("#475569"));
-        painter.setFont(QFont("Segoe UI", 10, QFont::Medium));
-        painter.drawText(QRect(padding, y, 110, barHeight), Qt::AlignRight | Qt::AlignVCenter, m_data[i].first);
+        painter.setFont(QFont("Segoe UI", 10, QFont::DemiBold));
+        painter.drawText(QRect(0, yPos, paddingLeft - 15, barHeight), Qt::AlignRight | Qt::AlignVCenter, m_data[idx].first);
 
-        // Delivery Count
-        painter.setPen(QColor("#1e293b"));
-        painter.setFont(QFont("Segoe UI", 10, QFont::Bold));
-        painter.drawText(QRect(trackX + barWidth + 12, y, 50, barHeight), Qt::AlignLeft | Qt::AlignVCenter, QString::number(m_data[i].second));
-        
-        // Highlight Label for Top Vehicle
-        if (i == 0) {
-             painter.setPen(QColor("#B45309"));
-             painter.setFont(QFont("Segoe UI", 8, QFont::Bold));
-             painter.drawText(QRect(trackX + trackWidth - 50, y, 45, barHeight), Qt::AlignRight | Qt::AlignVCenter, "TOP ★");
+        // Count (fade in with progress)
+        if (m_barProgress > 0.5) {
+            painter.setOpacity((m_barProgress - 0.5) * 2);
+            painter.setPen(QColor("#1e293b"));
+            painter.setFont(QFont("Segoe UI", 11, QFont::Bold));
+            painter.drawText(QRect(paddingLeft + animatedWidth + 10, yPos, 50, barHeight), Qt::AlignLeft | Qt::AlignVCenter, QString::number(m_data[idx].second));
+            painter.setOpacity(1.0);
         }
     }
 }
