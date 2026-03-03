@@ -2,10 +2,11 @@
 #define ADDQUAIDIALOG_H
 
 #include <QDialog>
-#include <QLineEdit>
-#include <QComboBox>
-#include <QPushButton>
-#include "quai.h"
+
+class QLineEdit;
+class QComboBox;
+class QPushButton;
+class Quai;
 
 class AddQuaiDialog : public QDialog
 {
@@ -14,14 +15,15 @@ class AddQuaiDialog : public QDialog
 public:
     explicit AddQuaiDialog(QWidget *parent = nullptr);
     Quai getData() const;
+    void saveQuai();
 
 private:
-    QLineEdit* nomInput;
+    QLineEdit* numeroInput;
+    QLineEdit* locationInput;
     QLineEdit* capaciteInput;
-    QLineEdit* tailleMaxInput;
     QLineEdit* tarifInput;
-    QLineEdit* clientInput;
-    QComboBox* statutInput;
+    QLineEdit* dureeInput;
+    QComboBox* etatInput;
 
     QPushButton* saveBtn;
     QPushButton* cancelBtn;

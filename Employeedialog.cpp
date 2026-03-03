@@ -1,7 +1,4 @@
 #include "employeedialog.h"
-#include <QIntValidator>
-#include <QDoubleValidator>
-#include <QLocale>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -10,8 +7,9 @@
 #include <QFont>
 #include <QDate>
 #include <QScrollArea>
-
-EmployeeDialog::EmployeeDialog(QWidget *parent, EmployeeModel* employeeData)
+#include <QRegularExpressionValidator>
+#include <QRegularExpression>
+EmployeeDialog::EmployeeDialog(QWidget *parent, Employee* employeeData)
     : QDialog(parent), employeeData(employeeData), isEdit(employeeData != nullptr)
 {
     setupUi();
@@ -125,12 +123,19 @@ void EmployeeDialog::setupUi()
     formLayout->addWidget(cinLabel);
 
     cinInput = new QLineEdit();
-    cinInput->setPlaceholderText("01234567");
-    cinInput->setValidator(new QIntValidator(0, 99999999, this));
+    cinInput->setPlaceholderText("12345678");
+    cinInput->setMaxLength(8);
     cinInput->setFont(inputFont);
     cinInput->setFixedHeight(50);
     cinInput->setStyleSheet(getInputStyle());
     formLayout->addWidget(cinInput);
+
+    cinErrorLabel = new QLabel("");
+    cinErrorLabel->setStyleSheet("color: #E74C3C; font-size: 11px; font-weight: bold; margin-top: -5px;");
+    cinErrorLabel->hide();
+    formLayout->addWidget(cinErrorLabel);
+
+    connect(cinInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateCin);
 
     formLayout->addSpacing(10);
 
@@ -156,8 +161,7 @@ void EmployeeDialog::setupUi()
     formLayout->addWidget(salaireLabel);
 
     salaryInput = new QLineEdit();
-    salaryInput->setPlaceholderText("Ex: 1200.50");
-    salaryInput->setValidator(new QDoubleValidator(0, 100000, 2, this));
+    salaryInput->setPlaceholderText("1200 DT");
     salaryInput->setFont(inputFont);
     salaryInput->setFixedHeight(50);
     salaryInput->setStyleSheet(getInputStyle());
@@ -247,7 +251,7 @@ void EmployeeDialog::setupUi()
             background-color: #3B77C4;
         }
     )");
-    connect(saveBtn, &QPushButton::clicked, this, &QDialog::accept);
+    connect(saveBtn, &QPushButton::clicked, this, &EmployeeDialog::onSaveClicked);
     buttonLayout->addWidget(saveBtn);
 
     formLayout->addLayout(buttonLayout);
@@ -268,7 +272,7 @@ QString EmployeeDialog::getInputStyle() const
             border-radius: 10px;
             padding: 12px 15px;
             color: #2C3E50;
-            font-size: 14px;
+            font-size: 12px;
         }
         QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
             border: 2px solid #5D9CEC;
@@ -306,28 +310,77 @@ void EmployeeDialog::populateFields()
 {
     if (!employeeData) return;
 
-    cinInput->setText(employeeData->getCin());
-    salaryInput->setText(QString::number(employeeData->getSalaire()));
-    dateInput->setDate(employeeData->getDate());
-    
-    int index = statusCombo->findText(employeeData->getStatut());
-    if (index >= 0) statusCombo->setCurrentIndex(index);
-    
-    positionInput->setText(employeeData->getPosition());
-    firstNameInput->setText(employeeData->getPrenom());
-    lastNameInput->setText(employeeData->getNom());
+    firstNameInput->setText(employeeData->firstName);
+    lastNameInput->setText(employeeData->lastName);
+    cinInput->setText(employeeData->cin);
+    positionInput->setText(employeeData->position);
+    salaryInput->setText(employeeData->salary);
+
+    // Parse date
+    QStringList dateParts = employeeData->date.split("/");
+    if (dateParts.size() == 3) {
+        dateInput->setDate(QDate(dateParts[2].toInt(), dateParts[1].toInt(), dateParts[0].toInt()));
+    }
+
+    int index = statusCombo->findText(employeeData->status);
+    if (index >= 0) {
+        statusCombo->setCurrentIndex(index);
+    }
 }
 
-EmployeeModel EmployeeDialog::getData() const
+Employee EmployeeDialog::getData() const
 {
-    return EmployeeModel(
-        "", // ID is handled by caller
-        cinInput->text(),
-        QLocale().toDouble(salaryInput->text()),
-        dateInput->date(),
-        statusCombo->currentText(),
-        positionInput->text(),
-        firstNameInput->text(),
-        lastNameInput->text()
-    );
+    Employee employee;
+    employee.firstName = firstNameInput->text();
+    employee.lastName = lastNameInput->text();
+    employee.cin = cinInput->text();
+    employee.position = positionInput->text();
+    employee.salary = salaryInput->text();
+    employee.date = dateInput->date().toString("dd/MM/yyyy");
+    employee.status = statusCombo->currentText();
+
+    return employee;
+}
+
+void EmployeeDialog::validateCin(const QString &text)
+{
+    QString cleanText = text;
+    bool hasLetters = false;
+
+    if (cleanText.contains(QRegularExpression("[^0-9]"))) {
+        hasLetters = true;
+        cleanText.remove(QRegularExpression("[^0-9]"));
+
+        cinInput->blockSignals(true);
+        int cursor = cinInput->cursorPosition() - 1;
+        cinInput->setText(cleanText);
+        cinInput->setCursorPosition(qMax(0, cursor));
+        cinInput->blockSignals(false);
+    }
+
+    if (cleanText.isEmpty()) {
+        cinErrorLabel->setText("Le CIN est obligatoire");
+        cinErrorLabel->show();
+    } else if (hasLetters) {
+        cinErrorLabel->setText("Il faut utiliser que des chiffres");
+        cinErrorLabel->show();
+    } else if (cleanText.length() != 8) {
+        cinErrorLabel->setText(QString("Le CIN doit comporter exactement 8 chiffres (%1/8)").arg(cleanText.length()));
+        cinErrorLabel->show();
+    } else {
+        cinErrorLabel->hide();
+    }
+}
+
+void EmployeeDialog::onSaveClicked()
+{
+    QString text = cinInput->text();
+    validateCin(text);
+
+    // Check if error label is hidden (valid)
+    if (!cinErrorLabel->isHidden()) {
+        return;
+    }
+
+    accept();
 }

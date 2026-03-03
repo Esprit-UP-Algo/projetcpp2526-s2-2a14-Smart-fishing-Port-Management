@@ -5,17 +5,21 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDateEdit>
-#include "employee.h"
+#include "Employeewindow.h"
 
 class EmployeeDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit EmployeeDialog(QWidget *parent = nullptr, EmployeeModel* employeeData = nullptr);
+    explicit EmployeeDialog(QWidget *parent = nullptr, Employee* employeeData = nullptr);
     ~EmployeeDialog();
 
-    EmployeeModel getData() const;
+    Employee getData() const;
+
+private slots:
+    void validateCin(const QString &text);
+    void onSaveClicked();
 
 private:
     void setupUi();
@@ -25,12 +29,13 @@ private:
     QLineEdit* firstNameInput;
     QLineEdit* lastNameInput;
     QLineEdit* cinInput;
+    QLabel* cinErrorLabel;
     QLineEdit* positionInput;
     QLineEdit* salaryInput;
     QDateEdit* dateInput;
     QComboBox* statusCombo;
 
-    EmployeeModel* employeeData;
+    Employee* employeeData;
     bool isEdit;
 };
 

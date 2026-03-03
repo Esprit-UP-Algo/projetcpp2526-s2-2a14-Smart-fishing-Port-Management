@@ -11,6 +11,9 @@
 #include <QWidget>
 #include <QPainter>
 #include <QPropertyAnimation>
+#include <QtSql/QSqlQuery>  // optional, but good
+#include <QtSql/QSqlRecord>
+
 #include "quai.h"
 
 // ==================== CIRCULAR PROGRESS WIDGET ====================
@@ -18,6 +21,7 @@ class CircularProgress : public QWidget {
     Q_OBJECT
     Q_PROPERTY(double progress READ progress WRITE setProgress)
 public:
+
     CircularProgress(double value, double maxVal, const QString& label,
                      const QString& unit, const QColor& color, QWidget* parent = nullptr)
         : QWidget(parent), m_progress(0), m_target(maxVal > 0 ? value / maxVal : 0),
@@ -127,7 +131,7 @@ class QuaisWindow : public QMainWindow
 
 public:
     explicit QuaisWindow(QWidget *parent = nullptr);
-
+    void loadQuaisFromDatabase();
 private:
     // UI
     QTableWidget* quaiTable;

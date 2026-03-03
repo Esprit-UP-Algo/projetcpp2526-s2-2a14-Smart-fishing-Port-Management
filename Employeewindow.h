@@ -12,10 +12,20 @@
 #include <QLabel>
 #include <QVector>
 #include <QComboBox>
-#include <QSqlRecord>
-#include "employee.h"
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QVariant>
 
-// Structure removed, using EmployeeModel now
+struct Employee {
+    QString id;
+    QString cin;
+    QString firstName;
+    QString lastName;
+    QString position;
+    QString salary;
+    QString date;
+    QString status;  // Actif / Congé / Inactif
+};
 
 class EmployeeWindow : public QMainWindow
 {
@@ -48,14 +58,15 @@ private:
     QPushButton* createNavButton(const QString& icon, const QString& text, bool isActive = false, bool isLogout = false);
     void setupTable();
     void populateTable(const QString& filterText = "");
+    void loadEmployeesFromDb();
     QWidget* createStatusBadge(const QString& status);
     QWidget* createActionButtons(int row);
     QString generateEmployeeId();
 
-    EmployeeModel   employeeModel;
-    QTableWidget*   table;
-    QLineEdit*      searchInput;
-    QComboBox*      sortCombo;
+    QVector<Employee> employees;
+    QTableWidget* table;
+    QLineEdit* searchInput;
+    QComboBox* sortCombo;
 };
 
 #endif // EMPLOYEEWINDOW_H

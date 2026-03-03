@@ -4,35 +4,37 @@
 #include <QString>
 
 class Quai {
-public:
-    Quai(); // default constructor
-    Quai(QString id, QString nom, int capacite,
-         double tailleMax, QString statut,
-         double tarif, QString client); // parameterized constructor
-
-    QString getId() const;
-    QString getNom() const;
-    int getCapacite() const;
-    double getTailleMax() const;
-    QString getStatut() const;
-    double getTarif() const;
-    QString getClient() const;
-
-    void setId(const QString &id);
-    void setNom(const QString &nom);
-    void setCapacite(int capacite);
-    void setTailleMax(double tailleMax);
-    void setStatut(const QString &statut);
-    void setTarif(double tarif);
-    void setClient(const QString &client);
-
 private:
-    QString id;
-    QString nom;
+    int numero;
     int capacite;
-    double tailleMax;
-    QString statut;
+    QString etat;
     double tarif;
-    QString client;
+    QString location;
+    QString dureeLocation;
+    double tailleMax;
+
+public:
+    Quai(); // default
+    Quai(int numero, int capacite, QString etat, double tarif, QString location,
+         const QString& dureeLocation);
+
+    // Getters
+    int getNumero() const;
+    int getCapacite() const;
+    QString getEtat() const;
+    double getTarif() const;
+    QString getLocation() const;
+    QString getDureeLocation() const;
+
+
+    // Setters
+    void setNumero(int numero);
+    void setCapacite(int capacite);
+    void setEtat(const QString &etat);
+    void setTarif(double tarif);
+    void setLocation(const QString &location);
+    void setDureeLocation(const QString &duree);
+
 };
+
 #endif

@@ -17,6 +17,9 @@ EmployeeWindow::EmployeeWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     setupUi();
+
+    loadEmployeesFromDb();
+
     populateTable();
 }
 
@@ -257,8 +260,8 @@ QFrame* EmployeeWindow::createHeader()
         btn->setFixedHeight(45);
         btn->setMinimumWidth(160);
         btn->setStyleSheet(QString(
-            "QPushButton{ background:%1; color:white; border:none; border-radius:12px; padding:0 20px; }"
-            "QPushButton:hover{ background:%2; }").arg(bg, hover));
+                               "QPushButton{ background:%1; color:white; border:none; border-radius:12px; padding:0 20px; }"
+                               "QPushButton:hover{ background:%2; }").arg(bg, hover));
         return btn;
     };
 
@@ -274,55 +277,54 @@ QFrame* EmployeeWindow::createToolbar()
 {
     QFrame* bar = new QFrame();
     bar->setStyleSheet(R"(
-        QFrame {
-            background: white;
-            border-radius: 14px;
-            border: 1.5px solid #e2e8f0;
-        }
+        QFrame { background: white; border-radius: 14px; border: 1.5px solid #e2e8f0; }
     )");
-    bar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    bar->setMinimumHeight(62);
+    bar->setFixedHeight(62);
 
     QHBoxLayout* lay = new QHBoxLayout(bar);
     lay->setContentsMargins(16, 0, 16, 0);
     lay->setSpacing(12);
 
-    /* Search bar */
+    /* Search Input */
     searchInput = new QLineEdit();
-    searchInput->setPlaceholderText("🔍  Rechercher un employé par nom, poste...");
-    searchInput->setFixedWidth(350);
-    searchInput->setFixedHeight(40);
+    searchInput->setPlaceholderText("Rechercher un employé par nom, poste...");
+    searchInput->setFont(QFont("Segoe UI", 11));
+    searchInput->setFixedHeight(45);
     searchInput->setStyleSheet(R"(
-        QLineEdit {
-            background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
-            padding-left:12px; font-size:13px; color:#334155;
-        }
-        QLineEdit:focus { border:1.5px solid #3b82f6; background:white; }
+        QLineEdit{ background:#ffffff; border:2px solid #e2e8f0; border-radius:12px; padding:4px 16px; color:#1f2937; }
+        QLineEdit:focus{ border:2px solid #2563EB; background:white; }
     )");
     connect(searchInput, &QLineEdit::textChanged, this, &EmployeeWindow::onSearch);
-    lay->addWidget(searchInput);
+    lay->addWidget(searchInput, 3);
 
-    lay->addStretch();
+    /* Divider */
+    QFrame* div = new QFrame(); div->setFrameShape(QFrame::VLine);
+    div->setStyleSheet("color:#e2e8f0;"); div->setFixedWidth(1);
+    lay->addWidget(div);
 
-    /* Sort combo */
-    QLabel* sortLbl = new QLabel("Trier par :");
-    sortLbl->setStyleSheet("color:#64748b; font-weight:600; border:none; background:transparent;");
-    lay->addWidget(sortLbl);
+    /* Sort label */
+    QLabel* sortLabel = new QLabel("Trier par :");
+    sortLabel->setFont(QFont("Segoe UI", 10, QFont::Medium));
+    sortLabel->setStyleSheet("color:#64748b; margin-left:10px;");
+    lay->addWidget(sortLabel);
 
+    /* Sort combo (Improved Premium Style) */
     sortCombo = new QComboBox();
-    sortCombo->setFixedWidth(200);
-    sortCombo->setFixedHeight(40);
-    sortCombo->addItems({"Par défaut", "Nom (A→Z)", "Nom (Z→A)", "Salaire ↑", "Salaire ↓"});
+    sortCombo->setFont(QFont("Segoe UI", 10));
+    sortCombo->setFixedHeight(45);
+    sortCombo->setMinimumWidth(200);
+    sortCombo->addItems({"Défaut", "Nom (A→Z)", "Nom (Z→A)", "Salaire ↑", "Salaire ↓"});
     sortCombo->setStyleSheet(R"(
-        QComboBox {
-            background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
-            padding:0 12px; color:#334155;
+        QComboBox{ background:transparent; border:none; padding:4px 12px; color:#1f2937; font-weight:600; }
+        QComboBox:hover { color:#2563EB; }
+        QComboBox::drop-down{ border:none; width:30px; }
+        QComboBox QAbstractItemView{
+            background:white; border:1px solid #e2e8f0; border-radius:12px;
+            selection-background-color:#eff6ff; selection-color:#2563EB; outline:none; padding:8px;
         }
-        QComboBox::drop-down { border:none; }
-        QComboBox::down-arrow { image:none; border-left:5px solid transparent; border-right:5px solid transparent; border-top:5px solid #64748b; margin-right:8px; }
     )");
     connect(sortCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &EmployeeWindow::onSort);
-    lay->addWidget(sortCombo);
+    lay->addWidget(sortCombo, 2);
 
     return bar;
 }
@@ -364,8 +366,8 @@ QFrame* EmployeeWindow::createTableCard()
 void EmployeeWindow::setupTable()
 {
     table = new QTableWidget();
-    table->setColumnCount(9);
-    table->setHorizontalHeaderLabels({"ID", "CIN", "Salaire", "Date Recrutement", "Statut", "Position", "Prénom", "Nom", "Actions"});
+    table->setColumnCount(8);
+    table->setHorizontalHeaderLabels({"Prénom", "Nom", "CIN", "Position", "Salaire", "Date", "Statut", "Actions"});
 
     table->horizontalHeader()->setStretchLastSection(true);
     table->verticalHeader()->setVisible(false);
@@ -373,7 +375,7 @@ void EmployeeWindow::setupTable()
     table->setSelectionMode(QAbstractItemView::SingleSelection);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setShowGrid(true);
-    table->setGridStyle(Qt::SolidLine);
+    table->setAlternatingRowColors(false);
 
     QFont headerFont("Segoe UI", 11, QFont::Bold);
     table->horizontalHeader()->setFont(headerFont);
@@ -416,75 +418,117 @@ void EmployeeWindow::setupTable()
         }
     )");
 
-    table->setColumnWidth(0, 100); // ID
-    table->setColumnWidth(1, 100); // CIN
-    table->setColumnWidth(2, 100); // Salaire
-    table->setColumnWidth(3, 140); // Date
-    table->setColumnWidth(4, 110); // Statut
-    table->setColumnWidth(5, 130); // Position
-    table->setColumnWidth(6, 120); // Prénom
-    table->setColumnWidth(7, 120); // Nom
+    table->setColumnWidth(0, 110);  // Prénom
+    table->setColumnWidth(1, 110);  // Nom
+    table->setColumnWidth(2, 100);  // CIN
+    table->setColumnWidth(3, 110);  // Position
+    table->setColumnWidth(4, 90);   // Salaire
+    table->setColumnWidth(5, 100);  // Date
+    table->setColumnWidth(6, 90);   // Statut
+}
+
+void EmployeeWindow::loadEmployeesFromDb()
+{
+    employees.clear();
+    QSqlQuery query;
+    bool success = query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN FROM EMPLOYEE");
+    if (!success) {
+        query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN FROM EMPLOYEES");
+    }
+
+    while (query.next()) {
+        Employee e;
+        e.id = query.value(0).toString();
+        e.firstName = query.value(1).toString();
+        e.lastName = query.value(2).toString();
+        e.position = query.value(3).toString();
+
+        e.salary = query.value(4).toString();
+        if (!e.salary.endsWith("DT") && !e.salary.isEmpty()) {
+            e.salary += " DT";
+        }
+
+        QVariant dateVar = query.value(5);
+        if (dateVar.type() == QVariant::Date || dateVar.type() == QVariant::DateTime) {
+            e.date = dateVar.toDate().toString("dd/MM/yyyy");
+        } else {
+            // Attempt to parse string or fallback
+            QString dStr = dateVar.toString();
+            QDate parsed = QDate::fromString(dStr, Qt::ISODate);
+            if (parsed.isValid()) {
+                e.date = parsed.toString("dd/MM/yyyy");
+            } else {
+                e.date = dStr;
+            }
+        }
+
+        e.status = query.value(6).toString();
+        e.cin = query.value(7).toString();
+        employees.append(e);
+    }
 }
 
 void EmployeeWindow::populateTable(const QString& filterText)
 {
     table->setRowCount(0);
+
     QFont cellFont("Segoe UI", 11);
 
-    QSqlQueryModel* model;
-    if (!filterText.isEmpty()) model = employeeModel.rechercher(filterText);
-    else {
-        int si = sortCombo ? sortCombo->currentIndex() : 0;
-        if (si == 0) model = employeeModel.afficher();
-        else {
-            QString crit = "NOM", ord = "ASC";
-            if (si == 1) { crit = "NOM"; ord = "ASC"; }
-            else if (si == 2) { crit = "NOM"; ord = "DESC"; }
-            else if (si == 3) { crit = "SALAIRE"; ord = "ASC"; }
-            else if (si == 4) { crit = "SALAIRE"; ord = "DESC"; }
-            model = employeeModel.trier(crit, ord);
+    for (int i = 0; i < employees.size(); ++i) {
+        const Employee& emp = employees[i];
+
+        // Filter
+        if (!filterText.isEmpty()) {
+            QString searchLower = filterText.toLower();
+            if (!emp.id.toLower().contains(searchLower) &&
+                !emp.firstName.toLower().contains(searchLower) &&
+                !emp.lastName.toLower().contains(searchLower) &&
+                !emp.position.toLower().contains(searchLower)) {
+                continue;
+            }
         }
+
+        int row = table->rowCount();
+        table->insertRow(row);
+        table->setRowHeight(row, 65);
+
+        // Prénom
+        QTableWidgetItem* prenomItem = new QTableWidgetItem(emp.firstName);
+        prenomItem->setFont(cellFont);
+        prenomItem->setData(Qt::UserRole, i); // Store row index for reference if needed
+        table->setItem(row, 0, prenomItem);
+
+        // Nom
+        QTableWidgetItem* nomItem = new QTableWidgetItem(emp.lastName);
+        nomItem->setFont(cellFont);
+        table->setItem(row, 1, nomItem);
+
+        // CIN
+        QTableWidgetItem* cinItem = new QTableWidgetItem(emp.cin);
+        cinItem->setFont(cellFont);
+        table->setItem(row, 2, cinItem);
+
+        // Position
+        QTableWidgetItem* positionItem = new QTableWidgetItem(emp.position);
+        positionItem->setFont(cellFont);
+        table->setItem(row, 3, positionItem);
+
+        // Salaire
+        QTableWidgetItem* salaireItem = new QTableWidgetItem(emp.salary);
+        salaireItem->setFont(cellFont);
+        table->setItem(row, 4, salaireItem);
+
+        // Date
+        QTableWidgetItem* dateItem = new QTableWidgetItem(emp.date);
+        dateItem->setFont(cellFont);
+        table->setItem(row, 5, dateItem);
+
+        // Statut
+        table->setCellWidget(row, 6, createStatusBadge(emp.status));
+
+        // Actions (Modifier et Supprimer)
+        table->setCellWidget(row, 7, createActionButtons(i));
     }
-
-    for (int i = 0; i < model->rowCount(); ++i) {
-        int r = table->rowCount();
-        table->insertRow(r);
-        table->setRowHeight(r, 60);
-
-        // Map from Model: ID(0), CIN(1), Salaire(2), Date(3), Statut(4), Position(5), Prenom(6), Nom(7)
-        // Table Columns: ID(0), CIN(1), Sal(2), Date(3), Stat(4), Pos(5), Pre(6), Nom(7), Actions(8)
-        
-        QString idArr = model->record(i).value(0).toString();
-        
-        auto addItem = [&](int col, QString val, bool isBold = false) {
-            QTableWidgetItem* item = new QTableWidgetItem(val);
-            item->setTextAlignment(Qt::AlignCenter);
-            item->setFont(isBold ? QFont("Segoe UI", 11, QFont::Bold) : cellFont);
-            if(isBold) item->setForeground(QBrush(QColor("#5D9CEC")));
-            item->setData(Qt::UserRole, idArr); 
-            table->setItem(r, col, item);
-        };
-
-        addItem(0, idArr, true); // ID
-        addItem(1, model->record(i).value(1).toString()); // CIN
-        
-        QString sal = model->record(i).value(2).toString();
-        if(!sal.isEmpty()) sal += " DT";
-        addItem(2, sal); // Salaire
-        
-        addItem(3, model->record(i).value(3).toDate().toString("dd/MM/yyyy")); // Date
-        
-        // Statut Badge
-        table->setCellWidget(r, 4, createStatusBadge(model->record(i).value(4).toString()));
-        
-        addItem(5, model->record(i).value(5).toString()); // Position
-        addItem(6, model->record(i).value(6).toString()); // Prénom
-        addItem(7, model->record(i).value(7).toString()); // Nom
-        
-        // Actions
-        table->setCellWidget(r, 8, createActionButtons(i)); 
-    }
-    delete model;
 }
 
 QWidget* EmployeeWindow::createStatusBadge(const QString& status)
@@ -648,7 +692,7 @@ QFrame* EmployeeWindow::createSideActionsPanel()
 
 void EmployeeWindow::onViewStats()
 {
-    EmployeeStatsWindow stats(this);
+    EmployeeStatsWindow stats(employees, this);
     stats.exec();
 }
 
@@ -660,7 +704,7 @@ void EmployeeWindow::onReglementInterieur()
     regDialog->setStyleSheet("background-color: white;");
 
     QVBoxLayout* layout = new QVBoxLayout(regDialog);
-    
+
     QLabel* title = new QLabel("RÈGLEMENT INTÉRIEUR - PORTFLOW");
     title->setFont(QFont("Segoe UI", 18, QFont::Bold));
     title->setAlignment(Qt::AlignCenter);
@@ -672,38 +716,38 @@ void EmployeeWindow::onReglementInterieur()
     textDisplay->setFont(QFont("Segoe UI", 11));
     textDisplay->setHtml(R"(
         <h1 style='color: #1e3a5f; text-align: center;'>📜 RÈGLEMENT INTÉRIEUR DU PORT – PORTFLOW</h1>
-        
+
         <h2 style='color: #2b5ea6;'>Article 1 : Objet</h2>
         <p>Le présent règlement définit les règles de conduite, de sécurité et d’organisation applicables à tous les employés du port.</p>
-        
+
         <h2 style='color: #2b5ea6;'>Article 2 : Horaires de travail</h2>
         <ul>
             <li>Les employés doivent respecter les horaires définis par l’administration.</li>
             <li>Tout retard doit être signalé au responsable hiérarchique.</li>
             <li>Les heures supplémentaires doivent être validées par la direction.</li>
         </ul>
-        
+
         <h2 style='color: #2b5ea6;'>Article 3 : Sécurité</h2>
         <ul>
             <li>Le port des équipements de protection (casque, gilet réfléchissant, chaussures de sécurité) est obligatoire.</li>
             <li>L’accès aux zones techniques est limité au personnel autorisé.</li>
             <li>Tout incident doit être déclaré immédiatement.</li>
         </ul>
-        
+
         <h2 style='color: #2b5ea6;'>Article 4 : Discipline</h2>
         <ul>
             <li>Le respect entre employés est obligatoire.</li>
             <li>Toute négligence mettant en danger la sécurité du port est sanctionnée.</li>
             <li>L’usage d’alcool ou de substances interdites est strictement prohibé.</li>
         </ul>
-        
+
         <h2 style='color: #2b5ea6;'>Article 5 : Gestion des opérations</h2>
         <ul>
             <li>Les employés doivent suivre les procédures de chargement et déchargement.</li>
             <li>Les données saisies dans le système PortFlow doivent être exactes.</li>
             <li>Toute falsification de données est passible de sanction.</li>
         </ul>
-        
+
         <h2 style='color: #2b5ea6;'>Article 6 : Sanctions</h2>
         <p>Le non-respect du présent règlement peut entraîner :</p>
         <ul>
@@ -711,10 +755,10 @@ void EmployeeWindow::onReglementInterieur()
             <li>Suspension temporaire</li>
             <li>Licenciement en cas de faute grave</li>
         </ul>
-        
+
         <h2 style='color: #2b5ea6;'>Article 7 : Entrée en vigueur</h2>
         <p>Ce règlement prend effet à compter de sa date de publication.</p>
-        
+
         <br><p style='text-align: right;'><i>Fait le )" + QDate::currentDate().toString("dd/MM/yyyy") + R"(<br>La Direction de PortFlow</i></p>
     )");
     layout->addWidget(textDisplay);
@@ -722,7 +766,7 @@ void EmployeeWindow::onReglementInterieur()
     QHBoxLayout* btnLayout = new QHBoxLayout();
     QPushButton* printBtn = new QPushButton("📄 Exporter PDF");
     QPushButton* closeBtn = new QPushButton("Fermer");
-    
+
     QString btnStyle = "QPushButton{ background:%1; color:white; border-radius:8px; padding:10px 20px; font-weight:bold; }";
     printBtn->setStyleSheet(btnStyle.arg("#059669"));
     closeBtn->setStyleSheet(btnStyle.arg("#6b7280"));
@@ -731,14 +775,14 @@ void EmployeeWindow::onReglementInterieur()
         QString fileName = QFileDialog::getSaveFileName(regDialog, "Exporter en PDF", "", "PDF Files (*.pdf)");
         if (!fileName.isEmpty()) {
             if (!fileName.endsWith(".pdf")) fileName += ".pdf";
-            
+
             QPrinter printer(QPrinter::HighResolution);
             printer.setOutputFormat(QPrinter::PdfFormat);
             printer.setPageSize(QPageSize(QPageSize::A4));
             printer.setOutputFileName(fileName);
-            
+
             textDisplay->document()->print(&printer);
-            
+
             QMessageBox::information(regDialog, "Succès", "Le règlement a été exporté avec succès vers :\n" + fileName);
         }
     });
@@ -763,24 +807,13 @@ void EmployeeWindow::onDemandeConge()
     // Récupérer les données depuis le tableau ou le vecteur
     // On peut utiliser le UserData stocké dans la première colonne
     QTableWidgetItem* item = table->item(currentRow, 0);
-    QString empId = item->data(Qt::UserRole).toString();
-
-    QSqlQuery query;
-    query.prepare("SELECT * FROM EMPLOYEES WHERE ID_EMPLOYE = :id");
-    query.bindValue(":id", empId);
-    if (!query.exec() || !query.next()) {
-        QMessageBox::critical(this, "Erreur", "Impossible de récupérer les données de l'employé.");
-        return;
-    }
-
-    QString prenom = query.value("PRENOM").toString();
-    QString nom = query.value("NOM").toString();
-    QString poste = query.value("POSITION").toString();
+    int empIndex = item->data(Qt::UserRole).toInt();
+    const Employee& emp = employees[empIndex];
 
     bool ok;
-    int days = QInputDialog::getInt(this, "Durée du Congé", 
-                                   "Nombre de jours pour " + prenom + " " + nom + " :",
-                                   1, 1, 30, 1, &ok);
+    int days = QInputDialog::getInt(this, "Durée du Congé",
+                                    "Nombre de jours pour " + emp.firstName + " " + emp.lastName + " :",
+                                    1, 1, 30, 1, &ok);
 
     if (ok) {
         QDialog* summary = new QDialog(this);
@@ -789,16 +822,16 @@ void EmployeeWindow::onDemandeConge()
 
         QVBoxLayout* lay = new QVBoxLayout(summary);
         QLabel* content = new QLabel(QString(
-            "<h3>Demande de Congé</h3>"
-            "<p><b>Employé :</b> %1 %2</p>"
-            "<p><b>Poste :</b> %3</p>"
-            "<p><b>Durée :</b> %4 jours</p>"
-            "<hr>"
-            "<p style='color: green;'><i>Demande générée avec succès le %5</i></p>"
-        ).arg(prenom, nom, poste).arg(days).arg(QDate::currentDate().toString("dd/MM/yyyy")));
-        
+                                         "<h3>Demande de Congé</h3>"
+                                         "<p><b>Employé :</b> %1 %2</p>"
+                                         "<p><b>Poste :</b> %3</p>"
+                                         "<p><b>Durée :</b> %4 jours</p>"
+                                         "<hr>"
+                                         "<p style='color: green;'><i>Demande générée avec succès le %5</i></p>"
+                                         ).arg(emp.firstName, emp.lastName, emp.position).arg(days).arg(QDate::currentDate().toString("dd/MM/yyyy")));
+
         lay->addWidget(content);
-        
+
         QPushButton* okBtn = new QPushButton("Terminer");
         okBtn->setStyleSheet("background: #2B5EA6; color: white; padding: 8px; border-radius: 5px;");
         connect(okBtn, &QPushButton::clicked, summary, &QDialog::accept);
@@ -817,23 +850,11 @@ void EmployeeWindow::onAttestationTravail()
     }
 
     QTableWidgetItem* item = table->item(currentRow, 0);
-    QString empId = item->data(Qt::UserRole).toString();
+    int empIndex = item->data(Qt::UserRole).toInt();
+    const Employee& emp = employees[empIndex];
 
-    QSqlQuery query;
-    query.prepare("SELECT * FROM EMPLOYEES WHERE ID_EMPLOYE = :id");
-    query.bindValue(":id", empId);
-    if (!query.exec() || !query.next()) {
-        QMessageBox::critical(this, "Erreur", "Impossible de récupérer les données de l'employé.");
-        return;
-    }
-
-    QString prenom = query.value("PRENOM").toString();
-    QString nom = query.value("NOM").toString();
-    QString poste = query.value("POSITION").toString();
-    QString dateEmbauche = query.value("DATE_RECRUTEMENT").toDate().toString("dd/MM/yyyy");
-
-    QString fileName = QFileDialog::getSaveFileName(this, "Exporter Attestation de Travail", 
-                                                    "Attestation_" + nom + ".pdf", "PDF Files (*.pdf)");
+    QString fileName = QFileDialog::getSaveFileName(this, "Exporter Attestation de Travail",
+                                                    "Attestation_" + emp.lastName + ".pdf", "PDF Files (*.pdf)");
     if (fileName.isEmpty()) return;
     if (!fileName.endsWith(".pdf")) fileName += ".pdf";
 
@@ -893,8 +914,8 @@ void EmployeeWindow::onAttestationTravail()
                 </tr>
             </table>
         </div>
-    )").arg(QDate::currentDate().toString("dd/MM/yyyy"), 
-            prenom, nom, poste, empId, dateEmbauche);
+    )").arg(QDate::currentDate().toString("dd/MM/yyyy"),
+                            emp.firstName, emp.lastName, emp.position, emp.id, emp.date);
 
     doc.setHtml(html);
     doc.print(&printer);
@@ -905,17 +926,13 @@ void EmployeeWindow::onAttestationTravail()
 QString EmployeeWindow::generateEmployeeId()
 {
     int maxId = 0;
-    QSqlQuery query("SELECT ID_EMPLOYE FROM EMPLOYEES");
-    while (query.next()) {
-        QString idStr = query.value(0).toString();
-        QString numStr = idStr.mid(3);
+    for (const Employee& e : employees) {
+        QString numStr = e.id.mid(3);
         int num = numStr.toInt();
         if (num > maxId) {
             maxId = num;
         }
     }
-    query.finish();
-    query.clear();
     return QString("EMP%1").arg(maxId + 1, 3, 10, QChar('0'));
 }
 
@@ -926,89 +943,109 @@ void EmployeeWindow::onSearch(const QString& text)
 
 void EmployeeWindow::onAddEmployee()
 {
-    EmployeeDialog dlg(this);
-    if (dlg.exec() == QDialog::Accepted) {
-        EmployeeModel newEmp = dlg.getData();
-        QString newId = generateEmployeeId();
+    EmployeeDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        Employee newEmployee = dialog.getData();
+        newEmployee.id = generateEmployeeId();
 
-        // Schema order: (id, cin, salaire, date_recrutement, statut, position, prenom, nom)
-        EmployeeModel toSave(newId,
-                             newEmp.getCin(),
-                             newEmp.getSalaire(),
-                             newEmp.getDate(),
-                             newEmp.getStatut(),
-                             newEmp.getPosition(),
-                             newEmp.getPrenom(),
-                             newEmp.getNom());
-
-        if (toSave.ajouter()) {
-            populateTable();
-            QMessageBox::information(this, "Succès", "Employé ajouté avec succès.");
-        } else {
-            QMessageBox::critical(this, "Erreur", "Impossible d'ajouter l'employé.\n\nErreur SQL: " + toSave.getLastError());
+        QSqlQuery query;
+        query.prepare("INSERT INTO EMPLOYEE (ID_EMPLOYE, PRENOM, NOM, CIN, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT) VALUES (:id, :pre, :nom, :cin, :pos, :sal, TO_DATE(:date, 'DD/MM/YYYY'), :stat)");
+        query.bindValue(":id", newEmployee.id);
+        query.bindValue(":pre", newEmployee.firstName);
+        query.bindValue(":nom", newEmployee.lastName);
+        query.bindValue(":cin", newEmployee.cin);
+        query.bindValue(":pos", newEmployee.position);
+        query.bindValue(":sal", newEmployee.salary);
+        query.bindValue(":date", newEmployee.date);
+        query.bindValue(":stat", newEmployee.status);
+        if(!query.exec()) {
+            // fallback
+            query.prepare("INSERT INTO EMPLOYEES (ID_EMPLOYE, PRENOM, NOM, CIN, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT) VALUES (:id, :pre, :nom, :cin, :pos, :sal, :date, :stat)");
+            query.bindValue(":id", newEmployee.id);
+            query.bindValue(":pre", newEmployee.firstName);
+            query.bindValue(":nom", newEmployee.lastName);
+            query.bindValue(":cin", newEmployee.cin);
+            query.bindValue(":pos", newEmployee.position);
+            query.bindValue(":sal", newEmployee.salary);
+            query.bindValue(":date", newEmployee.date);
+            query.bindValue(":stat", newEmployee.status);
+            query.exec();
         }
+
+        employees.append(newEmployee);
+        populateTable(searchInput->text());
+        qDebug() << "Employé ajouté:" << newEmployee.firstName << newEmployee.lastName;
     }
 }
 
 void EmployeeWindow::onEditEmployee(int row)
 {
-    if (row < 0) return;
-    QTableWidgetItem* item = table->item(row, 0);
-    if (!item) return;
-    QString id = item->data(Qt::UserRole).toString();
+    if (row < 0 || row >= employees.size()) return;
 
-    QSqlQuery query;
-    query.prepare("SELECT * FROM EMPLOYEES WHERE ID_EMPLOYE = :id");
-    query.bindValue(":id", id);
-    if (query.exec() && query.next()) {
-        // Schema order: (id, cin, salaire, date_recrutement, statut, position, prenom, nom)
-        EmployeeModel current(
-            query.value("ID_EMPLOYE").toString(),
-            query.value("CIN").toString(),
-            query.value("SALAIRE").toDouble(),
-            query.value("DATE_RECRUTEMENT").toDate(),
-            query.value("STATUT").toString(),
-            query.value("POSITION").toString(),
-            query.value("PRENOM").toString(),
-            query.value("NOM").toString()
-        );
+    EmployeeDialog dialog(this, &employees[row]);
+    if (dialog.exec() == QDialog::Accepted) {
+        Employee updatedEmployee = dialog.getData();
+        updatedEmployee.id = employees[row].id;
 
-        EmployeeDialog dlg(this, &current);
-        if (dlg.exec() == QDialog::Accepted) {
-            EmployeeModel updated = dlg.getData();
-            if (updated.modifier(id)) {
-                populateTable();
-                QMessageBox::information(this, "Succès", "Employé mis à jour.");
-            } else {
-                QMessageBox::critical(this, "Erreur", "Échec de la mise à jour.");
-            }
+        QSqlQuery query;
+        query.prepare("UPDATE EMPLOYEE SET PRENOM=:pre, NOM=:nom, CIN=:cin, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=TO_DATE(:date, 'DD/MM/YYYY'), STATUT=:stat WHERE ID_EMPLOYE=:id");
+        query.bindValue(":id", updatedEmployee.id);
+        query.bindValue(":pre", updatedEmployee.firstName);
+        query.bindValue(":nom", updatedEmployee.lastName);
+        query.bindValue(":cin", updatedEmployee.cin);
+        query.bindValue(":pos", updatedEmployee.position);
+        query.bindValue(":sal", updatedEmployee.salary);
+        query.bindValue(":date", updatedEmployee.date);
+        query.bindValue(":stat", updatedEmployee.status);
+        if(!query.exec()) {
+            // fallback
+            query.prepare("UPDATE EMPLOYEES SET PRENOM=:pre, NOM=:nom, CIN=:cin, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=:date, STATUT=:stat WHERE ID_EMPLOYE=:id");
+            query.bindValue(":id", updatedEmployee.id);
+            query.bindValue(":pre", updatedEmployee.firstName);
+            query.bindValue(":nom", updatedEmployee.lastName);
+            query.bindValue(":cin", updatedEmployee.cin);
+            query.bindValue(":pos", updatedEmployee.position);
+            query.bindValue(":sal", updatedEmployee.salary);
+            query.bindValue(":date", updatedEmployee.date);
+            query.bindValue(":stat", updatedEmployee.status);
+            query.exec();
         }
+
+        employees[row] = updatedEmployee;
+        populateTable(searchInput->text());
+        qDebug() << "Employé modifié:" << updatedEmployee.firstName << updatedEmployee.lastName;
     }
 }
 
 void EmployeeWindow::onDeleteEmployee(int row)
 {
-    if (row < 0) return;
-    QTableWidgetItem* item = table->item(row, 0);
-    if (!item) return;
-    QString id = item->data(Qt::UserRole).toString();
-    QString name = item->text() + " " + table->item(row, 1)->text();
+    if (row < 0 || row >= employees.size()) return;
 
-    if (QMessageBox::question(this, "Suppression", 
-        QString("Voulez-vous vraiment supprimer l'employé %1 ?").arg(name)) == QMessageBox::Yes) {
-        if (employeeModel.supprimer(id)) {
-            populateTable();
-            QMessageBox::information(this, "Succès", "Employé supprimé.");
-        } else {
-            QMessageBox::critical(this, "Erreur", "Échec de la suppression.");
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, "Confirmation",
+                                  "Êtes-vous sûr de vouloir supprimer l'employé '" + employees[row].firstName + " " + employees[row].lastName + "' ?",
+                                  QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        QString idToDelete = employees[row].id;
+        QSqlQuery query;
+        query.prepare("DELETE FROM EMPLOYEE WHERE ID_EMPLOYE = :id");
+        query.bindValue(":id", idToDelete);
+        if(!query.exec()) {
+            query.prepare("DELETE FROM EMPLOYEES WHERE ID_EMPLOYE = :id");
+            query.bindValue(":id", idToDelete);
+            query.exec();
         }
+
+        qDebug() << "Employé supprimé:" << employees[row].firstName << employees[row].lastName;
+        employees.removeAt(row);
+        populateTable(searchInput->text());
     }
 }
 
-
 void EmployeeWindow::onLogout()
 {
-    if (QMessageBox::question(this, "Quitter", "Voulez-vous vraiment quitter l'application ?", 
+    if (QMessageBox::question(this, "Quitter", "Voulez-vous vraiment quitter l'application ?",
                               QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
         this->close();
     }
@@ -1016,7 +1053,34 @@ void EmployeeWindow::onLogout()
 
 void EmployeeWindow::onSort(int index)
 {
-    Q_UNUSED(index);
+    if (index == 0) return; // Défaut (ordre d'ajout)
+
+    // Helper to extract salary as number
+    auto getSalaryValue = [](const QString& s) {
+        QString clean = s;
+        clean.remove("DT").remove(" ").remove(",");
+        return clean.toDouble();
+    };
+
+    if (index == 1) { // Nom (A→Z)
+        std::sort(employees.begin(), employees.end(), [](const Employee& a, const Employee& b) {
+            if (a.lastName != b.lastName) return a.lastName < b.lastName;
+            return a.firstName < b.firstName;
+        });
+    } else if (index == 2) { // Nom (Z→A)
+        std::sort(employees.begin(), employees.end(), [](const Employee& a, const Employee& b) {
+            if (a.lastName != b.lastName) return a.lastName > b.lastName;
+            return a.firstName > b.firstName;
+        });
+    } else if (index == 3) { // Salaire ↑
+        std::sort(employees.begin(), employees.end(), [&](const Employee& a, const Employee& b) {
+            return getSalaryValue(a.salary) < getSalaryValue(b.salary);
+        });
+    } else if (index == 4) { // Salaire ↓
+        std::sort(employees.begin(), employees.end(), [&](const Employee& a, const Employee& b) {
+            return getSalaryValue(a.salary) > getSalaryValue(b.salary);
+        });
+    }
+
     populateTable(searchInput->text());
 }
-
