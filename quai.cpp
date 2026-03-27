@@ -1,4 +1,7 @@
 #include "quai.h"
+#include <QtSql/QSqlQuery>
+#include <QtSql/QSqlError>
+#include <QDebug>
 
 // Default constructor
 Quai::Quai()
@@ -13,6 +16,30 @@ Quai::Quai(int numero, int capacite, QString etat, double tarif,
     location(location), dureeLocation(dureeLocation)
 {}
 
+// --- THE DATABASE METHOD (This is what was in your slide) ---
+bool Quai::ajouter()
+{
+    QSqlQuery query;
+
+    // Prepare the query with placeholders
+    query.prepare("INSERT INTO quai (NUMERO, CAPACITE, ETAT, TARIF, LOCATION, DUREELOCATION) "
+                  "VALUES (:num, :cap, :etat, :tar, :loc, :dur)");
+
+    // Bind the values from the class members
+    query.bindValue(":num", numero);
+    query.bindValue(":cap", capacite);
+    query.bindValue(":etat", etat);
+    query.bindValue(":tar", tarif);
+    query.bindValue(":loc", location);
+    query.bindValue(":dur", dureeLocation);
+
+    if (!query.exec()) {
+        qDebug() << "Error adding Quai:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
 // Getters
 int Quai::getNumero() const { return numero; }
 int Quai::getCapacite() const { return capacite; }
@@ -20,7 +47,6 @@ QString Quai::getEtat() const { return etat; }
 double Quai::getTarif() const { return tarif; }
 QString Quai::getLocation() const { return location; }
 QString Quai::getDureeLocation() const { return dureeLocation; }
-
 
 // Setters
 void Quai::setNumero(int n) { numero = n; }

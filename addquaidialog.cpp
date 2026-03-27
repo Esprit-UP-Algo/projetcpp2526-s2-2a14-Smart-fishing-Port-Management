@@ -127,7 +127,7 @@ AddQuaiDialog::AddQuaiDialog(QWidget *parent)
     numeroInput->setPlaceholderText("ex: 1");
     numeroInput->setFixedHeight(40);
     numeroInput->setStyleSheet(fieldStyle);
-    addField("Numéro du quai *", numeroInput);
+
 
     locationInput = new QLineEdit();
     locationInput->setPlaceholderText("ex: Zone A - Secteur Nord");
@@ -250,16 +250,40 @@ Quai AddQuaiDialog::getData() const
 
 // --- Save Quai ---
 void AddQuaiDialog::saveQuai()
-{
-    // Basic validation
-    if (numeroInput->text().isEmpty() || locationInput->text().isEmpty() ||
-        capaciteInput->text().isEmpty() || tarifInput->text().isEmpty() ||
-        dureeInput->text().isEmpty()) {
+{// Basic validation
+    if (
+        locationInput->text().trimmed().isEmpty() ||
+        capaciteInput->text().trimmed().isEmpty() ||
+        tarifInput->text().trimmed().isEmpty() ||
+        dureeInput->text().trimmed().isEmpty()) {
+
         QMessageBox::warning(this, "Champs requis",
                              "Veuillez remplir tous les champs obligatoires (*).");
         return;
     }
 
+    // Convert and validate numeric fields
+    bool okCapacite, okTarif, okDuree;
+
+    int capacite = capaciteInput->text().toInt(&okCapacite);
+    double tarif = tarifInput->text().toDouble(&okTarif);  // tarif could be float
+    int duree = dureeInput->text().toInt(&okDuree);
+
+
+    if (!okCapacite) {
+        QMessageBox::warning(this, "Erreur", "La capacité doit être un nombre entier.");
+        return;
+    }
+    if (!okTarif) {
+        QMessageBox::warning(this, "Erreur", "Le tarif doit être un nombre valide.");
+        return;
+    }
+    if (!okDuree) {
+        QMessageBox::warning(this, "Erreur", "La durée doit être un nombre entier.");
+        return;
+    }
+
+    // Check database connection
     if (!Connection::getInstance().createconnect()) {
         QMessageBox::critical(this, "Erreur", "Connexion à la base de données échouée !");
         return;
@@ -267,13 +291,18 @@ void AddQuaiDialog::saveQuai()
 
     Quai d = getData();
     QSqlQuery query;
+
+    // We use NVL(MAX(NUMERO), 0) + 1 to find the next number in the sequence
     query.prepare("INSERT INTO QUAIS (IDQUAI, NUMERO, LOCATION, CAPACITE, TARIF_LOCATION, DUREE_LOCATION, ETAT) "
-                  "VALUES (seq_quais.NEXTVAL, :numero, :location, :capacite, :tarif, :duree, :etat)");
-    query.bindValue(":numero",   d.getNumero());
+                  "VALUES (seq_quais.NEXTVAL, "
+                  "(SELECT NVL(MAX(NUMERO), 0) + 1 FROM QUAIS), "
+                  ":location, :capacite, :tarif, :duree, :etat)");
+
+    // Remove the bindValue for :numero since it's now handled by the subquery
     query.bindValue(":location", d.getLocation());
     query.bindValue(":capacite", d.getCapacite());
     query.bindValue(":tarif",    d.getTarif());
-    query.bindValue(":duree",    d.getDureeLocation()); // <-- QString
+    query.bindValue(":duree",    d.getDureeLocation());
     query.bindValue(":etat",     d.getEtat());
 
     if (!query.exec()) {

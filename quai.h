@@ -17,7 +17,9 @@ public:
     Quai(); // default
     Quai(int numero, int capacite, QString etat, double tarif, QString location,
          const QString& dureeLocation);
-
+    // quai.h
+public:
+    bool ajouter(); // Add this line in the public section
     // Getters
     int getNumero() const;
     int getCapacite() const;

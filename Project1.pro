@@ -6,6 +6,7 @@ CONFIG += c++17
 
 SOURCES += \
     connection.cpp \
+    contractgenerator.cpp \
     main.cpp \
     mainwindow.cpp \
     loginwindow.cpp \
@@ -38,6 +39,7 @@ SOURCES += \
 
 HEADERS += \
     connection.h \
+    contractgenerator.h \
     mainwindow.h \
     loginwindow.h \
     Bateauwindow.h \

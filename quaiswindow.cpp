@@ -25,6 +25,7 @@
 #include <QPrinter>
 #include <QPainter>
 #include <QTextDocument>
+#include <QtSql/QSqlQuery>
 #include <QFileDialog>
 #include <QDate>
 #include <QPrintDialog>
@@ -38,7 +39,7 @@
 #include <QStandardPaths>
 #include <QDateEdit>
 #include <QPageSize>
-#include <QtSql/QSqlQuery>
+
 #include <QtSql/QSqlError>
 #include <QtSql/QSqlRecord>
 #include <QRegularExpression>
@@ -54,6 +55,9 @@
 
 // ==================== ADD CONTRACT GENERATOR CLASS HERE ====================
 // ==================== FIXED CONTRACT GENERATOR CLASS ====================
+
+
+// ==================== ADD CONTRACT DIALOG CLASS HERE ====================
 class ContractGenerator {
 public:
     static bool generateContract(const Quai& quai, const QString& clientName,
@@ -498,8 +502,6 @@ private:
     QComboBox* durationField   = nullptr;
     Quai m_quai;
 };
-// ==================== END CONTRACT DIALOG ====================
-
 QuaisWindow::QuaisWindow(QWidget *parent) : QMainWindow(parent)
 {
     setMinimumSize(1400, 800);
@@ -1111,7 +1113,6 @@ void QuaisWindow::onAddQuai()
         populateTable(searchInput->text());
     }
 }
-
 void QuaisWindow::onEditQuai(int row) {
     if (row < 0 || row >= quais.size()) return;
 
@@ -1120,7 +1121,7 @@ void QuaisWindow::onEditQuai(int row) {
     // --- Create frameless dialog ---
     QDialog* dlg = new QDialog(this);
     dlg->setWindowTitle("Modifier Quai");
-    dlg->setFixedSize(500, 480);
+    dlg->setFixedSize(600, 600);
     dlg->setModal(true);
     dlg->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     dlg->setAttribute(Qt::WA_TranslucentBackground);
@@ -1131,7 +1132,7 @@ void QuaisWindow::onEditQuai(int row) {
     shadow->setColor(QColor(0, 0, 0, 80));
 
     QWidget* container = new QWidget(dlg);
-    container->setGeometry(0, 0, 500, 480);
+    container->setGeometry(0, 0, 600, 600);
     container->setGraphicsEffect(shadow);
     container->setStyleSheet("QWidget { background: white; border-radius: 24px; }");
 
@@ -1139,7 +1140,7 @@ void QuaisWindow::onEditQuai(int row) {
     mainLay->setContentsMargins(0, 0, 0, 0);
     mainLay->setSpacing(0);
 
-    // Header band
+    // --- Header band ---
     QFrame* headerBand = new QFrame();
     headerBand->setFixedHeight(80);
     headerBand->setStyleSheet(R"(
@@ -1167,64 +1168,97 @@ void QuaisWindow::onEditQuai(int row) {
     )");
     connect(closeBtn, &QPushButton::clicked, dlg, &QDialog::reject);
     headerLay->addWidget(closeBtn);
+
     mainLay->addWidget(headerBand);
 
-    // Form area
+    // --- Form area ---
     QWidget* formArea = new QWidget();
     formArea->setStyleSheet("background: transparent;");
     QVBoxLayout* formLay = new QVBoxLayout(formArea);
     formLay->setContentsMargins(30, 20, 30, 10);
     formLay->setSpacing(14);
 
-    auto makeField = [&](const QString& label, const QString& value, QLabel*& errLbl) -> QLineEdit* {
+    auto applyFieldState = [](QLineEdit* f, QLabel* h,
+                              bool isEmpty, bool isValid,
+                              const QString& idle, const QString& err, const QString& ok) {
+        if (isEmpty) {
+            f->setStyleSheet(R"(
+            QLineEdit { background:#F9FAFB; border:1.5px solid #E5E7EB;
+                        border-radius:10px; padding:4px 14px; color:#1f2937;
+                        font-family:'Segoe UI'; font-size:11pt; }
+            QLineEdit:focus { border:1.5px solid #378ADD; background:white; }
+        )");
+            h->setText("  " + idle);
+            h->setStyleSheet("color:#9ca3af; background:transparent; margin-top:-3px; margin-bottom:4px;");
+        } else if (isValid) {
+            f->setStyleSheet(R"(
+            QLineEdit { background:white; border:1.5px solid #1D9E75;
+                        border-radius:10px; padding:4px 14px; color:#1f2937;
+                        font-family:'Segoe UI'; font-size:11pt; }
+            QLineEdit:focus { border:1.5px solid #1D9E75; background:white; }
+        )");
+            h->setText("✓  " + ok);
+            h->setStyleSheet("color:#0F6E56; background:transparent; margin-top:-3px; margin-bottom:4px;");
+        } else {
+            f->setStyleSheet(R"(
+            QLineEdit { background:#FEF2F2; border:1.5px solid #E24B4A;
+                        border-radius:10px; padding:4px 14px; color:#1f2937;
+                        font-family:'Segoe UI'; font-size:11pt; }
+            QLineEdit:focus { border:1.5px solid #E24B4A; background:#FEF2F2; }
+        )");
+            h->setText("✕  " + err);
+            h->setStyleSheet("color:#A32D2D; background:transparent; margin-top:-3px; margin-bottom:4px;");
+        }
+    };
+
+    auto makeField = [&](const QString& label, const QString& value, QLabel*& hintLbl,
+                         const QString& idleHint) -> QLineEdit* {
         QLabel* lbl = new QLabel(label);
-        lbl->setFont(QFont("Segoe UI", 10, QFont::Medium));
-        lbl->setStyleSheet("color: #374151; background: transparent;");
+        lbl->setFont(QFont("Segoe UI", 8, QFont::Medium));
+        lbl->setStyleSheet("color: #6b7280; background: transparent; letter-spacing: 0.5px;");
 
         QLineEdit* field = new QLineEdit(value);
         field->setFont(QFont("Segoe UI", 11));
         field->setFixedHeight(44);
         field->setStyleSheet(R"(
-            QLineEdit { background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 10px;
-                        padding: 4px 14px; color: #1f2937; }
-            QLineEdit:focus { border: 2px solid #2563EB; background: white; }
-        )");
+        QLineEdit { background: #F9FAFB; border: 1.5px solid #E5E7EB;
+                    border-radius: 10px; padding: 4px 14px; color: #1f2937; }
+        QLineEdit:focus { border: 1.5px solid #378ADD; background: white; }
+    )");
         formLay->addWidget(lbl);
         formLay->addWidget(field);
 
-        errLbl = new QLabel("");
-        errLbl->setFont(QFont("Segoe UI", 8));
-        errLbl->setStyleSheet("color: #DC2626; background: transparent; margin-top: -4px; margin-bottom: 2px;");
-        errLbl->hide();
-        formLay->addWidget(errLbl);
+        hintLbl = new QLabel("  " + idleHint);
+        hintLbl->setFont(QFont("Segoe UI", 8));
+        hintLbl->setStyleSheet("color:#9ca3af; background:transparent; margin-top:-3px; margin-bottom:4px;");
+        formLay->addWidget(hintLbl);
 
         return field;
     };
 
-    QLabel* nomErr = nullptr;
-    QLabel* capErr = nullptr;
-    QLabel* tarifErr = nullptr;
+    QLabel* nomHint   = nullptr;
+    QLabel* capHint   = nullptr;
+    QLabel* tarifHint = nullptr;
 
-    QLineEdit* nomField      = makeField("Nom du Quai", (QString("Quai ") + QString::number(q.getNumero())), nomErr);
+    QLineEdit* nomField      = makeField("NOM DU QUAI", (QString("Quai ") + QString::number(q.getNumero())), nomHint, "");
     nomField->setReadOnly(true);
+    nomHint->setText("");
 
-    QLineEdit* capaciteField = makeField("Capacité", QString::number(q.getCapacite()), capErr);
-    connect(capaciteField, &QLineEdit::textChanged, dlg, [capErr](const QString& text) {
-        bool ok;
-        int val = text.toInt(&ok);
-        if (text.isEmpty() || (ok && val > 0)) capErr->hide();
-        else { capErr->setText("⚠ La capacité doit être un entier > 0."); capErr->show(); }
+    QLineEdit* capaciteField = makeField("CAPACITÉ", QString::number(q.getCapacite()), capHint, "Nombre entier supérieur à 0");
+    connect(capaciteField, &QLineEdit::textChanged, dlg, [=](const QString& t) {
+        bool ok; int val = t.toInt(&ok);
+        applyFieldState(capaciteField, capHint, t.isEmpty(), (ok && val > 0),
+                        "Nombre entier supérieur à 0", "Doit être un entier > 0", "Capacité valide ✓");
     });
 
-    QLineEdit* tarifField    = makeField("Tarif (DT)", QString::number(q.getTarif()), tarifErr);
-    connect(tarifField, &QLineEdit::textChanged, dlg, [tarifErr](const QString& text) {
-        bool ok;
-        double val = text.toDouble(&ok);
-        if (text.isEmpty() || (ok && val > 0)) tarifErr->hide();
-        else { tarifErr->setText("⚠ Le tarif doit être valide > 0."); tarifErr->show(); }
+    QLineEdit* tarifField = makeField("TARIF (DT)", QString::number(q.getTarif()), tarifHint, "Nombre positif ex: 50.00");
+    connect(tarifField, &QLineEdit::textChanged, dlg, [=](const QString& t) {
+        bool ok; double val = t.toDouble(&ok);
+        applyFieldState(tarifField, tarifHint, t.isEmpty(), (ok && val > 0),
+                        "Nombre positif ex: 50.00", "Doit être un nombre > 0", "Tarif valide ✓");
     });
 
-    // Statut combo
+    // --- Statut combo ---
     QLabel* statutLbl = new QLabel("Statut");
     statutLbl->setFont(QFont("Segoe UI", 10, QFont::Medium));
     statutLbl->setStyleSheet("color: #374151; background: transparent;");
@@ -1235,45 +1269,40 @@ void QuaisWindow::onEditQuai(int row) {
     statutCombo->setCurrentText(q.getEtat());
     statutCombo->setFont(QFont("Segoe UI", 11));
     statutCombo->setFixedHeight(44);
+    statutCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    statutCombo->setMinimumContentsLength(12);
     statutCombo->setStyleSheet(R"(
-        QComboBox { background: #F9FAFB; border: 2px solid #E5E7EB; border-radius: 10px;
-                    padding: 4px 14px; color: #1f2937; }
-        QComboBox:focus { border: 2px solid #2563EB; background: white; }
-        QComboBox::drop-down { border: none; width: 30px; }
+        QComboBox { background: #F9FAFB; border: 1.5px solid #E5E7EB; border-radius: 10px;
+                    padding: 4px 14px; color: #1f2937; font-family: 'Segoe UI'; font-size: 11pt; }
+        QComboBox:focus { border: 1.5px solid #378ADD; background: white; }
+        QComboBox::drop-down { border: none; width: 36px; subcontrol-origin: padding; subcontrol-position: right center; }
+        QComboBox::down-arrow { width: 12px; height: 12px; }
         QComboBox QAbstractItemView { background: white; border: 1px solid #e2e8f0;
             border-radius: 10px; selection-background-color: #eff6ff;
-            selection-color: #2563EB; padding: 6px; }
+            selection-color: #2563EB; padding: 6px; min-width: 180px; }
     )");
     formLay->addWidget(statutCombo);
 
     mainLay->addWidget(formArea, 1);
 
-    // Buttons
+    // --- Buttons ---
     QHBoxLayout* btnLay = new QHBoxLayout();
-    btnLay->setContentsMargins(30, 0, 30, 24);
-    btnLay->setSpacing(12);
+    btnLay->setContentsMargins(30, 20, 30, 30);
+    btnLay->setSpacing(15);
 
     QPushButton* cancelBtn = new QPushButton("Annuler");
-    cancelBtn->setFixedHeight(44);
+    cancelBtn->setFixedHeight(45);
     cancelBtn->setFont(QFont("Segoe UI", 11, QFont::Medium));
     cancelBtn->setCursor(Qt::PointingHandCursor);
-    cancelBtn->setStyleSheet(R"(
-        QPushButton { background: #F3F4F6; color: #374151; border: none; border-radius: 12px; padding: 0 20px; }
-        QPushButton:hover { background: #E5E7EB; }
-    )");
+    cancelBtn->setStyleSheet("QPushButton { background:#F3F4F6; color:#374151; border-radius:12px; font-weight:bold; }");
     connect(cancelBtn, &QPushButton::clicked, dlg, &QDialog::reject);
 
     QPushButton* saveBtn = new QPushButton("💾  Enregistrer");
-    saveBtn->setFixedHeight(44);
+    saveBtn->setFixedHeight(45);
     saveBtn->setFont(QFont("Segoe UI", 11, QFont::Bold));
     saveBtn->setCursor(Qt::PointingHandCursor);
-    saveBtn->setStyleSheet(R"(
-        QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                          stop:0 #2B5EA6, stop:1 #5D9CEC);
-                      color: white; border: none; border-radius: 12px; padding: 0 20px; }
-        QPushButton:hover { background: #1D4ED8; }
-    )");
-    connect(saveBtn, &QPushButton::clicked, [&]() {
+    saveBtn->setStyleSheet("QPushButton { background:#2563EB; color:white; border-radius:12px; font-weight:bold; }");
+    connect(saveBtn, &QPushButton::clicked, [=, &q]() {
         QString capText = capaciteField->text().trimmed();
         QString tarifText = tarifField->text().trimmed();
 
@@ -1297,17 +1326,19 @@ void QuaisWindow::onEditQuai(int row) {
         }
 
         QSqlQuery query;
-        QString sql = QString("UPDATE QUAIS SET CAPACITE = %1, TARIF_LOCATION = %2, ETAT = '%3' WHERE NUMERO = %4")
-                          .arg(cap)
-                          .arg(tarif)
-                          .arg(statutCombo->currentText())
-                          .arg(q.getNumero());
+        query.prepare("UPDATE QUAIS SET CAPACITE = :cap, ETAT = :etat, TARIF_LOCATION = :tarif WHERE NUMERO = :num");
+        query.bindValue(":cap", cap);
+        query.bindValue(":etat", statutCombo->currentText());
+        query.bindValue(":tarif", tarif);
+        query.bindValue(":num", q.getNumero());
 
-        if (!query.exec(sql)) {
-            QMessageBox::critical(dlg, "Erreur", "Mise à jour échouée : " + query.lastError().text());
-        } else {
+        if (query.exec()) {
             QSqlDatabase::database().commit();
             dlg->accept();
+            loadQuaisFromDatabase();
+            populateTable();
+        } else {
+            QMessageBox::critical(dlg, "Erreur SQL", query.lastError().text());
         }
     });
 
@@ -1316,10 +1347,13 @@ void QuaisWindow::onEditQuai(int row) {
     btnLay->addWidget(saveBtn);
     mainLay->addLayout(btnLay);
 
-    if (dlg->exec() == QDialog::Accepted) {
+    dlg->exec();
+
+    if (dlg->result() == QDialog::Accepted) {
         loadQuaisFromDatabase();
         populateTable(searchInput->text());
     }
+
 }void QuaisWindow::onDeleteQuai(int row) {
     if (row < 0 || row >= quais.size()) return;
 
@@ -1434,17 +1468,30 @@ void QuaisWindow::onEditQuai(int row) {
 
     if (dlg->exec() == QDialog::Accepted) {
         QSqlQuery query;
-        QString sql = QString("DELETE FROM QUAIS WHERE NUMERO = %1").arg(q.getNumero());
+        // Utilisation d'une requête préparée pour plus de sécurité
+        query.prepare("DELETE FROM QUAIS WHERE NUMERO = :num");
+        query.bindValue(":num", q.getNumero());
 
-        if (!query.exec(sql)) {
-            QMessageBox::critical(this, "Erreur", "Suppression échouée : " + query.lastError().text());
+        if (!query.exec()) {
+            QMessageBox::critical(this, "Erreur",
+                                  "Impossible de supprimer le quai de la base de données :\n" + query.lastError().text());
         } else {
+            // Validation de la transaction si nécessaire
             QSqlDatabase::database().commit();
+
+            // Mise à jour de l'interface
             loadQuaisFromDatabase();
             populateTable(searchInput->text());
+
+            // Optionnel : Petit feedback visuel ou sonore
+            qDebug() << "Quai n°" << q.getNumero() << "supprimé avec succès.";
         }
     }
+
+    // Nettoyage manuel si le dialogue n'a pas Qt::WA_DeleteOnClose
+    dlg->deleteLater();
 }
+
 void QuaisWindow::onUpdateQuai(int id) {
     // Your logic here. Even an empty body will fix the linker:
     Q_UNUSED(id); // Avoid unused parameter warning if nothing is done yet
@@ -1454,19 +1501,23 @@ void QuaisWindow::onLogout() {
         this->close();
 }
 
-void QuaisWindow::onSort(int index)
-{
-    switch (index) {
-    case 0:
-        loadQuaisFromDatabase();
-        break;
-    case 1: std::sort(quais.begin(), quais.end(), [](const Quai &a, const Quai &b){ return a.getNumero() < b.getNumero(); }); break;
-    case 2: std::sort(quais.begin(), quais.end(), [](const Quai &a, const Quai &b){ return a.getNumero() > b.getNumero(); }); break;
-    case 3: std::sort(quais.begin(), quais.end(), [](const Quai &a, const Quai &b){ return a.getTarif() < b.getTarif(); }); break;
-    case 4: std::sort(quais.begin(), quais.end(), [](const Quai &a, const Quai &b){ return a.getTarif() > b.getTarif(); }); break;
-    default: break;
-    }
+void QuaisWindow::onSort(int index) {
+    if (quais.isEmpty()) return;
 
+    switch(index) {
+    case 1: // Numéro Croissant
+        std::sort(quais.begin(), quais.end(), [](const Quai& a, const Quai& b) { return a.getNumero() < b.getNumero(); });
+        break;
+    case 2: // Numéro Décroissant
+        std::sort(quais.begin(), quais.end(), [](const Quai& a, const Quai& b) { return a.getNumero() > b.getNumero(); });
+        break;
+    case 3: // Tarif Croissant
+        std::sort(quais.begin(), quais.end(), [](const Quai& a, const Quai& b) { return a.getTarif() < b.getTarif(); });
+        break;
+    case 4: // Tarif Décroissant
+        std::sort(quais.begin(), quais.end(), [](const Quai& a, const Quai& b) { return a.getTarif() > b.getTarif(); });
+        break;
+    }
     populateTable(searchInput->text());
 }
 
@@ -1658,60 +1709,60 @@ void QuaisWindow::afficherStatistiques()
         QTimer::singleShot(i * 150, cp, [cp]() { cp->animateTo(); });
     }
     dlg->exec();
-
 }
-void QuaisWindow::onGenerateContract(int row)
-{
-    if (row < 0 || row >= quais.size()) return;
+    void QuaisWindow::onGenerateContract(int row)
+    {
+        if (row < 0 || row >= quais.size()) return;
 
-    const Quai& quai = quais[row];
+        const Quai& quai = quais[row];
 
-    // Check if quai is available or occupied
-    if (quai.getEtat() == "Maintenance") {
-        QMessageBox::warning(this, "Quai en maintenance",
-                             "Ce quai est en maintenance et ne peut pas faire l'objet d'un contrat.");
-        return;
-    }
-
-    // Create and show contract dialog
-    ContractDialog dialog(quai, this);
-
-    if (dialog.exec() == QDialog::Accepted) {
-        QString clientName = dialog.getClientName();
-        QString company = dialog.getCompany();
-        QString duration = dialog.getDuration();
-        QDate startDate = dialog.getStartDate();
-
-        // Validate required fields
-        if (clientName.isEmpty() || company.isEmpty() || duration.isEmpty()) {
-            QMessageBox::warning(this, "Champs requis",
-                                 "Veuillez remplir tous les champs obligatoires (nom, société, durée).");
+        // Check if quai is available or occupied
+        if (quai.getEtat() == "Maintenance") {
+            QMessageBox::warning(this, "Quai en maintenance",
+                                 "Ce quai est en maintenance et ne peut pas faire l'objet d'un contrat.");
             return;
         }
 
-        QRegularExpression nameExp("^[a-zA-ZÀ-ÿ\\s]+$");
-        if (!clientName.contains(nameExp)) {
-            QMessageBox::warning(this, "Erreur de saisie", "Le nom ne doit contenir que des lettres.");
-            return;
-        }
+        // Create and show contract dialog
+        ContractDialog dialog(quai, this);
 
-        // Generate the contract
-        if (ContractGenerator::generateContract(quai, clientName, company,
-                                                duration, startDate, this)) {
-            // Optionally update quai status to "Occupé" if needed
-            if (quai.getEtat() == "Disponible") {
-                int answer = QMessageBox::question(this, "Mettre à jour le statut",
-                                                   "Souhaitez-vous marquer ce quai comme 'Occupé' ?",
-                                                   QMessageBox::Yes | QMessageBox::No);
+        if (dialog.exec() == QDialog::Accepted) {
+            QString clientName = dialog.getClientName();
+            QString company = dialog.getCompany();
+            QString duration = dialog.getDuration();
+            QDate startDate = dialog.getStartDate();
 
-                if (answer == QMessageBox::Yes) {
-                    // Update quai status
-                    Quai& q = quais[row]; // Get non-const reference
-                    q.setEtat("Occupé");
-                    q.setLocation(company);
-                    populateTable(searchInput->text());
+            // Validate required fields
+            if (clientName.isEmpty() || company.isEmpty() || duration.isEmpty()) {
+                QMessageBox::warning(this, "Champs requis",
+                                     "Veuillez remplir tous les champs obligatoires (nom, société, durée).");
+                return;
+            }
+
+            QRegularExpression nameExp("^[a-zA-ZÀ-ÿ\\s]+$");
+            if (!clientName.contains(nameExp)) {
+                QMessageBox::warning(this, "Erreur de saisie", "Le nom ne doit contenir que des lettres.");
+                return;
+            }
+
+            // Generate the contract
+            if (ContractGenerator::generateContract(quai, clientName, company,
+                                                    duration, startDate, this)) {
+                // Optionally update quai status to "Occupé" if needed
+                if (quai.getEtat() == "Disponible") {
+                    int answer = QMessageBox::question(this, "Mettre à jour le statut",
+                                                       "Souhaitez-vous marquer ce quai comme 'Occupé' ?",
+                                                       QMessageBox::Yes | QMessageBox::No);
+
+                    if (answer == QMessageBox::Yes) {
+                        // Update quai status
+                        Quai& q = quais[row]; // Get non-const reference
+                        q.setEtat("Occupé");
+                        q.setLocation(company);
+                        populateTable(searchInput->text());
+                    }
                 }
             }
         }
     }
-}
+
