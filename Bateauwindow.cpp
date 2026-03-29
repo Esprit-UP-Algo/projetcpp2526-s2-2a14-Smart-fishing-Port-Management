@@ -460,7 +460,8 @@ void BateauWindow::onGeneratePDF()
     
     int wPage = writer.width();
     int hPage = writer.height();
-    int margin = wPage / 20; // marge 5%  (division entière simple)
+    int margin = (wPage * 5) / 100; // marge 5%  (division entière simple)
+    int w = wPage - 2 * margin;
     int y = margin;
     
     QFont titleFont("Arial", 22, QFont::Bold);
@@ -468,11 +469,16 @@ void BateauWindow::onGeneratePDF()
     QFont headerFont("Arial", 10, QFont::Bold);
     QFont bodyFont("Arial", 9);
     
+    QColor mainBlue("#1E3A8A"); 
+    QColor lightBlue("#F0F4F8");
+    
     // Titre et Sous-titre
+    painter.setPen(mainBlue);
     painter.setFont(titleFont);
     painter.drawText(margin, y, "SUIVI OFFICIEL DES BATEAUX EN MAINTENANCE");
-    y += 200;
+    y += 150;
     
+    painter.setPen(Qt::darkGray);
     painter.setFont(subTitleFont);
     painter.drawText(margin, y, "Document destiné à la Direction Générale du Port");
     y += 150;
@@ -480,51 +486,76 @@ void BateauWindow::onGeneratePDF()
     painter.drawText(margin, y, "Date d'édition : " + QDateTime::currentDateTime().toString("dd/MM/yyyy HH:mm"));
     y += 300;
     
-    // En-tête du tableau
+    // En-tête du tableau (Fond bleu)
+    painter.fillRect(margin, y - 80, w, 130, mainBlue); 
+    painter.setPen(Qt::white);
     painter.setFont(headerFont);
-    int colW = (wPage - 2 * margin) / 6; // 6 colonnes, divisé en parts égales (entiers)
-    int sX = margin;
     
-    painter.drawText(sX, y, "NOM");
-    painter.drawText(sX + colW * 1, y, "IMMATRICULATION");
-    painter.drawText(sX + colW * 2, y, "CAPACITÉ");
-    painter.drawText(sX + colW * 3, y, "ÉTAT");
-    painter.drawText(sX + colW * 4, y, "DATE MAINT.");
-    painter.drawText(sX + colW * 5, y, "OBSERVATIONS / REMARQUES");
+    int c1 = margin + (w * 1) / 100;
+    int c2 = margin + (w * 15) / 100;
+    int c3 = margin + (w * 32) / 100;
+    int c4 = margin + (w * 44) / 100;
+    int c5 = margin + (w * 58) / 100;
+    int c6 = margin + (w * 72) / 100;
+    int rW = (w * 28) / 100; // largeur de la remarque augmentée (28%)
+    
+    painter.drawText(c1, y, "NOM");
+    painter.drawText(c2, y, "IMMATRICULATION");
+    painter.drawText(c3, y, "CAPACITÉ");
+    painter.drawText(c4, y, "ÉTAT");
+    painter.drawText(c5, y, "DATE MAINT.");
+    painter.drawText(c6, y, "OBSERVATIONS / REMARQUES");
     y += 100;
-    
-    painter.drawLine(margin, y - 50, wPage - margin, y - 50);
     
     // Contenu du tableau
     painter.setFont(bodyFont);
     for (int i=0; i<mBoats.size(); ++i) {
-        if (y > hPage - margin - 600) { // Nouvelle page si besoin
+        if (y > hPage - margin - 500) { // Nouvelle page si besoin
             writer.newPage();
-            y = margin;
+            y = margin + 100;
+            // Répéter l'en-tête
+            painter.fillRect(margin, y - 80, w, 130, mainBlue); 
+            painter.setPen(Qt::white); painter.setFont(headerFont);
+            painter.drawText(c1, y, "NOM"); painter.drawText(c2, y, "IMMATRICULATION"); painter.drawText(c3, y, "CAPACITÉ");
+            painter.drawText(c4, y, "ÉTAT"); painter.drawText(c5, y, "DATE MAINT."); painter.drawText(c6, y, "OBSERVATIONS / REMARQUES");
+            y += 100; painter.setFont(bodyFont);
         }
-        painter.drawText(sX, y, mBoats[i][0]); // Nom
-        painter.drawText(sX + colW * 1, y, mBoats[i][1]); // Immatriculation
-        painter.drawText(sX + colW * 2, y, mBoats[i][2]); // Capacité
-        painter.drawText(sX + colW * 3, y, mBoats[i][3]); // Etat
-        painter.drawText(sX + colW * 4, y, mBoats[i][4]); // Date
+        
+        // Zébrure (Ligne sur deux gris clair)
+        if (i % 2 == 0) {
+            painter.fillRect(margin, y - 50, w, 180, lightBlue);
+        }
+        
+        painter.setPen(Qt::black);
+        painter.drawText(c1, y + 50, mBoats[i][0]); // Nom
+        painter.drawText(c2, y + 50, mBoats[i][1]); // Immatriculation
+        painter.drawText(c3, y + 50, mBoats[i][2].isEmpty() ? "-" : mBoats[i][2] + " T"); // Capacité
+        painter.drawText(c4, y + 50, mBoats[i][3]); // Etat
+        painter.drawText(c5, y + 50, mBoats[i][4]); // Date
         
         // Remarque sur plusieurs lignes (WordWrap)
         QString remark = mBoats[i][5].isEmpty() ? "-" : mBoats[i][5];
-        painter.drawText(QRect(sX + colW * 5, y - 80, colW, 160), Qt::AlignLeft | Qt::TextWordWrap, remark);
+        QRect remRect(c6, y - 20, rW - 20, 160); // Cadre confiné
+        painter.drawText(remRect, Qt::AlignLeft | Qt::TextWordWrap, remark);
         
-        y += 150;
+        y += 180; // Interligne augmenté
     }
     
-    y += 100;
-    painter.drawLine(margin, y - 50, wPage - margin, y - 50);
-    y += 200;
+    painter.setPen(QPen(mainBlue, 3));
+    painter.drawLine(margin, y - 30, wPage - margin, y - 30);
+    y += 150;
     
     // Signature de la direction générale
-    if (y > hPage - margin - 400) { writer.newPage(); y = margin; }
+    if (y > hPage - margin - 400) { writer.newPage(); y = margin + 100; }
     
     painter.setFont(subTitleFont);
-    painter.drawText(wPage - margin - 1000, y, "Validation du Responsable du Port :");
-    painter.drawRect(wPage - margin - 1000, y + 50, 1000, 300);
+    painter.setPen(Qt::black);
+    int sigW = (w * 40) / 100;
+    int sigX = wPage - margin - sigW;
+    
+    painter.drawText(sigX, y, "Signature du Responsable :");
+    painter.setPen(QPen(Qt::gray, 2, Qt::DashLine));
+    painter.drawRect(sigX, y + 50, sigW, 300);
     
     QMessageBox::information(this, "Succès", "Rapport PDF Officiel pour la Direction Générale généré avec succès !");
 }
