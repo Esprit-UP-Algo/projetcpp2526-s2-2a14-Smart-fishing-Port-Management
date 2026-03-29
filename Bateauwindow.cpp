@@ -1,6 +1,7 @@
 #include "bateauwindow.h"
 #include "bateaudialog.h"
 #include "BateauStatisticsDialog.h"
+#include "PredictMaintenanceDialog.h"
 #include <QDebug>
 #include <QMessageBox>
 #include <QHeaderView>
@@ -370,11 +371,18 @@ QWidget* BateauWindow::createActionButtons(int row)
         b->setStyleSheet(QString("QPushButton{background:%1;border:none;border-radius:8px;font-size:14px;} QPushButton:hover{background:%2;}").arg(bg,hov));
         return b;
     };
+    QPushButton* p = mk("🔮","#e0e7ff","#c7d2fe");
     QPushButton* e = mk("✏️","#fef9c3","#fde68a");
     QPushButton* d = mk("🗑️","#fee2e2","#fecaca");
+    
+    p->setToolTip("Prédire la maintenance");
+    e->setToolTip("Modifier");
+    d->setToolTip("Supprimer");
+
+    connect(p,&QPushButton::clicked,[this,row](){ onPredictMaintenance(row); });
     connect(e,&QPushButton::clicked,[this,row](){ onEditBateau(row); });
     connect(d,&QPushButton::clicked,[this,row](){ onDeleteBateau(row); });
-    l->addWidget(e); l->addWidget(d);
+    l->addWidget(p); l->addWidget(e); l->addWidget(d);
     return w;
 }
 
@@ -653,4 +661,30 @@ void BateauWindow::onDeleteBateau(int row)
 void BateauWindow::onLogout()
 {
     if (QMessageBox::question(this, "Quitter", "Voulez-vous quitter ?", QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) this->close();
+}
+
+void BateauWindow::onPredictMaintenance(int row)
+{
+    QString ageStr = table->item(row, 5)->text().replace(" ans", "").trimmed();
+    int age = ageStr.toInt();
+
+    QString dateStr = table->item(row, 6)->text();
+    QDate maintDate = QDate::fromString(dateStr, "dd/MM/yyyy");
+    int moisMaintenance = 0;
+    if (maintDate.isValid()) {
+        int yearDiff = QDate::currentDate().year() - maintDate.year();
+        int monthDiff = QDate::currentDate().month() - maintDate.month();
+        moisMaintenance = yearDiff * 12 + monthDiff;
+        if (moisMaintenance < 0) moisMaintenance = 0;
+    }
+
+    QString etat = "Au port";
+    QWidget* badge = table->cellWidget(row, 9);
+    if(badge) {
+        QLabel* l = badge->findChild<QLabel*>();
+        if(l) etat = l->text();
+    }
+
+    PredictMaintenanceDialog diag(age, moisMaintenance, etat, this);
+    diag.exec();
 }

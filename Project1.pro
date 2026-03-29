@@ -35,7 +35,8 @@ SOURCES += \
     employee.cpp \
     frigo.cpp \
     bateau.cpp \
-    LivraisonTrackingDialog.cpp
+    LivraisonTrackingDialog.cpp \
+    PredictMaintenanceDialog.cpp
 
 
 HEADERS += \
@@ -68,7 +69,8 @@ HEADERS += \
     employee.h \
     frigo.h \
     bateau.h \
-    LivraisonTrackingDialog.h
+    LivraisonTrackingDialog.h \
+    PredictMaintenanceDialog.h
 
 
 # Default rules for deployment.

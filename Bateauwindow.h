@@ -24,6 +24,7 @@ private slots:
     void onAddBateau();
     void onEditBateau(int row);
     void onDeleteBateau(int row);
+    void onPredictMaintenance(int row);
     void onGeneratePDF();
     void onShowStatistics();
     void onLogout();
