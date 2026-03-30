@@ -103,9 +103,12 @@ void AddFrigoDialog::setupUi()
     grid->addWidget(dateResEdit, 7, 0);
 
     occEdit = new QLineEdit();
-    occEdit->setPlaceholderText("Ex: 50.5");
+    occEdit->setPlaceholderText("Ex: 0");
     occEdit->setStyleSheet(getInputStyle());
     occEdit->setMinimumHeight(45);
+    if (!isEdit) {
+        occEdit->setText("0");
+    }
     grid->addWidget(createLabel("Occupation (%)"), 6, 1);
     grid->addWidget(occEdit, 7, 1);
 
@@ -158,12 +161,18 @@ bool AddFrigoDialog::validateInputs()
         return false;
     }
 
-    occEdit->text().toDouble(&ok);
+    double occVal = occEdit->text().trimmed().isEmpty() ? 0.0 : occEdit->text().toDouble(&ok);
     if (!ok) {
         QMessageBox::warning(this, "Validation", "Occupation invalide (nombre requis).");
         return false;
     }
 
+    if (occVal < 0 || occVal > 100) {
+        QMessageBox::warning(this, "Validation", "Occupation doit être entre 0 et 100%.");
+        return false;
+    }
+
+    occEdit->setText(QString::number(occVal));
     return true;
 }
 
