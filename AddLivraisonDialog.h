@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QTextEdit>
 #include <QDateEdit>
+#include <QLabel>
 #include "livraison.h"
 
 class AddLivraisonDialog : public QDialog
@@ -21,6 +22,8 @@ public:
 private:
     void setupUi();
     void populateFields();
+    bool validateInputs();
+    void updateFieldStyle(QWidget* field, bool isValid);
 
     QTextEdit* adresseEdit;
     QLineEdit* vehiculeEdit;
@@ -28,8 +31,19 @@ private:
     QLineEdit* prixEdit;
     QDateEdit* dateEdit;
 
+    // Error Labels
+    QLabel* errorAdresse;
+    QLabel* errorVehicule;
+    QLabel* errorPrix;
+
     Livraison* livraisonData;
     bool isEdit;
+
+private slots:
+    void onAdresseChanged();
+    void onVehiculeChanged();
+    void onPrixChanged();
+    void handleSave();
 };
 
 #endif // ADDLIVRAISONDIALOG_H
