@@ -313,7 +313,7 @@ void LivraisonWindow::setupTable()
 {
     table = new QTableWidget();
     table->setColumnCount(6);
-    table->setHorizontalHeaderLabels({"Date", "Adresse", "Statut", "Transport", "Prix", "Actions"});
+    table->setHorizontalHeaderLabels({"Date", "Adresse", "Statut", "Transport", "Prix (DT/$/€)", "Actions"});
 
     /* Responsive columns (matching Bateau styling) */
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);

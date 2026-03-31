@@ -33,8 +33,7 @@ void LoginWindow::setupUi()
     // Mac: "/Users/username/Pictures/background.jpg"
     // Relative: "./images/background.jpg"
 
-    QString backgroundImagePath = "C:/Users/manne/Downloads/login.png"; // ← CHANGE THIS
-
+QString backgroundImagePath = "C:/Users/Anas/Downloads/login.png";
     // Try to load the background image
     QPixmap backgroundPixmap(backgroundImagePath);
 

@@ -213,12 +213,12 @@ void AddLivraisonDialog::setupUi()
     row2->addLayout(transCol);
 
     QVBoxLayout* prixCol = new QVBoxLayout();
-    QLabel* prixLabel = new QLabel("💰  Prix (DT)");
+    QLabel* prixLabel = new QLabel("💰  Prix (DT / $ / €)");
     prixLabel->setFont(labelFont);
     prixLabel->setStyleSheet("color: #2C3E50;");
     prixCol->addWidget(prixLabel);
     prixEdit = new QLineEdit();
-    prixEdit->setPlaceholderText("Ex: 150 DT");
+    prixEdit->setPlaceholderText("Ex: 150 DT, 50$ ou 45€");
     prixEdit->setFixedHeight(45);
     prixEdit->setStyleSheet(getInputStyle());
     prixCol->addWidget(prixEdit);
@@ -323,7 +323,13 @@ void AddLivraisonDialog::onVehiculeChanged() {
 }
 
 void AddLivraisonDialog::onPrixChanged() {
-    QString p = prixEdit->text().trimmed();
+    QString p = prixEdit->text();
+    if (p.contains("-")) {
+        p.remove("-");
+        prixEdit->setText(p);
+        return; // Signal will re-trigger
+    }
+    p = p.trimmed();
     bool valid = !p.isEmpty() && (p.endsWith("DT") || p.endsWith("$") || p.endsWith("€"));
     updateFieldStyle(prixEdit, valid);
     errorPrix->setVisible(!valid);
