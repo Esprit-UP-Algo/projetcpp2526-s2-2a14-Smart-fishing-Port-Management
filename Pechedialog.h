@@ -2,10 +2,10 @@
 #define PECHEDIALOG_H
 
 #include <QDialog>
+#include <QLabel>
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDateEdit>
-#include <QLabel>
 #include "peche.h"
 
 class PecheDialog : public QDialog
@@ -27,7 +27,6 @@ private:
 
 private slots:
     void onSave();
-    void onSuggestStorage();
 
 private:
     QLineEdit* referenceInput;

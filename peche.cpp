@@ -3,6 +3,7 @@
 #include <QSqlError>
 #include <QSqlRecord>
 #include <QDate>
+#include <QRegularExpression>
 
 QString Peche::lastError = "";
 
@@ -21,6 +22,32 @@ Peche::Peche(QString id, QString ref, QString esp, QString qte, QString date, QS
 }
 
 bool Peche::ajouter() {
+    // Validation de base
+    if (reference.trimmed().isEmpty()) {
+        lastError = "La référence ne peut pas être vide.";
+        return false;
+    }
+
+    // Validation du format (REF-YYYY-NOMBRE)
+    QRegularExpression refRegex("^REF-\\d{4}-\\d+$");
+    if (!refRegex.match(reference).hasMatch()) {
+        lastError = "Format de référence invalide (Attendu: REF-YYYY-NOMBRE).";
+        return false;
+    }
+
+    // [NOUVEAU] Contrôle d'unicité
+    if (referenceExiste(reference)) {
+        lastError = "Cette référence existe déjà.";
+        return false;
+    }
+
+    bool ok;
+    double val = quantiteKg.toDouble(&ok);
+    if (!ok || val <= 0) {
+        lastError = "La quantité doit être un nombre positif.";
+        return false;
+    }
+
     QSqlQuery query;
     
     // [LOGIQUE INNOVANTE] Vérification du Quota Mensuel (ex: 5000 Kg)
@@ -96,6 +123,33 @@ bool Peche::supprimer(QString id) {
 }
 
 bool Peche::modifier(QString id) {
+    // Validation de base
+    if (reference.trimmed().isEmpty()) {
+        lastError = "La référence ne peut pas être vide.";
+        return false;
+    }
+
+    // Validation du format (REF-YYYY-NOMBRE)
+    QRegularExpression refRegex("^REF-\\d{4}-\\d+$");
+    if (!refRegex.match(reference).hasMatch()) {
+        lastError = "Format de référence invalide (Attendu: REF-YYYY-NOMBRE).";
+        return false;
+    }
+
+    // [NOUVEAU] Contrôle d'unicité (en excluant le lot actuel)
+    int idNumForCheck = id.startsWith("LOT") ? id.mid(3).toInt() : id.toInt();
+    if (referenceExiste(reference, idNumForCheck)) {
+        lastError = "Cette référence est déjà utilisée par un autre lot.";
+        return false;
+    }
+
+    bool ok;
+    double val = quantiteKg.toDouble(&ok);
+    if (!ok || val <= 0) {
+        lastError = "La quantité doit être un nombre positif.";
+        return false;
+    }
+
     QSqlQuery query;
     query.prepare("UPDATE PECHES SET reference = :ref, espece = :esp, quantite = :qte, datecapture = :date, "
                   "idbateau = :idb, idfrigo = :idf "
@@ -166,4 +220,20 @@ QSqlQueryModel* Peche::rechercher(QString val) {
     query.exec();
     model->setQuery(std::move(query));
     return model;
+}
+
+bool Peche::referenceExiste(QString ref, int idLotExclu) {
+    QSqlQuery query;
+    if (idLotExclu == -1) {
+        query.prepare("SELECT COUNT(*) FROM PECHES WHERE REFERENCE = :ref");
+    } else {
+        query.prepare("SELECT COUNT(*) FROM PECHES WHERE REFERENCE = :ref AND IDLOT != :id");
+        query.bindValue(":id", idLotExclu);
+    }
+    query.bindValue(":ref", ref);
+    
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+    return false;
 }

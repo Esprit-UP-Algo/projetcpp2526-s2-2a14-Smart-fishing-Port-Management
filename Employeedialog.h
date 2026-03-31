@@ -1,7 +1,8 @@
-﻿#ifndef EMPLOYEEDIALOG_H
+#ifndef EMPLOYEEDIALOG_H
 #define EMPLOYEEDIALOG_H
 
 #include <QDialog>
+#include <QLabel>
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDateEdit>
@@ -28,6 +29,7 @@ private:
     void setupUi();
     void populateFields();
     QString getInputStyle() const;
+    void showError(const QString& msg);
 
     QLineEdit* firstNameInput;
     QLabel* firstNameErrorLabel;

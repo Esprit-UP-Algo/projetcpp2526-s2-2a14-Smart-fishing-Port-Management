@@ -1,5 +1,6 @@
 #include "frigo.h"
 #include <QDebug>
+#include <QRegularExpression>
 
 FrigoModel::FrigoModel() : idFrigo(""), capacite(0), temperature(0), occupation(0) {}
 
@@ -8,6 +9,17 @@ FrigoModel::FrigoModel(QString id, QString ref, double cap, QString type, QStrin
 
 bool FrigoModel::ajouter()
 {
+    // Validation du format de référence (FRG-NUMERO)
+    QRegularExpression frgRegex("^FRG-\\d+$");
+    if (reference.trimmed().isEmpty()) {
+        m_lastError = "La référence ne peut pas être vide.";
+        return false;
+    }
+    if (!frgRegex.match(reference).hasMatch()) {
+        m_lastError = "Format de référence invalide (Attendu: FRG-NUMERO, ex: FRG-001).";
+        return false;
+    }
+
     QSqlQuery query;
     query.prepare("INSERT INTO FRIGOS (IDFRIGO, REFERENCE, CAPACITE, TYPE_POISSON, STATUT, DATE_RESERVATION, TEMPERATURE, OCCUPATION) "
                   "VALUES (:id, :ref, :cap, :type, :stat, TO_DATE(:dateRes, 'DD/MM/YYYY'), :temp, :occ)");
@@ -69,6 +81,17 @@ bool FrigoModel::supprimer(QString id)
 
 bool FrigoModel::modifier(QString id)
 {
+    // Validation du format de référence (FRG-NUMERO)
+    QRegularExpression frgRegex("^FRG-\\d+$");
+    if (reference.trimmed().isEmpty()) {
+        m_lastError = "La référence ne peut pas être vide.";
+        return false;
+    }
+    if (!frgRegex.match(reference).hasMatch()) {
+        m_lastError = "Format de référence invalide (Attendu: FRG-NUMERO, ex: FRG-001).";
+        return false;
+    }
+
     QSqlQuery query;
     query.prepare("UPDATE FRIGOS SET REFERENCE=:ref, CAPACITE=:cap, TYPE_POISSON=:type, "
                   "STATUT=:stat, DATE_RESERVATION=TO_DATE(:dateRes, 'DD/MM/YYYY'), TEMPERATURE=:temp, OCCUPATION=:occ "

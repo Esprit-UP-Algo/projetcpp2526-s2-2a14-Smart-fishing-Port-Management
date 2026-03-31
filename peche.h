@@ -47,6 +47,9 @@ public:
     QSqlQueryModel* trier(QString critere, QString ordre);
     QSqlQueryModel* rechercher(QString val);
 
+    // [NOUVEAU] Unicité
+    static bool referenceExiste(QString ref, int idLotExclu = -1);
+
     // Error Reporting
     static QString getLastError() { return lastError; }
 };

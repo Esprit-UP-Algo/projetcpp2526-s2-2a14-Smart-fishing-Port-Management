@@ -41,7 +41,7 @@ bool Livraison::ajouter() {
     query.bindValue(":transport", transport);
     
     QString p = prix;
-    p = p.replace("DT", "").trimmed();
+    p = p.replace("DT", "").replace("$", "").replace("€", "").trimmed();
     query.bindValue(":prix", p.toDouble());
     
     query.bindValue(":vehicule", vehicule);
@@ -96,7 +96,7 @@ bool Livraison::modifier(QString id) {
     query.bindValue(":transport", transport);
     
     QString p = prix;
-    p = p.replace("DT", "").trimmed();
+    p = p.replace("DT", "").replace("$", "").replace("€", "").trimmed();
     query.bindValue(":prix", p.toDouble());
     
     query.bindValue(":vehicule", vehicule);

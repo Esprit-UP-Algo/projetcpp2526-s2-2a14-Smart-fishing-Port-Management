@@ -105,21 +105,19 @@ void BateauDialog::setupUi()
     nomBateauInput->setStyleSheet(getInputStyle());
     formLayout->addWidget(nomBateauInput);
 
-    nomErrorLabel = new QLabel("⚠️ Attention: Le nom ne doit pas contenir de chiffres");
+    QLabel* nomErrorLabel = new QLabel("⚠️ Attention: Le nom ne doit pas contenir de chiffres");
     nomErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
     nomErrorLabel->hide();
     formLayout->addWidget(nomErrorLabel);
 
     connect(nomBateauInput, &QLineEdit::textChanged, this, [=](const QString &text){
         if(text.isEmpty()) { 
-            nomErrorLabel->setText("⚠️ Champ obligatoire.");
-            nomErrorLabel->show(); 
-            nomBateauInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;"); 
+            nomErrorLabel->hide(); 
+            nomBateauInput->setStyleSheet(getInputStyle()); 
             return; 
         }
         QRegularExpression rx("^[a-zA-ZÀ-ÿ\\s-]*$");
         if(!rx.match(text).hasMatch()) {
-            nomErrorLabel->setText("⚠️ Attention: Le nom ne doit pas contenir de chiffres");
             nomErrorLabel->show();
             nomBateauInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
         } else {
@@ -141,23 +139,27 @@ void BateauDialog::setupUi()
     immatriculationInput->setFont(inputFont);
     immatriculationInput->setFixedHeight(50);
     immatriculationInput->setStyleSheet(getInputStyle());
+
+    // Bloquer les caractères non conformes au format TN-YYYY-NUMERO
+    QRegularExpression immatParialRegex("^TN(-\\d{0,4}(-\\d{0,6})?)?$");
+    QRegularExpressionValidator* immatValidator = new QRegularExpressionValidator(immatParialRegex, this);
+    immatriculationInput->setValidator(immatValidator);
+
     formLayout->addWidget(immatriculationInput);
 
-    immatErrorLabel = new QLabel("⚠️ Format invalide (lettres, chiffres, tirets uniquement).");
+    QLabel* immatErrorLabel = new QLabel("⚠️ Format invalide ! Attendu : TN-YYYY-NUMERO (ex: TN-2025-001)");
     immatErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
     immatErrorLabel->hide();
     formLayout->addWidget(immatErrorLabel);
 
     connect(immatriculationInput, &QLineEdit::textChanged, this, [=](const QString &text){
-        if(text.isEmpty()) { 
-            immatErrorLabel->setText("⚠️ Champ obligatoire.");
-            immatErrorLabel->show(); 
-            immatriculationInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;"); 
-            return; 
+        if(text.isEmpty()) {
+            immatErrorLabel->hide();
+            immatriculationInput->setStyleSheet(getInputStyle());
+            return;
         }
-        QRegularExpression rx("^[a-zA-Z0-9-]*$");
-        if(!rx.match(text).hasMatch()) {
-            immatErrorLabel->setText("⚠️ Format invalide (lettres, chiffres, tirets uniquement).");
+        QRegularExpression fullImmat("^TN-\\d{4}-\\d+$");
+        if(!fullImmat.match(text).hasMatch()) {
             immatErrorLabel->show();
             immatriculationInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
         } else {
@@ -179,23 +181,25 @@ void BateauDialog::setupUi()
     capaciteInput->setFont(inputFont);
     capaciteInput->setFixedHeight(50);
     capaciteInput->setStyleSheet(getInputStyle());
+    // Bloquer les lettres : nombres positifs uniquement
+    QDoubleValidator* capValidator = new QDoubleValidator(0.01, 99999.99, 2, this);
+    capValidator->setNotation(QDoubleValidator::StandardNotation);
+    capaciteInput->setValidator(capValidator);
     formLayout->addWidget(capaciteInput);
 
-    capErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre valide (> 0).");
+    QLabel* capErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre valide (> 0).");
     capErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
     capErrorLabel->hide();
     formLayout->addWidget(capErrorLabel);
 
     connect(capaciteInput, &QLineEdit::textChanged, this, [=](const QString &text){
         if(text.isEmpty()) { 
-            capErrorLabel->setText("⚠️ Champ obligatoire.");
-            capErrorLabel->show(); 
-            capaciteInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;"); 
+            capErrorLabel->hide(); 
+            capaciteInput->setStyleSheet(getInputStyle()); 
             return; 
         }
         QRegularExpression rx("^[0-9]*[.,]?[0-9]*$");
         if(!rx.match(text).hasMatch()) {
-            capErrorLabel->setText("⚠️ Veuillez saisir un nombre valide (> 0).");
             capErrorLabel->show();
             capaciteInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
         } else {
@@ -217,23 +221,25 @@ void BateauDialog::setupUi()
     longueurInput->setFont(inputFont);
     longueurInput->setFixedHeight(50);
     longueurInput->setStyleSheet(getInputStyle());
+    // Bloquer les lettres : nombres positifs uniquement
+    QDoubleValidator* lonValidator = new QDoubleValidator(0.01, 9999.99, 2, this);
+    lonValidator->setNotation(QDoubleValidator::StandardNotation);
+    longueurInput->setValidator(lonValidator);
     formLayout->addWidget(longueurInput);
 
-    lonErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre valide (> 0).");
+    QLabel* lonErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre valide (> 0).");
     lonErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
     lonErrorLabel->hide();
     formLayout->addWidget(lonErrorLabel);
 
     connect(longueurInput, &QLineEdit::textChanged, this, [=](const QString &text){
         if(text.isEmpty()) { 
-            lonErrorLabel->setText("⚠️ Champ obligatoire.");
-            lonErrorLabel->show(); 
-            longueurInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;"); 
+            lonErrorLabel->hide(); 
+            longueurInput->setStyleSheet(getInputStyle()); 
             return; 
         }
         QRegularExpression rx("^[0-9]*[.,]?[0-9]*$");
         if(!rx.match(text).hasMatch()) {
-            lonErrorLabel->setText("⚠️ Veuillez saisir un nombre valide (> 0).");
             lonErrorLabel->show();
             longueurInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
         } else {
@@ -255,23 +261,24 @@ void BateauDialog::setupUi()
     ageInput->setFont(inputFont);
     ageInput->setFixedHeight(50);
     ageInput->setStyleSheet(getInputStyle());
+    // Bloquer les lettres : entiers uniquement (0-150)
+    QIntValidator* ageValidator = new QIntValidator(0, 150, this);
+    ageInput->setValidator(ageValidator);
     formLayout->addWidget(ageInput);
 
-    ageErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre entier (pas de lettres).");
+    QLabel* ageErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre entier (pas de lettres).");
     ageErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
     ageErrorLabel->hide();
     formLayout->addWidget(ageErrorLabel);
 
     connect(ageInput, &QLineEdit::textChanged, this, [=](const QString &text){
         if(text.isEmpty()) { 
-            ageErrorLabel->setText("⚠️ Champ obligatoire.");
-            ageErrorLabel->show(); 
-            ageInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;"); 
+            ageErrorLabel->hide(); 
+            ageInput->setStyleSheet(getInputStyle()); 
             return; 
         }
         QRegularExpression rx("^[0-9]*$");
         if(!rx.match(text).hasMatch()) {
-            ageErrorLabel->setText("⚠️ Veuillez saisir un nombre entier (pas de lettres).");
             ageErrorLabel->show();
             ageInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
         } else {
@@ -416,98 +423,58 @@ void BateauDialog::setQuaiList(const QList<QPair<QString, QString>>& quais) {
 }
 
 bool BateauDialog::validateInputs() {
-    bool isValid = true;
-    QString errorStyle = "border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;";
-
     // 1. Nom
     QString nom = nomBateauInput->text().trimmed();
     if(nom.isEmpty() || nom.length() < 2){ 
-        nomErrorLabel->setText("⚠️ Champ obligatoire (min 2 caractères)."); 
-        nomErrorLabel->show();
-        nomBateauInput->setStyleSheet(errorStyle);
-        isValid = false; 
-    } else {
-        QRegularExpression rx("^[a-zA-ZÀ-ÿ\\s-]*$");
-        if(!rx.match(nom).hasMatch()) {
-            nomErrorLabel->setText("⚠️ Le nom ne doit pas contenir de chiffres.");
-            nomErrorLabel->show();
-            nomBateauInput->setStyleSheet(errorStyle);
-            isValid = false;
-        }
+        showError("Le nom du bateau est obligatoire et doit contenir au moins 2 caractères (sans chiffres)."); 
+        return false; 
     }
 
-    // 2. Immatriculation
+    // 2. Immatriculation - format TN-YYYY-NUMERO obligatoire
     QString immat = immatriculationInput->text().trimmed();
-    if(immat.isEmpty() || immat.length() < 3){ 
-        immatErrorLabel->setText("⚠️ Champ obligatoire (min 3 caractères)."); 
-        immatErrorLabel->show();
-        immatriculationInput->setStyleSheet(errorStyle);
-        isValid = false; 
-    } else {
-        QRegularExpression rx("^[a-zA-Z0-9-]*$");
-        if(!rx.match(immat).hasMatch()) {
-            immatErrorLabel->setText("⚠️ Format invalide (lettres, chiffres, tirets).");
-            immatErrorLabel->show();
-            immatriculationInput->setStyleSheet(errorStyle);
-            isValid = false;
-        }
+    QRegularExpression fullImmat("^TN-\\d{4}-\\d+$");
+    if (immat.isEmpty()) {
+        showError("L'immatriculation est obligatoire.");
+        return false;
+    } else if (!fullImmat.match(immat).hasMatch()) {
+        showError("Format d'immatriculation invalide !\nAttendu : TN-YYYY-NUMERO\nExemple : TN-2025-001");
+        return false;
+    }
+
+    // [NOUVEAU] Contrôle unicité via le modèle
+    int currentIdB = (isEdit && bateauData) ? bateauData->getIdBateau().toInt() : -1;
+    if (Bateau::immatriculationExiste(immat, currentIdB)) {
+        showError("Cette immatriculation est déjà utilisée par un autre bateau."); 
+        return false; 
     }
 
     // 3. Capacité
-    bool okCap;
+    bool ok;
     QString capStr = capaciteInput->text().replace(",", ".");
-    double cap = capStr.toDouble(&okCap);
-    if(capStr.isEmpty()){
-        capErrorLabel->setText("⚠️ Champ obligatoire.");
-        capErrorLabel->show();
-        capaciteInput->setStyleSheet(errorStyle);
-        isValid = false;
-    } else if(!okCap || cap <= 0){ 
-        capErrorLabel->setText("⚠️ La capacité doit être un nombre positif.");
-        capErrorLabel->show();
-        capaciteInput->setStyleSheet(errorStyle);
-        isValid = false; 
+    double cap = capStr.toDouble(&ok);
+    if(!ok || cap <= 0){ 
+        showError("La capacité doit être un nombre strictement positif."); 
+        return false; 
     }
 
     // 4. Longueur
-    bool okLon;
     QString lonStr = longueurInput->text().replace(",", ".");
-    double lon = lonStr.toDouble(&okLon);
-    if(lonStr.isEmpty()){
-        lonErrorLabel->setText("⚠️ Champ obligatoire.");
-        lonErrorLabel->show();
-        longueurInput->setStyleSheet(errorStyle);
-        isValid = false;
-    } else if(!okLon || lon <= 0){ 
-        lonErrorLabel->setText("⚠️ La longueur doit être un nombre positif.");
-        lonErrorLabel->show();
-        longueurInput->setStyleSheet(errorStyle);
-        isValid = false; 
+    double lon = lonStr.toDouble(&ok);
+    if(!ok || lon <= 0){ 
+        showError("La longueur doit être un nombre strictement positif."); 
+        return false; 
     }
 
     // 5. Age
-    bool okAge;
-    int age = ageInput->text().toInt(&okAge);
-    if(ageInput->text().isEmpty()){
-        ageErrorLabel->setText("⚠️ Champ obligatoire.");
-        ageErrorLabel->show();
-        ageInput->setStyleSheet(errorStyle);
-        isValid = false;
-    } else if(!okAge || age < 0 || age > 150){ 
-        ageErrorLabel->setText("⚠️ L'âge doit être un entier positif (0-150).");
-        ageErrorLabel->show();
-        ageInput->setStyleSheet(errorStyle);
-        isValid = false; 
+    int age = ageInput->text().toInt(&ok);
+    if(!ok || age < 0 || age > 150){ 
+        showError("L'âge doit être un entier positif (0-150)."); 
+        return false; 
     }
 
     // 6. Maintenance Date
     if(dateMaintenanceInput->date() > QDate::currentDate()) {
         showError("La date de dernière maintenance ne peut pas être dans le futur.");
-        isValid = false;
-    }
-
-    if (!isValid) {
-        showError("Veuillez corriger les champs en rouge avant d'enregistrer.");
         return false;
     }
 

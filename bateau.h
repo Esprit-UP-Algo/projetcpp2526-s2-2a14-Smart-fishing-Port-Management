@@ -55,6 +55,9 @@ public:
     QSqlQueryModel* trier(QString critere, QString ordre);
     QSqlQueryModel* rechercher(QString val);
 
+    // [NOUVEAU] Unicité
+    static bool immatriculationExiste(QString imm, int idBateauExclu = -1);
+
     static QString getLastError() { return lastError; }
 };
 

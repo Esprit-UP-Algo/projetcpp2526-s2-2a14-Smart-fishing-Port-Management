@@ -1,6 +1,7 @@
 #include "bateau.h"
 #include <QSqlError>
 #include <QDebug>
+#include <QRegularExpression>
 
 QString Bateau::lastError = "";
 
@@ -11,6 +12,19 @@ Bateau::Bateau(QString id, QString nom, QString imm, QString cap, QString lon, Q
       ageBateau(age), dateMaintenance(date), idEmploye(idE), idQuai(idQ), etat(etatC) {}
 
 bool Bateau::ajouter() {
+    // Validation du format (TN-YYYY-NUMERO)
+    QRegularExpression immatRegex("^TN-\\d{4}-\\d+$");
+    if (!immatRegex.match(immatriculation).hasMatch()) {
+        lastError = "Format d'immatriculation invalide (Attendu: TN-YYYY-NUMERO).";
+        return false;
+    }
+
+    // [NOUVEAU] Unicité
+    if (immatriculationExiste(immatriculation)) {
+        lastError = "Cette immatriculation appartient déjà à un autre bateau.";
+        return false;
+    }
+
     QSqlQuery query;
     query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT) "
                   "VALUES (:id, :nom, :imm, :cap, :lon, :age, TO_DATE(:date, 'DD/MM/YYYY'), :idE, :idQ, :etat)");
@@ -53,6 +67,19 @@ bool Bateau::supprimer(QString id) {
 }
 
 bool Bateau::modifier(QString id) {
+    // Validation du format (TN-YYYY-NUMERO)
+    QRegularExpression immatRegex("^TN-\\d{4}-\\d+$");
+    if (!immatRegex.match(immatriculation).hasMatch()) {
+        lastError = "Format d'immatriculation invalide (Attendu: TN-YYYY-NUMERO).";
+        return false;
+    }
+
+    // [NOUVEAU] Unicité (en excluant le bateau actuel)
+    if (immatriculationExiste(immatriculation, id.toInt())) {
+        lastError = "Cette immatriculation appartient déjà à un autre bateau.";
+        return false;
+    }
+
     QSqlQuery query;
     query.prepare("UPDATE BATEAUX SET NOMBATEAU=:nom, IMMATRICULATION=:imm, CAPACITE=:cap, LONGEUR=:lon, "
                   "AGE_BATEAU=:age, DATE_DERNIERE_MAINTENANCE=TO_DATE(:date, 'DD/MM/YYYY'), ID_EMPLOYE=:idE, IDQUAI=:idQ, ETAT=:etat "
@@ -108,4 +135,20 @@ QSqlQueryModel* Bateau::rechercher(QString val) {
     query.exec();
     model->setQuery(std::move(query));
     return model;
+}
+
+bool Bateau::immatriculationExiste(QString imm, int idBateauExclu) {
+    QSqlQuery query;
+    if (idBateauExclu == -1) {
+        query.prepare("SELECT COUNT(*) FROM BATEAUX WHERE IMMATRICULATION = :imm");
+    } else {
+        query.prepare("SELECT COUNT(*) FROM BATEAUX WHERE IMMATRICULATION = :imm AND IDBATEAU != :id");
+        query.bindValue(":id", idBateauExclu);
+    }
+    query.bindValue(":imm", imm);
+    
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+    return false;
 }

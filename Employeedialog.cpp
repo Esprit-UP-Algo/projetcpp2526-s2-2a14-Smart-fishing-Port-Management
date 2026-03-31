@@ -1,4 +1,4 @@
-﻿#include "employeedialog.h"
+#include "employeedialog.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -9,6 +9,7 @@
 #include <QScrollArea>
 #include <QRegularExpressionValidator>
 #include <QRegularExpression>
+#include <QMessageBox>
 EmployeeDialog::EmployeeDialog(QWidget *parent, Employee* employeeData)
     : QDialog(parent), employeeData(employeeData), isEdit(employeeData != nullptr)
 {
@@ -144,6 +145,9 @@ void EmployeeDialog::setupUi()
     cinInput->setFont(inputFont);
     cinInput->setFixedHeight(50);
     cinInput->setStyleSheet(getInputStyle());
+    // Bloquer les lettres : chiffres uniquement
+    QIntValidator* cinValidator = new QIntValidator(0, 99999999, this);
+    cinInput->setValidator(cinValidator);
     formLayout->addWidget(cinInput);
 
     cinErrorLabel = new QLabel("");
@@ -181,6 +185,9 @@ void EmployeeDialog::setupUi()
     salaryInput->setFont(inputFont);
     salaryInput->setFixedHeight(50);
     salaryInput->setStyleSheet(getInputStyle());
+    // Bloquer les lettres : entiers uniquement (1000-10000)
+    QIntValidator* salaryValidator = new QIntValidator(0, 99999, this);
+    salaryInput->setValidator(salaryValidator);
     formLayout->addWidget(salaryInput);
     
     salaryErrorLabel = new QLabel("");
@@ -380,11 +387,14 @@ void EmployeeDialog::validateFirstName(const QString &text)
     if (text.isEmpty()) {
         firstNameErrorLabel->setText("Le prénom est obligatoire");
         firstNameErrorLabel->show();
+        firstNameInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
     } else if (hasInvalidChars) {
         firstNameErrorLabel->setText("utiliser que des lettres");
         firstNameErrorLabel->show();
+        firstNameInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
     } else {
         firstNameErrorLabel->hide();
+        firstNameInput->setStyleSheet(getInputStyle());
     }
 }
 
@@ -395,11 +405,14 @@ void EmployeeDialog::validateLastName(const QString &text)
     if (text.isEmpty()) {
         lastNameErrorLabel->setText("Le nom est obligatoire");
         lastNameErrorLabel->show();
+        lastNameInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
     } else if (hasInvalidChars) {
         lastNameErrorLabel->setText("utiliser que des lettres");
         lastNameErrorLabel->show();
+        lastNameInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
     } else {
         lastNameErrorLabel->hide();
+        lastNameInput->setStyleSheet(getInputStyle());
     }
 }
 
@@ -410,14 +423,18 @@ void EmployeeDialog::validateCin(const QString &text)
     if (text.isEmpty()) {
         cinErrorLabel->setText("Le CIN est obligatoire");
         cinErrorLabel->show();
+        cinInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
     } else if (hasLetters) {
         cinErrorLabel->setText("utiliser que des chiffres");
         cinErrorLabel->show();
+        cinInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
     } else if (text.length() != 8) {
         cinErrorLabel->setText(QString("Le CIN doit comporter exactement 8 chiffres (%1/8)").arg(text.length()));
         cinErrorLabel->show();
+        cinInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
     } else {
         cinErrorLabel->hide();
+        cinInput->setStyleSheet(getInputStyle());
     }
 }
 
@@ -428,16 +445,20 @@ void EmployeeDialog::validateSalary(const QString &text)
     if (text.isEmpty()) {
         salaryErrorLabel->setText("Le salaire est obligatoire");
         salaryErrorLabel->show();
+        salaryInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
     } else if (hasLetters) {
         salaryErrorLabel->setText("utiliser que des chiffres");
         salaryErrorLabel->show();
+        salaryInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
     } else {
         int salary = text.toInt();
         if (salary < 1000 || salary > 10000) {
             salaryErrorLabel->setText("le salaire doit être entre 1000 et 10000");
             salaryErrorLabel->show();
+            salaryInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
         } else {
             salaryErrorLabel->hide();
+            salaryInput->setStyleSheet(getInputStyle());
         }
     }
 }
@@ -449,10 +470,16 @@ void EmployeeDialog::onSaveClicked()
     validateLastName(lastNameInput->text());
     validateSalary(salaryInput->text());
 
-    // Check if error label is hidden (valid)
+    // Check if error labels are hidden (valid)
     if (!cinErrorLabel->isHidden() || !firstNameErrorLabel->isHidden() || !lastNameErrorLabel->isHidden() || !salaryErrorLabel->isHidden()) {
+        showError("Veuillez corriger les erreurs de saisie avant d'enregistrer.");
         return;
     }
 
     accept();
+}
+
+void EmployeeDialog::showError(const QString& msg)
+{
+    QMessageBox::warning(this, "Validation", msg);
 }

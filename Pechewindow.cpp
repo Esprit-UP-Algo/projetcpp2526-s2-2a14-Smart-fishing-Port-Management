@@ -112,7 +112,7 @@ QFrame* PecheWindow::createSidebar()
 
     navLay->addWidget(createNavButton("🏠", "Tableau de bord"));
     navLay->addWidget(createNavButton("⛵", "Bateaux"));
-    navLay->addWidget(createNavButton("🐟", "Pêche", true));
+    navLay->addWidget(createNavButton("�", "Pêche", true));
     navLay->addWidget(createNavButton("👥", "Employés"));
     navLay->addWidget(createNavButton("🧊", "Frigos"));
     navLay->addWidget(createNavButton("⚙️", "Paramètres"));

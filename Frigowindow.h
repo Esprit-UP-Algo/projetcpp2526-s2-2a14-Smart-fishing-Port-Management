@@ -30,6 +30,7 @@ private slots:
     void onAddFrigo();
     void onEditFrigo(int row);
     void onDeleteFrigo(int row);
+    void onDeleteFrigoById(const QString& id);
     void onLogout();
     void onSort(int index);
     void onGeneratePDF();
@@ -46,7 +47,7 @@ private:
     void setupTable();
     void populateTable(const QString& filterText = "");
     QWidget* createStatusBadge(const QString& status);
-    QWidget* createActionButtons(int row);
+    QWidget* createActionButtons(int row, const QString& dbId);
     QString generateFrigoId();
 
     FrigoModel      frigoModel;

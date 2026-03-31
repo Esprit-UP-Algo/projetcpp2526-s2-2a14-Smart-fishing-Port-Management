@@ -33,7 +33,7 @@ void LoginWindow::setupUi()
     // Mac: "/Users/username/Pictures/background.jpg"
     // Relative: "./images/background.jpg"
 
-    QString backgroundImagePath = "C:/Users/manne/Downloads/login.png"; // ← CHANGE THIS
+    QString backgroundImagePath = "C:/Users/Dhafer/Downloads/login.png"; // ← CHANGE THIS
 
     // Try to load the background image
     QPixmap backgroundPixmap(backgroundImagePath);
@@ -98,14 +98,6 @@ QFrame* LoginWindow::createLoginCard()
     // Logo
     QLabel* logoLabel = new QLabel();
 
-    // ============================================
-    // CHANGE THIS PATH TO YOUR LOGO IMAGE
-    // ============================================
-    // Examples:
-    // Windows: "C:/Users/YourName/Pictures/logo.png"
-    // Linux: "/home/username/Pictures/logo.png"
-    // Mac: "/Users/username/Pictures/logo.png"
-    // Relative: "./images/logo.png"
 
     QString logoPath = ":/images/images/logo.png";  // Loaded from resources
 

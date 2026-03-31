@@ -11,6 +11,8 @@
 #include <QSqlRecord>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QRegularExpressionValidator>
+#include <QDoubleValidator>
 
 PecheDialog::PecheDialog(QWidget *parent, Peche* pecheData)
     : QDialog(parent), pecheData(pecheData), isEdit(pecheData != nullptr)
@@ -61,7 +63,7 @@ void PecheDialog::setupUi()
     title->setStyleSheet("color: white;");
     headerVLayout->addWidget(title);
 
-    QLabel* subTitle = new QLabel(isEdit ? "✏️  Modifier les informations du lot" : "📋  Informations du lot de pêche");
+    QLabel* subTitle = new QLabel(isEdit ? "✏️  Modifier les informations du lot" : "🎣  Informations du lot de pêche");
     subTitle->setFont(QFont("Segoe UI", 11));
     subTitle->setStyleSheet("color: rgba(255, 255, 255, 0.9);");
     headerVLayout->addWidget(subTitle);
@@ -72,7 +74,15 @@ void PecheDialog::setupUi()
     QScrollArea* scrollArea = new QScrollArea();
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setStyleSheet("QScrollArea { background-color: white; border: none; }");
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setStyleSheet(
+        "QScrollArea { background-color: white; border: none; }"
+        "QScrollBar:vertical { background: #F0F4F8; width: 10px; border-radius: 5px; margin: 0px; }"
+        "QScrollBar::handle:vertical { background: #5D9CEC; border-radius: 5px; min-height: 30px; }"
+        "QScrollBar::handle:vertical:hover { background: #3b82f6; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+    );
 
     // Form content
     QWidget* content = new QWidget();
@@ -97,25 +107,29 @@ void PecheDialog::setupUi()
     referenceInput->setFont(inputFont);
     referenceInput->setFixedHeight(50);
     referenceInput->setStyleSheet(getInputStyle());
+    
+    // VALIDATION DE FORMAT (REF-YYYY-NOMBRE)
+    QRegularExpression refRegex("^REF-\\d{4}-\\d+$");
+    QRegularExpressionValidator* refValidator = new QRegularExpressionValidator(refRegex, this);
+    referenceInput->setValidator(refValidator);
+    
     formLayout->addWidget(referenceInput);
 
-    refErrorLabel = new QLabel("⚠️ Format invalide (lettres, chiffres, tirets uniquement).");
+    refErrorLabel = new QLabel("⚠️ La référence ne peut pas être vide.");
     refErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
     refErrorLabel->hide();
     formLayout->addWidget(refErrorLabel);
 
     connect(referenceInput, &QLineEdit::textChanged, this, [=](const QString &text){
-        if(text.isEmpty()) { 
-            refErrorLabel->setText("⚠️ Champ obligatoire.");
-            refErrorLabel->show(); 
-            referenceInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;"); 
-            return; 
-        }
-        QRegularExpression rx("^[a-zA-Z0-9-]*$");
-        if(!rx.match(text).hasMatch()) {
-            refErrorLabel->setText("⚠️ Format invalide (lettres, chiffres, tirets uniquement).");
+        QRegularExpression fullRegex("^REF-\\d{4}-\\d+$");
+        if(text.trimmed().isEmpty()) {
+            refErrorLabel->setText("⚠️ La référence ne peut pas être vide.");
             refErrorLabel->show();
-            referenceInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
+            referenceInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
+        } else if (!fullRegex.match(text).hasMatch()) {
+            refErrorLabel->setText("⚠️ Format invalide! Utilisez : REF-YYYY-NOMBRE (ex: REF-2025-1)");
+            refErrorLabel->show();
+            referenceInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
         } else {
             refErrorLabel->hide();
             referenceInput->setStyleSheet(getInputStyle());
@@ -150,25 +164,25 @@ void PecheDialog::setupUi()
     quantiteInput->setFont(inputFont);
     quantiteInput->setFixedHeight(50);
     quantiteInput->setStyleSheet(getInputStyle());
+
+    // Bloquer la saisie des lettres - autoriser uniquement les nombres positifs
+    QDoubleValidator* qteValidator = new QDoubleValidator(0.01, 999999.99, 2, this);
+    qteValidator->setNotation(QDoubleValidator::StandardNotation);
+    quantiteInput->setValidator(qteValidator);
+
     formLayout->addWidget(quantiteInput);
 
-    qteErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre valide (> 0).");
+    qteErrorLabel = new QLabel("⚠️ La quantité doit être un nombre positif.");
     qteErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
     qteErrorLabel->hide();
     formLayout->addWidget(qteErrorLabel);
 
     connect(quantiteInput, &QLineEdit::textChanged, this, [=](const QString &text){
-        if(text.isEmpty()) { 
-            qteErrorLabel->setText("⚠️ Champ obligatoire.");
-            qteErrorLabel->show(); 
-            quantiteInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;"); 
-            return; 
-        }
-        QRegularExpression rx("^[0-9]*[.,]?[0-9]*$");
-        if(!rx.match(text).hasMatch()) {
-            qteErrorLabel->setText("⚠️ Veuillez saisir un nombre valide (> 0).");
+        bool ok;
+        double val = text.trimmed().toDouble(&ok);
+        if(text.trimmed().isEmpty() || !ok || val <= 0) {
             qteErrorLabel->show();
-            quantiteInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
+            quantiteInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
         } else {
             qteErrorLabel->hide();
             quantiteInput->setStyleSheet(getInputStyle());
@@ -214,30 +228,11 @@ void PecheDialog::setupUi()
     fridgeLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
     formLayout->addWidget(fridgeLabel);
 
-    QHBoxLayout* fridgeLayout = new QHBoxLayout();
     fridgeCombo = new QComboBox();
     fridgeCombo->setFont(inputFont);
     fridgeCombo->setFixedHeight(50);
     fridgeCombo->setStyleSheet(getInputStyle());
-    fridgeLayout->addWidget(fridgeCombo, 1);
-
-    QPushButton* suggestBtn = new QPushButton("🔧 Suggérer");
-    suggestBtn->setFixedSize(140, 50);
-    suggestBtn->setCursor(Qt::PointingHandCursor);
-    suggestBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: #34C988;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: bold;
-        }
-        QPushButton:hover { background-color: #2EB177; }
-    )");
-    connect(suggestBtn, &QPushButton::clicked, this, &PecheDialog::onSuggestStorage);
-    fridgeLayout->addWidget(suggestBtn);
-
-    formLayout->addLayout(fridgeLayout);
+    formLayout->addWidget(fridgeCombo);
 
     // Initialisation des combos
     QSqlQuery bQuery("SELECT IdBateau, NomBateau FROM BATEAUX");
@@ -391,59 +386,68 @@ void PecheDialog::onSave()
 
 bool PecheDialog::validateInputs()
 {
-    // Contrôle de saisie obligatoire dans le code C++ (Consigne cours)
     QString ref = referenceInput->text().trimmed();
     QString qte = quantiteInput->text().trimmed();
     bool isValid = true;
-    QString errorStyle = "border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;";
 
+    // Validation Référence (Vérification et Format final)
+    QRegularExpression fullRegex("^REF-\\d{4}-\\d+$");
     if (ref.isEmpty()) {
-        refErrorLabel->setText("⚠️ Champ obligatoire.");
+        refErrorLabel->setText("⚠️ La référence ne peut pas être vide.");
         refErrorLabel->show();
-        referenceInput->setStyleSheet(errorStyle);
+        referenceInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
+        isValid = false;
+    } else if (!fullRegex.match(ref).hasMatch()) {
+        refErrorLabel->setText("⚠️ Format invalide! Attendu : REF-annee-nombre (ex: REF-2026-001)");
+        refErrorLabel->show();
+        referenceInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
         isValid = false;
     } else {
-        QRegularExpression rxRef("^[a-zA-Z0-9-]*$");
-        if(!rxRef.match(ref).hasMatch()) {
-            refErrorLabel->setText("⚠️ Format invalide (lettres, chiffres, tirets uniquement).");
+        // [NOUVEAU] Contrôle unicité via le modèle
+        int currentId = -1;
+        if (isEdit && pecheData) {
+            QString idStr = pecheData->getIdLot();
+            currentId = idStr.startsWith("LOT") ? idStr.mid(3).toInt() : idStr.toInt();
+        }
+        
+        if (Peche::referenceExiste(ref, currentId)) {
+            refErrorLabel->setText("⚠️ Cette référence est déjà utilisée.");
             refErrorLabel->show();
-            referenceInput->setStyleSheet(errorStyle);
+            referenceInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
             isValid = false;
+        } else {
+            refErrorLabel->hide();
+            referenceInput->setStyleSheet(getInputStyle());
         }
     }
 
-    if (qte.isEmpty()) {
-        qteErrorLabel->setText("⚠️ Champ obligatoire.");
+    // Validation Quantité
+    bool ok;
+    double val = qte.toDouble(&ok);
+    if (qte.isEmpty() || !ok || val <= 0) {
         qteErrorLabel->show();
-        quantiteInput->setStyleSheet(errorStyle);
+        quantiteInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C;");
         isValid = false;
     } else {
-        bool ok;
-        double val = qte.toDouble(&ok);
-        if (!ok || val <= 0) {
-            qteErrorLabel->setText("⚠️ Veuillez saisir un nombre valide (> 0).");
-            qteErrorLabel->show();
-            quantiteInput->setStyleSheet(errorStyle);
-            isValid = false;
-        }
-    }
-
-    if (!isValid) {
-        showError("Veuillez corriger les champs en rouge avant d'enregistrer.");
-        return false;
+        qteErrorLabel->hide();
+        quantiteInput->setStyleSheet(getInputStyle());
     }
 
     if (boatCombo->currentIndex() == -1) {
         showError("Veuillez sélectionner un bateau.");
-        return false;
+        isValid = false;
     }
 
     if (fridgeCombo->currentIndex() == -1) {
         showError("Veuillez sélectionner un frigo.");
-        return false;
+        isValid = false;
     }
 
-    return true;
+    if (!isValid && (ref.isEmpty() || qte.isEmpty() || !ok || val <= 0)) {
+        showError("Veuillez corriger les erreurs dans le formulaire.");
+    }
+
+    return isValid;
 }
 
 void PecheDialog::showError(const QString& msg)
@@ -451,59 +455,6 @@ void PecheDialog::showError(const QString& msg)
     QMessageBox::warning(this, "Validation", msg);
 }
 
-void PecheDialog::onSuggestStorage()
-{
-    QString esp = especeCombo->currentText();
-    double qte = quantiteInput->text().toDouble();
-    
-    if (qte <= 0) {
-        showError("Veuillez saisir une quantité valide pour suggérer un stockage.");
-        return;
-    }
-
-    // [LOGIQUE INNOVANTE] Algorithme de sélection automatique du stockage optimal
-    // On cherche un frigo Disponible, du même type, avec assez de place et la meilleure température.
-    QSqlQuery query;
-    query.prepare("SELECT IDFRIGO, REFERENCE, TEMPERATURE, (CAPACITE - OCCUPATION) as SPACE "
-                  "FROM FRIGOS "
-                  "WHERE STATUT = 'Disponible' AND TYPE_POISSON = :esp AND (CAPACITE - OCCUPATION) >= :qte "
-                  "ORDER BY TEMPERATURE ASC, SPACE DESC");
-    query.bindValue(":esp", esp);
-    query.bindValue(":qte", qte);
-
-    if (query.exec() && query.next()) {
-        QString id = query.value("IDFRIGO").toString();
-        int idx = fridgeCombo->findData(id);
-        if (idx >= 0) {
-            fridgeCombo->setCurrentIndex(idx);
-            QMessageBox::information(this, "Automatisation", 
-                QString("Stockage optimal trouvé : %1\nTempérature : %2°C\nEspace restant : %3 Kg")
-                .arg(query.value("REFERENCE").toString())
-                .arg(query.value("TEMPERATURE").toString())
-                .arg(query.value("SPACE").toString()));
-            return;
-        }
-    }
-
-    // Sinon, on cherche n'importe quel frigo Disponible avec assez de place
-    QSqlQuery backup;
-    backup.prepare("SELECT IDFRIGO, REFERENCE FROM FRIGOS "
-                   "WHERE STATUT = 'Disponible' AND (CAPACITE - OCCUPATION) >= :qte "
-                   "ORDER BY (CAPACITE - OCCUPATION) DESC");
-    backup.bindValue(":qte", qte);
-    
-    if (backup.exec() && backup.next()) {
-        QString id = backup.value("IDFRIGO").toString();
-        int idx = fridgeCombo->findData(id);
-        if (idx >= 0) {
-            fridgeCombo->setCurrentIndex(idx);
-            QMessageBox::information(this, "Automatisation", 
-                "Aucun frigo spécifique trouvé. Stockage par défaut suggéré : " + backup.value("REFERENCE").toString());
-        }
-    } else {
-        QMessageBox::warning(this, "Stockage", "Aucun stockage adapté trouvé. Veuillez libérer un frigo.");
-    }
-}
 
 Peche PecheDialog::getData() const
 {

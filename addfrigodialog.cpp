@@ -1,6 +1,7 @@
 #include "addfrigodialog.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QFrame>
@@ -9,6 +10,8 @@
 #include <QDateEdit>
 #include <QDate>
 #include <QMessageBox>
+#include <QRegularExpression>
+#include <QRegularExpressionValidator>
 
 AddFrigoDialog::AddFrigoDialog(QWidget *parent, FrigoModel* frigoData)
     : QDialog(parent), frigoData(frigoData), isEdit(frigoData != nullptr)
@@ -57,41 +60,62 @@ void AddFrigoDialog::setupUi()
         return l;
     };
 
+    auto createErrorLabel = []() {
+        QLabel* l = new QLabel();
+        l->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: 600; margin-bottom: 5px;");
+        l->setVisible(false);
+        return l;
+    };
+
     // Ligne 1: Référence
     refEdit = new QLineEdit();
     refEdit->setPlaceholderText("Ex: FRG-001");
     refEdit->setStyleSheet(getInputStyle());
     refEdit->setMinimumHeight(45);
-    grid->addWidget(createLabel("Référence"), 0, 0, 1, 2);
-    grid->addWidget(refEdit, 1, 0, 1, 2);
+    refError = createErrorLabel();
+
+    // Bloquer la saisie : autoriser uniquement le format FRG-NUMERO en cours de frappe
+    QRegularExpression frgRegex("^FRG(-\\d{0,6})?$");
+    QRegularExpressionValidator* frgValidator = new QRegularExpressionValidator(frgRegex, this);
+    refEdit->setValidator(frgValidator);
+
+    grid->addWidget(createLabel("Référence  (format: FRG-NUMERO)"), 0, 0, 1, 2);
+    grid->addWidget(refError, 1, 0, 1, 2);
+    grid->addWidget(refEdit, 2, 0, 1, 2);
 
     // Ligne 2: Capacité et Température
     capEdit = new QLineEdit();
     capEdit->setStyleSheet(getInputStyle());
     capEdit->setMinimumHeight(45);
-    grid->addWidget(createLabel("Capacité (Kg)"), 2, 0);
-    grid->addWidget(capEdit, 3, 0);
+    capError = createErrorLabel();
+
+    grid->addWidget(createLabel("Capacité (Kg)"), 3, 0);
+    grid->addWidget(capError, 4, 0);
+    grid->addWidget(capEdit, 5, 0);
 
     tempEdit = new QLineEdit();
     tempEdit->setStyleSheet(getInputStyle());
     tempEdit->setMinimumHeight(45);
-    grid->addWidget(createLabel("Température (°C)"), 2, 1);
-    grid->addWidget(tempEdit, 3, 1);
+    tempError = createErrorLabel();
+
+    grid->addWidget(createLabel("Température (°C)"), 3, 1);
+    grid->addWidget(tempError, 4, 1);
+    grid->addWidget(tempEdit, 5, 1);
 
     // Ligne 3: Statut et Type de Poisson
     statusBox = new QComboBox();
     statusBox->addItems({"Disponible", "Occupé", "Maintenance"});
     statusBox->setStyleSheet(getInputStyle());
     statusBox->setMinimumHeight(45);
-    grid->addWidget(createLabel("Statut"), 4, 0);
-    grid->addWidget(statusBox, 5, 0);
+    grid->addWidget(createLabel("Statut"), 6, 0);
+    grid->addWidget(statusBox, 7, 0);
 
     fishBox = new QComboBox();
     fishBox->addItems({"Sardine", "Thon", "Merlan", "Crevette", "Saumon", "Sans"});
     fishBox->setStyleSheet(getInputStyle());
     fishBox->setMinimumHeight(45);
-    grid->addWidget(createLabel("Type de Poisson"), 4, 1);
-    grid->addWidget(fishBox, 5, 1);
+    grid->addWidget(createLabel("Type de Poisson"), 6, 1);
+    grid->addWidget(fishBox, 7, 1);
 
     // Ligne 4: Date de Réservation et Occupation
     dateResEdit = new QDateEdit(QDate::currentDate());
@@ -99,8 +123,8 @@ void AddFrigoDialog::setupUi()
     dateResEdit->setStyleSheet(getInputStyle());
     dateResEdit->setDisplayFormat("dd/MM/yyyy");
     dateResEdit->setMinimumHeight(45);
-    grid->addWidget(createLabel("Date Réservation"), 6, 0);
-    grid->addWidget(dateResEdit, 7, 0);
+    grid->addWidget(createLabel("Date Réservation"), 8, 0);
+    grid->addWidget(dateResEdit, 9, 0);
 
     occEdit = new QLineEdit();
     occEdit->setPlaceholderText("Ex: 0");
@@ -109,10 +133,22 @@ void AddFrigoDialog::setupUi()
     if (!isEdit) {
         occEdit->setText("0");
     }
-    grid->addWidget(createLabel("Occupation (%)"), 6, 1);
-    grid->addWidget(occEdit, 7, 1);
+    occError = createErrorLabel();
+
+    grid->addWidget(createLabel("Occupation (%)"), 8, 1);
+    grid->addWidget(occError, 9, 1);
+    grid->addWidget(occEdit, 10, 1);
 
     mainContentLayout->addLayout(grid);
+
+    // Validation en temps réel
+    connect(refEdit, &QLineEdit::textChanged, this, &AddFrigoDialog::validateInputs);
+    connect(capEdit, &QLineEdit::textChanged, this, &AddFrigoDialog::validateInputs);
+    connect(tempEdit, &QLineEdit::textChanged, this, &AddFrigoDialog::validateInputs);
+    connect(occEdit, &QLineEdit::textChanged, this, &AddFrigoDialog::validateInputs);
+    connect(statusBox, &QComboBox::currentTextChanged, this, &AddFrigoDialog::validateInputs);
+    connect(fishBox, &QComboBox::currentTextChanged, this, &AddFrigoDialog::validateInputs);
+
     mainContentLayout->addStretch();
 
     // Buttons
@@ -143,37 +179,81 @@ void AddFrigoDialog::onSave()
 
 bool AddFrigoDialog::validateInputs()
 {
-    if (refEdit->text().trimmed().isEmpty()) {
-        QMessageBox::warning(this, "Validation", "La référence est obligatoire.");
-        return false;
+    bool isValid = true;
+    QString baseStyle = getInputStyle();
+    QString errorStyle = baseStyle + " border: 2px solid #EF4444; background: #FEF2F2;";
+
+    // Reset styles and messages
+    refEdit->setStyleSheet(baseStyle);
+    refError->hide();
+    refError->setText("");
+
+    capEdit->setStyleSheet(baseStyle);
+    capError->hide();
+    capError->setText("");
+
+    tempEdit->setStyleSheet(baseStyle);
+    tempError->hide();
+    tempError->setText("");
+
+    occEdit->setStyleSheet(baseStyle);
+    occError->hide();
+    occError->setText("");
+
+    // Validation Référence
+    QString ref = refEdit->text().trimmed();
+    QRegularExpression frgFull("^FRG-\\d+$");
+    if (ref.isEmpty()) {
+        refError->setText("⚠️ La référence est obligatoire.");
+        refError->show();
+        refEdit->setStyleSheet(errorStyle);
+        isValid = false;
+    } else if (!frgFull.match(ref).hasMatch()) {
+        refError->setText("⚠️ Format invalide ! Attendu : FRG-NUMERO (ex: FRG-001)");
+        refError->show();
+        refEdit->setStyleSheet(errorStyle);
+        isValid = false;
     }
 
+    // Validation Capacité
     bool ok;
-    capEdit->text().toDouble(&ok);
-    if (!ok) {
-        QMessageBox::warning(this, "Validation", "Capacité invalide (nombre requis).");
-        return false;
+    double capVal = capEdit->text().toDouble(&ok);
+    if (capEdit->text().isEmpty()) {
+        capError->setText("La capacité est obligatoire.");
+        capError->show();
+        capEdit->setStyleSheet(errorStyle);
+        isValid = false;
+    } else if (!ok || capVal <= 0) {
+        capError->setText("Nombre positif requis.");
+        capError->show();
+        capEdit->setStyleSheet(errorStyle);
+        isValid = false;
     }
 
-    tempEdit->text().toDouble(&ok);
-    if (!ok) {
-        QMessageBox::warning(this, "Validation", "Température invalide (nombre requis).");
-        return false;
+    // Validation Température
+    double tempVal = tempEdit->text().toDouble(&ok);
+    if (tempEdit->text().isEmpty()) {
+        tempError->setText("La température est obligatoire.");
+        tempError->show();
+        tempEdit->setStyleSheet(errorStyle);
+        isValid = false;
+    } else if (!ok) {
+        tempError->setText("Nombre requis.");
+        tempError->show();
+        tempEdit->setStyleSheet(errorStyle);
+        isValid = false;
     }
 
+    // Validation Occupation
     double occVal = occEdit->text().trimmed().isEmpty() ? 0.0 : occEdit->text().toDouble(&ok);
-    if (!ok) {
-        QMessageBox::warning(this, "Validation", "Occupation invalide (nombre requis).");
-        return false;
+    if (!ok || occVal < 0 || occVal > 100) {
+        occError->setText("0 à 100% requis.");
+        occError->show();
+        occEdit->setStyleSheet(errorStyle);
+        isValid = false;
     }
 
-    if (occVal < 0 || occVal > 100) {
-        QMessageBox::warning(this, "Validation", "Occupation doit être entre 0 et 100%.");
-        return false;
-    }
-
-    occEdit->setText(QString::number(occVal));
-    return true;
+    return isValid;
 }
 
 QString AddFrigoDialog::getInputStyle() const

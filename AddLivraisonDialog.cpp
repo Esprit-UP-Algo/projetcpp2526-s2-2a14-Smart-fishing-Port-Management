@@ -97,9 +97,28 @@ void AddLivraisonDialog::setupUi()
                 color: #2C3E50;
                 font-size: 11pt;
             }
+            QLineEdit:hover, QComboBox:hover, QTextEdit:hover, QDateEdit:hover {
+                border: 2px solid #CBD5E1;
+            }
+            /* Hover States for Validation */
+            QLineEdit:hover[state="error"], QTextEdit:hover[state="error"] {
+                border: 2px solid #EF4444;
+            }
+            QLineEdit:hover[state="success"], QTextEdit:hover[state="success"] {
+                border: 2px solid #10B981;
+            }
             QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QDateEdit:focus {
                 border: 2px solid #5D9CEC;
                 background-color: white;
+            }
+            /* Error styling for fields */
+            *[state="error"] {
+                border: 2px solid #FCA5A5;
+                background-color: #FEF2F2;
+            }
+            /* Success styling for fields */
+            *[state="success"] {
+                border: 2px solid #A7F3D0;
             }
             /* Fix for Calendar Popup */
             QCalendarWidget QAbstractItemView {
@@ -132,6 +151,12 @@ void AddLivraisonDialog::setupUi()
     adresseEdit->setStyleSheet(getInputStyle());
     formLayout->addWidget(adresseEdit);
 
+    errorAdresse = new QLabel("⚠ L'adresse ne peut pas être vide");
+    errorAdresse->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: -15px; margin-left: 5px;");
+    errorAdresse->setVisible(false);
+    formLayout->addWidget(errorAdresse);
+    connect(adresseEdit, &QTextEdit::textChanged, this, &AddLivraisonDialog::onAdresseChanged);
+
     // Date de livraison
     QLabel* dateLabel = new QLabel("📅  Date de livraison");
     dateLabel->setFont(labelFont);
@@ -157,6 +182,12 @@ void AddLivraisonDialog::setupUi()
     vehiculeEdit->setFixedHeight(45);
     vehiculeEdit->setStyleSheet(getInputStyle());
     formLayout->addWidget(vehiculeEdit);
+
+    errorVehicule = new QLabel("⚠ Le nom du véhicule est obligatoire");
+    errorVehicule->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: -15px; margin-left: 5px;");
+    errorVehicule->setVisible(false);
+    formLayout->addWidget(errorVehicule);
+    connect(vehiculeEdit, &QLineEdit::textChanged, this, &AddLivraisonDialog::onVehiculeChanged);
 
     // Row for Transport and Price
     QHBoxLayout* row2 = new QHBoxLayout();
@@ -187,10 +218,16 @@ void AddLivraisonDialog::setupUi()
     prixLabel->setStyleSheet("color: #2C3E50;");
     prixCol->addWidget(prixLabel);
     prixEdit = new QLineEdit();
-    prixEdit->setPlaceholderText("Ex: 150");
+    prixEdit->setPlaceholderText("Ex: 150 DT");
     prixEdit->setFixedHeight(45);
     prixEdit->setStyleSheet(getInputStyle());
     prixCol->addWidget(prixEdit);
+
+    errorPrix = new QLabel("⚠ Doit finir par DT, $ ou €");
+    errorPrix->setStyleSheet("color: #EF4444; font-size: 8pt; font-weight: bold;");
+    errorPrix->setVisible(false);
+    prixCol->addWidget(errorPrix);
+    connect(prixEdit, &QLineEdit::textChanged, this, &AddLivraisonDialog::onPrixChanged);
     row2->addLayout(prixCol);
 
     formLayout->addLayout(row2);
@@ -219,7 +256,7 @@ void AddLivraisonDialog::setupUi()
         QPushButton { background-color: #5D9CEC; color: white; border: none; border-radius: 10px; font-weight: 700; }
         QPushButton:hover { background-color: #4A89DC; }
     )");
-    connect(saveBtn, &QPushButton::clicked, this, &QDialog::accept);
+    connect(saveBtn, &QPushButton::clicked, this, &AddLivraisonDialog::handleSave);
     btnRow->addWidget(saveBtn);
 
     formLayout->addLayout(btnRow);
@@ -240,7 +277,11 @@ void AddLivraisonDialog::populateFields()
     adresseEdit->setPlainText(livraisonData->getAdresse());
     vehiculeEdit->setText(livraisonData->getVehicule());
     transportEdit->setCurrentText(livraisonData->getTransport());
-    prixEdit->setText(livraisonData->getPrix());
+    QString p = livraisonData->getPrix();
+    if (!p.isEmpty() && !p.endsWith("DT") && !p.endsWith("$") && !p.endsWith("€")) {
+        p += " DT";
+    }
+    prixEdit->setText(p);
 }
 
 Livraison AddLivraisonDialog::getData() const
@@ -251,8 +292,8 @@ Livraison AddLivraisonDialog::getData() const
     data.setVehicule(vehiculeEdit->text());
     data.setTransport(transportEdit->currentText());
     
-    QString prix = prixEdit->text();
-    data.setPrix(prix.replace("DT", "").trimmed());
+    QString prix = prixEdit->text().trimmed();
+    data.setPrix(prix);
     
     // Status is automated: "En attente" by default for new, preserved for edit
     if (isEdit && livraisonData) {
@@ -269,4 +310,58 @@ Livraison AddLivraisonDialog::getData() const
     }
     
     return data;
+}
+
+void AddLivraisonDialog::onAdresseChanged() {
+    updateFieldStyle(adresseEdit, !adresseEdit->toPlainText().trimmed().isEmpty());
+    errorAdresse->setVisible(adresseEdit->toPlainText().trimmed().isEmpty());
+}
+
+void AddLivraisonDialog::onVehiculeChanged() {
+    updateFieldStyle(vehiculeEdit, !vehiculeEdit->text().trimmed().isEmpty());
+    errorVehicule->setVisible(vehiculeEdit->text().trimmed().isEmpty());
+}
+
+void AddLivraisonDialog::onPrixChanged() {
+    QString p = prixEdit->text().trimmed();
+    bool valid = !p.isEmpty() && (p.endsWith("DT") || p.endsWith("$") || p.endsWith("€"));
+    updateFieldStyle(prixEdit, valid);
+    errorPrix->setVisible(!valid);
+}
+
+void AddLivraisonDialog::updateFieldStyle(QWidget* field, bool isValid) {
+    field->setProperty("state", isValid ? "success" : "error");
+    field->style()->unpolish(field);
+    field->style()->polish(field);
+}
+
+bool AddLivraisonDialog::validateInputs() {
+    bool ok = true;
+    
+    if (adresseEdit->toPlainText().trimmed().isEmpty()) {
+        updateFieldStyle(adresseEdit, false);
+        errorAdresse->setVisible(true);
+        ok = false;
+    }
+    
+    if (vehiculeEdit->text().trimmed().isEmpty()) {
+        updateFieldStyle(vehiculeEdit, false);
+        errorVehicule->setVisible(true);
+        ok = false;
+    }
+    
+    QString p = prixEdit->text().trimmed();
+    if (p.isEmpty() || !(p.endsWith("DT") || p.endsWith("$") || p.endsWith("€"))) {
+        updateFieldStyle(prixEdit, false);
+        errorPrix->setVisible(true);
+        ok = false;
+    }
+    
+    return ok;
+}
+
+void AddLivraisonDialog::handleSave() {
+    if (validateInputs()) {
+        accept();
+    }
 }

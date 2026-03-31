@@ -5,6 +5,7 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDateEdit>
+#include <QLabel>
 #include "frigo.h"
 
 class AddFrigoDialog : public QDialog
@@ -42,6 +43,12 @@ private:
     QComboBox* statusBox;
     QComboBox* fishBox;
     QDateEdit* dateResEdit;
+
+    // Error labels
+    QLabel* refError;
+    QLabel* capError;
+    QLabel* tempError;
+    QLabel* occError;
 
     FrigoModel* frigoData;
     bool isEdit;

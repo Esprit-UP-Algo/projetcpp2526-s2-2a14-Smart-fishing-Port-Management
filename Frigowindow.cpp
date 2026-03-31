@@ -480,8 +480,8 @@ void FrigoWindow::populateTable(const QString& filterText)
         addItem(5, model->record(i).value(6).toString() + " °C"); // Température
         addItem(6, model->record(i).value(7).toString() + " %"); // Occupation
         
-        // Actions
-        table->setCellWidget(r, 7, createActionButtons(r)); // Use current row index for actions
+        // Actions — passer l'ID de la BD directement dans le widget
+        table->setCellWidget(r, 7, createActionButtons(r, dbId));
     }
     
     // Détruire proprement la requête pour libérer totalement ODBC
@@ -538,7 +538,7 @@ QWidget* FrigoWindow::createStatusBadge(const QString& status)
     return widget;
 }
 
-QWidget* FrigoWindow::createActionButtons(int row)
+QWidget* FrigoWindow::createActionButtons(int row, const QString& dbId)
 {
     QWidget* widget = new QWidget();
     QHBoxLayout* layout = new QHBoxLayout(widget);
@@ -565,7 +565,7 @@ QWidget* FrigoWindow::createActionButtons(int row)
     connect(editBtn, &QPushButton::clicked, [this, row]() { onEditFrigo(row); });
     layout->addWidget(editBtn);
 
-    // Delete button
+    // Delete button — utilise l'ID de la BD directement (fix bug suppression)
     QPushButton* deleteBtn = new QPushButton("🗑️");
     deleteBtn->setFixedSize(36, 36);
     deleteBtn->setCursor(Qt::PointingHandCursor);
@@ -581,7 +581,9 @@ QWidget* FrigoWindow::createActionButtons(int row)
             background-color: #FECACA;
         }
     )");
-    connect(deleteBtn, &QPushButton::clicked, [this, row]() { onDeleteFrigo(row); });
+    connect(deleteBtn, &QPushButton::clicked, [this, dbId]() {
+        onDeleteFrigoById(dbId);
+    });
     layout->addWidget(deleteBtn);
 
     return widget;
@@ -788,7 +790,25 @@ void FrigoWindow::onDeleteFrigo(int row)
     QTableWidgetItem* item = table->item(row, 0);
     if (!item) return;
     QString id = item->data(Qt::UserRole).toString();
-    QString ref = item->text();
+    onDeleteFrigoById(id);
+}
+
+void FrigoWindow::onDeleteFrigoById(const QString& id)
+{
+    if (id.isEmpty()) {
+        QMessageBox::critical(this, "Erreur", "Identifiant du frigo introuvable.");
+        return;
+    }
+
+    // Récupérer la référence pour afficher dans la confirmation
+    QSqlQuery refQuery;
+    refQuery.prepare("SELECT REFERENCE FROM FRIGOS WHERE IDFRIGO = :id");
+    refQuery.bindValue(":id", id);
+    QString ref = id;
+    if (refQuery.exec() && refQuery.next()) {
+        ref = refQuery.value(0).toString();
+    }
+    refQuery.finish();
 
     if (QMessageBox::question(this, "Confirmation",
         QString("Voulez-vous vraiment supprimer le frigo '%1' ?").arg(ref)) == QMessageBox::Yes) {
@@ -796,7 +816,7 @@ void FrigoWindow::onDeleteFrigo(int row)
             populateTable();
             QMessageBox::information(this, "Succès", "Frigo supprimé.");
         } else {
-            QMessageBox::critical(this, "Erreur", "La suppression a échoué.");
+            QMessageBox::critical(this, "Erreur", "La suppression a échoué. Vérifiez que ce frigo n'est pas référencé par des pêches.");
         }
     }
 }
