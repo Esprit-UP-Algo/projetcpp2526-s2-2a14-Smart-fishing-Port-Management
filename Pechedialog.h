@@ -5,6 +5,7 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDateEdit>
+#include <QLabel>
 #include "peche.h"
 
 class PecheDialog : public QDialog
@@ -30,8 +31,10 @@ private slots:
 
 private:
     QLineEdit* referenceInput;
+    QLabel* refErrorLabel;
     QComboBox* especeCombo;
     QLineEdit* quantiteInput;
+    QLabel* qteErrorLabel;
     QDateEdit* dateInput;
     QComboBox* boatCombo;
     QComboBox* fridgeCombo;

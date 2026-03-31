@@ -10,6 +10,7 @@
 #include <QSqlQuery>
 #include <QSqlRecord>
 #include <QMessageBox>
+#include <QRegularExpression>
 
 PecheDialog::PecheDialog(QWidget *parent, Peche* pecheData)
     : QDialog(parent), pecheData(pecheData), isEdit(pecheData != nullptr)
@@ -98,6 +99,29 @@ void PecheDialog::setupUi()
     referenceInput->setStyleSheet(getInputStyle());
     formLayout->addWidget(referenceInput);
 
+    refErrorLabel = new QLabel("⚠️ Format invalide (lettres, chiffres, tirets uniquement).");
+    refErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
+    refErrorLabel->hide();
+    formLayout->addWidget(refErrorLabel);
+
+    connect(referenceInput, &QLineEdit::textChanged, this, [=](const QString &text){
+        if(text.isEmpty()) { 
+            refErrorLabel->setText("⚠️ Champ obligatoire.");
+            refErrorLabel->show(); 
+            referenceInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;"); 
+            return; 
+        }
+        QRegularExpression rx("^[a-zA-Z0-9-]*$");
+        if(!rx.match(text).hasMatch()) {
+            refErrorLabel->setText("⚠️ Format invalide (lettres, chiffres, tirets uniquement).");
+            refErrorLabel->show();
+            referenceInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
+        } else {
+            refErrorLabel->hide();
+            referenceInput->setStyleSheet(getInputStyle());
+        }
+    });
+
     formLayout->addSpacing(10);
 
     // Espèce
@@ -127,6 +151,29 @@ void PecheDialog::setupUi()
     quantiteInput->setFixedHeight(50);
     quantiteInput->setStyleSheet(getInputStyle());
     formLayout->addWidget(quantiteInput);
+
+    qteErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre valide (> 0).");
+    qteErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
+    qteErrorLabel->hide();
+    formLayout->addWidget(qteErrorLabel);
+
+    connect(quantiteInput, &QLineEdit::textChanged, this, [=](const QString &text){
+        if(text.isEmpty()) { 
+            qteErrorLabel->setText("⚠️ Champ obligatoire.");
+            qteErrorLabel->show(); 
+            quantiteInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;"); 
+            return; 
+        }
+        QRegularExpression rx("^[0-9]*[.,]?[0-9]*$");
+        if(!rx.match(text).hasMatch()) {
+            qteErrorLabel->setText("⚠️ Veuillez saisir un nombre valide (> 0).");
+            qteErrorLabel->show();
+            quantiteInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
+        } else {
+            qteErrorLabel->hide();
+            quantiteInput->setStyleSheet(getInputStyle());
+        }
+    });
 
     formLayout->addSpacing(10);
 
@@ -347,21 +394,42 @@ bool PecheDialog::validateInputs()
     // Contrôle de saisie obligatoire dans le code C++ (Consigne cours)
     QString ref = referenceInput->text().trimmed();
     QString qte = quantiteInput->text().trimmed();
+    bool isValid = true;
+    QString errorStyle = "border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;";
 
     if (ref.isEmpty()) {
-        showError("La référence ne peut pas être vide.");
-        return false;
+        refErrorLabel->setText("⚠️ Champ obligatoire.");
+        refErrorLabel->show();
+        referenceInput->setStyleSheet(errorStyle);
+        isValid = false;
+    } else {
+        QRegularExpression rxRef("^[a-zA-Z0-9-]*$");
+        if(!rxRef.match(ref).hasMatch()) {
+            refErrorLabel->setText("⚠️ Format invalide (lettres, chiffres, tirets uniquement).");
+            refErrorLabel->show();
+            referenceInput->setStyleSheet(errorStyle);
+            isValid = false;
+        }
     }
 
     if (qte.isEmpty()) {
-        showError("La quantité ne peut pas être vide.");
-        return false;
+        qteErrorLabel->setText("⚠️ Champ obligatoire.");
+        qteErrorLabel->show();
+        quantiteInput->setStyleSheet(errorStyle);
+        isValid = false;
+    } else {
+        bool ok;
+        double val = qte.toDouble(&ok);
+        if (!ok || val <= 0) {
+            qteErrorLabel->setText("⚠️ Veuillez saisir un nombre valide (> 0).");
+            qteErrorLabel->show();
+            quantiteInput->setStyleSheet(errorStyle);
+            isValid = false;
+        }
     }
 
-    bool ok;
-    double val = qte.toDouble(&ok);
-    if (!ok || val <= 0) {
-        showError("La quantité doit être un nombre positif.");
+    if (!isValid) {
+        showError("Veuillez corriger les champs en rouge avant d'enregistrer.");
         return false;
     }
 

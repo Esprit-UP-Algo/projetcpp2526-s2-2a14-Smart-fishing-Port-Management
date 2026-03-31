@@ -5,6 +5,7 @@
 #include <QComboBox>
 #include <QDateEdit>
 #include <QLineEdit>
+#include <QLabel>
 #include <QMessageBox>
 #include <QList>
 #include <QPair>
@@ -34,10 +35,15 @@ private:
     QString getRadioStyle() const;
 
     QLineEdit* nomBateauInput;
+    QLabel* nomErrorLabel;
     QLineEdit* immatriculationInput;
+    QLabel* immatErrorLabel;
     QLineEdit* capaciteInput;
+    QLabel* capErrorLabel;
     QLineEdit* longueurInput;
+    QLabel* lonErrorLabel;
     QLineEdit* ageInput;
+    QLabel* ageErrorLabel;
     QDateEdit* dateMaintenanceInput;
     QComboBox* employeeCombo;
     QComboBox* quaiCombo;
