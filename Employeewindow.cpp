@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿#include "employeewindow.h"
+=======
+#include "employeewindow.h"
+>>>>>>> master
 #include "employeedialog.h"
 #include <QDebug>
 #include <QMessageBox>
@@ -13,6 +17,11 @@
 #include <QScrollBar>
 #include "EmployeeStatsWindow.h"
 #include <algorithm>
+<<<<<<< HEAD
+=======
+#include <QMenu>
+#include <QAction>
+>>>>>>> master
 
 EmployeeWindow::EmployeeWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -136,7 +145,13 @@ QFrame* EmployeeWindow::createSidebar()
     navLayout->addWidget(createNavButton("🐟", "Pêche"));
     navLayout->addWidget(createNavButton("👥", "Employés", true));
     navLayout->addWidget(createNavButton("🧊", "Frigos"));
+<<<<<<< HEAD
     navLayout->addWidget(createNavButton("⚙️", "Paramètres"));
+=======
+    QPushButton* settingsBtn = createNavButton("⚙️", "Paramètres");
+    connect(settingsBtn, &QPushButton::clicked, this, &EmployeeWindow::onSettingsClicked);
+    navLayout->addWidget(settingsBtn);
+>>>>>>> master
 
     navLayout->addStretch();
 
@@ -217,6 +232,7 @@ QWidget* EmployeeWindow::createContentArea()
     toolbar = createToolbar();
     layout->addWidget(toolbar);
 
+<<<<<<< HEAD
     // Horizontal layout for Table and Actions
     QHBoxLayout* bodyLayout = new QHBoxLayout();
     bodyLayout->setSpacing(20);
@@ -230,6 +246,11 @@ QWidget* EmployeeWindow::createContentArea()
     bodyLayout->addWidget(sideActionsPanel, 2); // Decrease to 20% space
 
     layout->addLayout(bodyLayout, 1);
+=======
+    // Table card (Full width)
+    tableCard = createTableCard();
+    layout->addWidget(tableCard, 1);
+>>>>>>> master
 
     return contentArea;
 }
@@ -267,10 +288,64 @@ QFrame* EmployeeWindow::createHeader()
     };
 
     QPushButton* addBtn   = makeBtn("➕  Nouvel Employé", "#2563EB", "#1D4ED8");
+<<<<<<< HEAD
 
     connect(addBtn, &QPushButton::clicked, this, &EmployeeWindow::onAddEmployee);
 
     lay->addWidget(addBtn);
+=======
+    connect(addBtn, &QPushButton::clicked, this, &EmployeeWindow::onAddEmployee);
+    lay->addWidget(addBtn);
+
+    // Administration Button with Dropdown Menu
+    QPushButton* adminBtn = makeBtn("📜  Administration", "#2B5EA6", "#1D4ED8");
+    adminMenu = new QMenu(this);
+    
+    adminMenu->setStyleSheet(R"(
+        QMenu {
+            background-color: white;
+            border: 1.5px solid #d1d5db;
+            border-radius: 14px;
+            padding: 10px 0px;
+        }
+        QMenu::item {
+            padding: 12px 30px;
+            font-family: 'Segoe UI';
+            font-size: 13px;
+            font-weight: 500;
+            color: #1e3a5f;
+            border-bottom: 0.5px solid #f1f5f9;
+        }
+        QMenu::item:selected {
+            background-color: #eff6ff;
+            color: #2563EB;
+        }
+        QMenu::item:last {
+            border-bottom: none;
+        }
+    )");
+
+    QAction* reglementAct = new QAction("📜  Règlement Intérieur", this);
+    QAction* congeAct = new QAction("📅  Demande de Congé", this);
+    QAction* attestationAct = new QAction("📄  Attestation de Travail", this);
+    
+    adminMenu->addAction(reglementAct);
+    adminMenu->addAction(congeAct);
+    adminMenu->addAction(attestationAct);
+    
+    adminBtn->setMenu(adminMenu);
+    
+    connect(reglementAct, &QAction::triggered, this, &EmployeeWindow::onReglementInterieur);
+    connect(congeAct, &QAction::triggered, this, &EmployeeWindow::onDemandeConge);
+    connect(attestationAct, &QAction::triggered, this, &EmployeeWindow::onAttestationTravail);
+    
+    lay->addWidget(adminBtn);
+
+    // Statistiques Button
+    QPushButton* statsBtn = makeBtn("📊  Statistiques", "#F59E0B", "#D97706");
+    connect(statsBtn, &QPushButton::clicked, this, &EmployeeWindow::onViewStats);
+    lay->addWidget(statsBtn);
+>>>>>>> master
     
     header = hdr;
     return hdr;
@@ -1114,6 +1189,59 @@ void EmployeeWindow::toggleDarkMode()
     applyTheme();
 }
 
+<<<<<<< HEAD
+=======
+void EmployeeWindow::onSettingsClicked()
+{
+    QDialog* settingsDlg = new QDialog(this);
+    settingsDlg->setWindowTitle("Paramètres - PortFlow");
+    settingsDlg->setFixedSize(350, 180);
+    settingsDlg->setStyleSheet(isDarkMode ? "background-color: #2D3748; color: white;" : "background-color: #F0F4F8; color: #1e3a5f;");
+
+    QVBoxLayout* layout = new QVBoxLayout(settingsDlg);
+    layout->setSpacing(15);
+    layout->setContentsMargins(30, 30, 30, 30);
+
+    QLabel* title = new QLabel("Préférences");
+    title->setFont(QFont("Segoe UI", 16, QFont::Bold));
+    title->setAlignment(Qt::AlignCenter);
+    layout->addWidget(title);
+
+    QPushButton* darkBtnDlg = new QPushButton(isDarkMode ? "☀️  Mode: Clair" : "🌙  Mode: Sombre");
+
+    auto btnStyle = R"(
+        QPushButton {
+            background-color: #2B5EA6;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 15px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        QPushButton:hover {
+            background-color: #1e3a5f;
+        }
+    )";
+    darkBtnDlg->setStyleSheet(btnStyle);
+
+    connect(darkBtnDlg, &QPushButton::clicked, [this, darkBtnDlg, settingsDlg]() {
+        toggleDarkMode();
+        darkBtnDlg->setText(isDarkMode ? "☀️  Mode: Clair" : "🌙  Mode: Sombre");
+        settingsDlg->setStyleSheet(isDarkMode ? "background-color: #2D3748; color: white;" : "background-color: #F0F4F8; color: #1e3a5f;");
+    });
+
+    layout->addWidget(darkBtnDlg);
+
+    QPushButton* closeBtn = new QPushButton("Fermer");
+    closeBtn->setStyleSheet("background-color: #6c757d; color: white; border-radius: 10px; padding: 10px; font-weight: bold; margin-top: 10px;");
+    connect(closeBtn, &QPushButton::clicked, settingsDlg, &QDialog::accept);
+    layout->addWidget(closeBtn);
+
+    settingsDlg->exec();
+}
+
+>>>>>>> master
 void EmployeeWindow::applyTheme()
 {
     QString bgColor = isDarkMode ? "#1A202C" : "#F0F4F8";
@@ -1153,10 +1281,13 @@ void EmployeeWindow::applyTheme()
         QLineEdit:focus{ border:2px solid #3B82F6; background:%1; }
     )").arg(containerBg, borderCol, textPrimary));
     
+<<<<<<< HEAD
     // Actions Panel
     sideActionsPanel->setStyleSheet(QString("QFrame { background-color: %1; border-radius: 20px; border: 1.5px solid %2; }").arg(containerBg, borderCol));
     panelTitle->setStyleSheet(QString("color: %1; border: none;").arg(textPrimary));
     
+=======
+>>>>>>> master
     // Header texts
     titleLabel->setStyleSheet(QString("color: %1;").arg(textPrimary));
     subtitleLabel->setStyleSheet(QString("color: %1;").arg(textSecondary));
@@ -1199,6 +1330,36 @@ void EmployeeWindow::applyTheme()
         QHeaderView::section:last { border-top-right-radius: 14px; }
     )").arg(containerBg, tableGrid, textPrimary));
     
+<<<<<<< HEAD
+=======
+    // Update Administration Menu style
+    if (adminMenu) {
+        adminMenu->setStyleSheet(QString(R"(
+            QMenu {
+                background-color: %1;
+                border: 1.5px solid %2;
+                border-radius: 14px;
+                padding: 10px 0px;
+            }
+            QMenu::item {
+                padding: 12px 30px;
+                font-family: 'Segoe UI';
+                font-size: 13px;
+                font-weight: 500;
+                color: %3;
+                border-bottom: 0.5px solid %4;
+            }
+            QMenu::item:selected {
+                background-color: %5;
+                color: #2563EB;
+            }
+            QMenu::item:last {
+                border-bottom: none;
+            }
+        )").arg(containerBg, borderCol, textPrimary, borderCol, (isDarkMode ? "#374151" : "#eff6ff")));
+    }
+    
+>>>>>>> master
     // Update action buttons and badge styling on table update
     populateTable(searchInput->text());
 }

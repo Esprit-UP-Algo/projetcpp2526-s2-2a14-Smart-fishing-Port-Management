@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿#include "employeedialog.h"
+=======
+#include "employeedialog.h"
+>>>>>>> master
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -9,6 +13,13 @@
 #include <QScrollArea>
 #include <QRegularExpressionValidator>
 #include <QRegularExpression>
+<<<<<<< HEAD
+=======
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QMessageBox>
+
+>>>>>>> master
 EmployeeDialog::EmployeeDialog(QWidget *parent, Employee* employeeData)
     : QDialog(parent), employeeData(employeeData), isEdit(employeeData != nullptr)
 {
@@ -454,5 +465,76 @@ void EmployeeDialog::onSaveClicked()
         return;
     }
 
+<<<<<<< HEAD
+=======
+    // Check if CIN already exists in database
+    QString currentCin = cinInput->text();
+    QSqlQuery checkQuery;
+    QString sql = "SELECT COUNT(*) FROM EMPLOYEES WHERE CIN = :cin";
+    if (isEdit && employeeData) {
+        sql += " AND ID_EMPLOYE != :id";
+    }
+    checkQuery.prepare(sql);
+    checkQuery.bindValue(":cin", currentCin);
+    if (isEdit && employeeData) {
+        checkQuery.bindValue(":id", employeeData->id.toInt());
+    }
+
+    bool exists = false;
+    if (checkQuery.exec() && checkQuery.next()) {
+        if (checkQuery.value(0).toInt() > 0) {
+            exists = true;
+        }
+    } else {
+        // Fallback to EMPLOYEE table
+        QSqlQuery checkQuery2;
+        QString sql2 = "SELECT COUNT(*) FROM EMPLOYEE WHERE CIN = :cin";
+        if (isEdit && employeeData) {
+            sql2 += " AND ID_EMPLOYE != :id";
+        }
+        checkQuery2.prepare(sql2);
+        checkQuery2.bindValue(":cin", currentCin);
+        if (isEdit && employeeData) {
+            checkQuery2.bindValue(":id", employeeData->id.toInt());
+        }
+        
+        if (checkQuery2.exec() && checkQuery2.next()) {
+            if (checkQuery2.value(0).toInt() > 0) {
+                exists = true;
+            }
+        }
+    }
+
+    if (exists) {
+        QMessageBox msgBox(this);
+        msgBox.setWindowTitle("Erreur d'enregistrement - PortFlow");
+        msgBox.setIcon(QMessageBox::Critical);
+        msgBox.setText("Impossible d'enregistrer l'employé.\nVeuillez corriger les erreurs suivantes :\n\n- CIN : Le CIN existe déjà");
+        msgBox.setStyleSheet(R"(
+            QMessageBox {
+                background-color: #F0F4F8;
+            }
+            QLabel {
+                color: #5D9CEC;
+                font-family: 'Segoe UI';
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton {
+                background-color: #5D9CEC;
+                color: white;
+                border-radius: 8px;
+                padding: 10px 25px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4A89DC;
+            }
+        )");
+        msgBox.exec();
+        return;
+    }
+
+>>>>>>> master
     accept();
 }

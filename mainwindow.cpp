@@ -157,6 +157,7 @@ QFrame* MainWindow::createSidebar()
     connect(quaisBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToQuais);
     navLayout->addWidget(quaisBtn);
 
+<<<<<<< HEAD
     navLayout->addWidget(createNavButton("⚙️", "Paramètres"));
     navLayout->addStretch();
     
@@ -167,6 +168,12 @@ QFrame* MainWindow::createSidebar()
     darkModeBtn = createNavButton("🌙", "Mode Sombre", false, false);
     connect(darkModeBtn, &QPushButton::clicked, this, &MainWindow::toggleGlobalTheme);
     navLayout->addWidget(darkModeBtn);
+=======
+    QPushButton* settingsBtn = createNavButton("⚙️", "Paramètres");
+    connect(settingsBtn, &QPushButton::clicked, this, &MainWindow::onSettingsClicked);
+    navLayout->addWidget(settingsBtn);
+    navLayout->addStretch();
+>>>>>>> master
 
     QPushButton* logoutBtn = createNavButton("🚪", "Quitter", false, true);
     connect(logoutBtn, &QPushButton::clicked, this, &MainWindow::onLogout);
@@ -527,6 +534,7 @@ void MainWindow::onLogout()
 void MainWindow::toggleGlobalTheme()
 {
     isDarkMode = !isDarkMode;
+<<<<<<< HEAD
     
     if (isDarkMode) {
         darkModeBtn->setText("☀️  Mode Clair");
@@ -537,6 +545,72 @@ void MainWindow::toggleGlobalTheme()
     updateThemeRecursive(this, isDarkMode);
 }
 
+=======
+    updateThemeRecursive(this, isDarkMode);
+}
+
+void MainWindow::onSettingsClicked()
+{
+    QDialog* settingsDlg = new QDialog(this);
+    settingsDlg->setWindowTitle("Paramètres - PortFlow");
+    settingsDlg->setFixedSize(350, 250);
+    settingsDlg->setStyleSheet(isDarkMode ? "background-color: #2D3748; color: white;" : "background-color: #F0F4F8; color: #2C3E50;");
+
+    QVBoxLayout* layout = new QVBoxLayout(settingsDlg);
+    layout->setSpacing(15);
+    layout->setContentsMargins(30, 30, 30, 30);
+
+    QLabel* title = new QLabel("Préférences");
+    title->setFont(QFont("Segoe UI", 16, QFont::Bold));
+    title->setAlignment(Qt::AlignCenter);
+    layout->addWidget(title);
+
+    QPushButton* langBtnDlg = new QPushButton(isEnglish ? "🌐  Language: English" : "🌐  Langue: Français");
+    QPushButton* darkBtnDlg = new QPushButton(isDarkMode ? "☀️  Mode: Clair" : "🌙  Mode: Sombre");
+
+    auto btnStyle = R"(
+        QPushButton {
+            background-color: #2B5EA6;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 15px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        QPushButton:hover {
+            background-color: #1e3a5f;
+        }
+    )";
+
+    langBtnDlg->setStyleSheet(btnStyle);
+    darkBtnDlg->setStyleSheet(btnStyle);
+
+    connect(langBtnDlg, &QPushButton::clicked, [this, langBtnDlg, settingsDlg]() {
+        toggleLanguage();
+        langBtnDlg->setText(isEnglish ? "🌐  Language: English" : "🌐  Langue: Français");
+        translateRecursive(settingsDlg, isEnglish);
+    });
+
+    connect(darkBtnDlg, &QPushButton::clicked, [this, darkBtnDlg, settingsDlg]() {
+        toggleGlobalTheme();
+        darkBtnDlg->setText(isDarkMode ? "☀️  Mode: Clair" : "🌙  Mode: Sombre");
+        settingsDlg->setStyleSheet(isDarkMode ? "background-color: #2D3748; color: white;" : "background-color: #F0F4F8; color: #2C3E50;");
+    });
+
+    layout->addWidget(langBtnDlg);
+    layout->addWidget(darkBtnDlg);
+    
+    QPushButton* closeBtn = new QPushButton("Fermer");
+    closeBtn->setStyleSheet("background-color: #6c757d; color: white; border-radius: 10px; padding: 10px; font-weight: bold; margin-top: 10px;");
+    connect(closeBtn, &QPushButton::clicked, settingsDlg, &QDialog::accept);
+    layout->addWidget(closeBtn);
+
+    translateRecursive(settingsDlg, isEnglish);
+    settingsDlg->exec();
+}
+
+>>>>>>> master
 void MainWindow::updateThemeRecursive(QWidget* widget, bool isDark)
 {
     if (!widget) return;

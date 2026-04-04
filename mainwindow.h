@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿#ifndef MAINWINDOW_H
+=======
+#ifndef MAINWINDOW_H
+>>>>>>> master
 #define MAINWINDOW_H
 
 #include "pechewindow.h"
@@ -35,6 +39,10 @@ private slots:
     void toggleGlobalTheme();
     void toggleLanguage();
     void onLogout();
+<<<<<<< HEAD
+=======
+    void onSettingsClicked();
+>>>>>>> master
 
 private:
     void setupUi();

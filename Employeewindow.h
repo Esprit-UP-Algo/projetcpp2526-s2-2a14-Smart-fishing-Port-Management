@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ﻿#ifndef EMPLOYEEWINDOW_H
+=======
+#ifndef EMPLOYEEWINDOW_H
+>>>>>>> master
 #define EMPLOYEEWINDOW_H
 
 #include <QMainWindow>
@@ -47,6 +51,10 @@ private slots:
     void onAttestationTravail();
     void onViewStats();
     void toggleDarkMode();
+<<<<<<< HEAD
+=======
+    void onSettingsClicked();
+>>>>>>> master
 
 private:
     void applyTheme();
@@ -82,6 +90,10 @@ private:
     QFrame* tableContainer;
     QFrame* sideActionsPanel;
     QLabel* panelTitle;
+<<<<<<< HEAD
+=======
+    QMenu* adminMenu;
+>>>>>>> master
 };
 
 #endif // EMPLOYEEWINDOW_H
