@@ -61,6 +61,7 @@ private:
     void downloadMap();
     void onTileDownloaded(QNetworkReply* reply);
     void applyPan(int dx, int dy);
+    void finalizePan();
     QPointF coordinateToPixel(double lon, double lat);
 
     struct TileInfo {
@@ -102,6 +103,8 @@ private:
     QDateTime m_startTime;
     qint64 m_simElapsed;
     QTimer* m_panDebounceTimer;
+    int m_panOffsetX = 0;
+    int m_panOffsetY = 0;
     
     // Constants
     const QString ORS_API_KEY = "5b3ce3597851110001cf6248d3e9142f9e424268a05fbbd72565432";

@@ -508,19 +508,6 @@ void LivraisonWindow::onTrackDelivery(int row)
     dlg->show();
 }
 
-QString LivraisonWindow::generateLivraisonId()
-{
-    int maxId = 0;
-    // Explicit scoping for the query
-    {
-        QSqlQuery query("SELECT MAX(IDLIVRAISON) FROM LIVRAISONS");
-        if (query.next()) {
-            maxId = query.value(0).toInt();
-        }
-    }
-    return QString("LIV%1").arg(maxId + 1, 3, 10, QChar('0'));
-}
-
 void LivraisonWindow::onSearch(const QString& text)
 {
     populateTable(text);
@@ -531,7 +518,7 @@ void LivraisonWindow::onAddLivraison()
     AddLivraisonDialog dialog(this);
     if (dialog.exec() == QDialog::Accepted) {
         Livraison data = dialog.getData(); 
-        data.setID(generateLivraisonId());
+        // ID is securely gathered from dialog input directly
         
         if (data.ajouter()) {
             populateTable(searchInput->text());
@@ -550,8 +537,7 @@ void LivraisonWindow::onEditLivraison(int row)
     // We need to fetch current data to pass to dialog
     QSqlQuery query;
     query.prepare("SELECT * FROM LIVRAISONS WHERE IDLIVRAISON = :id");
-    int idNum = id.startsWith("LIV") ? id.mid(3).toInt() : id.toInt();
-    query.bindValue(":id", idNum);
+    query.bindValue(":id", id);
     
     if (!query.exec() || !query.next()) return;
 

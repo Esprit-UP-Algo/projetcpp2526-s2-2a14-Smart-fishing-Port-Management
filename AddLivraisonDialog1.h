@@ -3,15 +3,10 @@
 
 #include <QDialog>
 #include <QLineEdit>
-#include <QTextEdit>
 #include <QComboBox>
+#include <QTextEdit>
 #include <QDateEdit>
 #include <QLabel>
-#include <QtNetwork/QNetworkAccessManager>
-#include <QtNetwork/QNetworkReply>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <QTimer>
 #include "livraison.h"
 
 class AddLivraisonDialog : public QDialog
@@ -24,40 +19,31 @@ public:
 
     Livraison getData() const;
 
-private slots:
-    void handleSave();
-    void onAddressValidationFinished(QNetworkReply* reply);
-    void onIdChanged();
-    void onAdresseChanged();
-    void onPrixChanged();
-    void onAddressDebounceTimeout();
-
 private:
     void setupUi();
     void populateFields();
     bool validateInputs();
     void updateFieldStyle(QWidget* field, bool isValid);
-    void validateAddressViaAPI(const QString& address);
 
-    QLineEdit* idEdit;
     QTextEdit* adresseEdit;
-    QDateEdit* dateEdit;
-    QComboBox* vehiculeEdit;
+    QLineEdit* vehiculeEdit;
     QComboBox* transportEdit;
     QLineEdit* prixEdit;
+    QDateEdit* dateEdit;
 
-    QLabel* errorId;
+    // Error Labels
     QLabel* errorAdresse;
     QLabel* errorVehicule;
     QLabel* errorPrix;
 
-    QNetworkAccessManager* networkManager;
-    QTimer* addressDebounceTimer;
     Livraison* livraisonData;
     bool isEdit;
-    bool addressValidating;
-    bool addressFound;
-    bool waitingForSave;
+
+private slots:
+    void onAdresseChanged();
+    void onVehiculeChanged();
+    void onPrixChanged();
+    void handleSave();
 };
 
 #endif // ADDLIVRAISONDIALOG_H

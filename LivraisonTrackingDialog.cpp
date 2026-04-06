@@ -28,6 +28,7 @@ void MapWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         m_isPanning = false;
         setCursor(Qt::ArrowCursor);
+        if (m_parent) m_parent->finalizePan();
     }
 }
 
@@ -159,14 +160,27 @@ void LivraisonTrackingDialog::setupUi()
 
 void LivraisonTrackingDialog::applyPan(int dx, int dy)
 {
+    m_panOffsetX += dx;
+    m_panOffsetY += dy;
+    m_mapArea->update();
+}
+
+void LivraisonTrackingDialog::finalizePan()
+{
+    if (m_panOffsetX == 0 && m_panOffsetY == 0) return;
+    
     double lonRange = maxLon - minLon;
     double latRange = maxLat - minLat;
-    double dLon = (double)dx / m_mapArea->width() * lonRange * -1.0;
-    double dLat = (double)dy / m_mapArea->height() * latRange;
+    double dLon = (double)-m_panOffsetX / m_mapArea->width() * lonRange;
+    double dLat = (double)m_panOffsetY / m_mapArea->height() * latRange;
+    
     minLon += dLon; maxLon += dLon;
     minLat += dLat; maxLat += dLat;
-    m_panDebounceTimer->start(150);
-    m_mapArea->update();
+    
+    m_panOffsetX = 0;
+    m_panOffsetY = 0;
+    
+    m_panDebounceTimer->start(50);
 }
 
 void LivraisonTrackingDialog::geocodeAddress(const QString& address)
@@ -300,9 +314,19 @@ void LivraisonTrackingDialog::renderMap(QWidget* viewport)
 {
     QPainter painter(viewport);
     painter.setRenderHint(QPainter::Antialiasing);
+    
+    painter.fillRect(viewport->rect(), QColor("#E2E8F0"));
+    
     double offsetX = (viewport->width() - m_mapPixmap.width()) / 2.0;
     double offsetY = (viewport->height() - m_mapPixmap.height()) / 2.0;
-    painter.drawPixmap(offsetX, offsetY, m_mapPixmap);
+    
+    offsetX += m_panOffsetX;
+    offsetY += m_panOffsetY;
+    
+    if (!m_mapPixmap.isNull()) {
+        painter.drawPixmap(offsetX, offsetY, m_mapPixmap);
+    }
+    
     auto tp = [&](double lon, double lat) { QPointF p = coordinateToPixel(lon, lat); return QPointF(offsetX + p.x(), offsetY + p.y()); };
     if (m_routePoints.size() > 1) {
         painter.setPen(QPen(QColor(37, 99, 235, 100), 5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));

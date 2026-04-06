@@ -27,9 +27,7 @@ bool Livraison::ajouter() {
     query.prepare("INSERT INTO LIVRAISONS (IDLIVRAISON, DATELIVRAISON, ADRESSELIVRAISON, STATUT, TYPETRANSPORT, PRIXLIVRAISON, VEHICULE, DUREE) "
                   "VALUES (:id, :date, :adresse, :statut, :transport, :prix, :vehicule, :duree)");
 
-    // Convert "LIV001" to number for IDLIVRAISON
-    int idNum = id.startsWith("LIV") ? id.mid(3).toInt() : id.toInt();
-    query.bindValue(":id", idNum);
+    query.bindValue(":id", id);
     
     // Parse date string to QDate for DATELIVRAISON
     QDate qdate = QDate::fromString(date, "dd/MM/yyyy");
@@ -59,7 +57,7 @@ bool Livraison::ajouter() {
 QSqlQueryModel* Livraison::afficher() {
     QSqlQueryModel* model = new QSqlQueryModel();
     // Use correct column names and format numeric ID back to LIVxxx for UI consistency
-    model->setQuery("SELECT 'LIV' || LPAD(IDLIVRAISON, 3, '0') as ID, DATELIVRAISON as \"Date\", "
+    model->setQuery("SELECT IDLIVRAISON as ID, DATELIVRAISON as \"Date\", "
                     "ADRESSELIVRAISON as \"Adresse\", STATUT, TYPETRANSPORT as \"Transport\", "
                     "VEHICULE as \"Véhicule\", PRIXLIVRAISON as \"Prix\", DUREE as \"Durée\" FROM LIVRAISONS");
     return model;
@@ -68,8 +66,7 @@ QSqlQueryModel* Livraison::afficher() {
 bool Livraison::supprimer(QString id) {
     QSqlQuery query;
     query.prepare("DELETE FROM LIVRAISONS WHERE IDLIVRAISON = :id");
-    int idNum = id.startsWith("LIV") ? id.mid(3).toInt() : id.toInt();
-    query.bindValue(":id", idNum);
+    query.bindValue(":id", id);
     if (!query.exec()) {
         lastError = "Execute failed: " + query.lastError().text();
         return false;
@@ -84,8 +81,7 @@ bool Livraison::modifier(QString id) {
                   "TYPETRANSPORT = :transport, PRIXLIVRAISON = :prix, VEHICULE = :vehicule, DUREE = :duree "
                   "WHERE IDLIVRAISON = :id");
 
-    int idNum = id.startsWith("LIV") ? id.mid(3).toInt() : id.toInt();
-    query.bindValue(":id", idNum);
+    query.bindValue(":id", id);
     
     QDate qdate = QDate::fromString(date, "dd/MM/yyyy");
     if (!qdate.isValid()) qdate = QDate::fromString(date, Qt::ISODate);
@@ -120,7 +116,7 @@ QSqlQueryModel* Livraison::trier(QString critere, QString ordre) {
     else if (critere == "TRANSPORT") dbCritere = "TYPETRANSPORT";
     else if (critere == "PRIX") dbCritere = "PRIXLIVRAISON";
 
-    QString queryString = QString("SELECT 'LIV' || LPAD(IDLIVRAISON, 3, '0') as ID, DATELIVRAISON as \"Date\", "
+    QString queryString = QString("SELECT IDLIVRAISON as ID, DATELIVRAISON as \"Date\", "
                                   "ADRESSELIVRAISON as \"Adresse\", STATUT, TYPETRANSPORT as \"Transport\", "
                                   "VEHICULE as \"Véhicule\", PRIXLIVRAISON as \"Prix\", DUREE as \"Durée\" "
                                   "FROM LIVRAISONS ORDER BY %1 %2").arg(dbCritere, ordre);
@@ -131,7 +127,7 @@ QSqlQueryModel* Livraison::trier(QString critere, QString ordre) {
 QSqlQueryModel* Livraison::rechercher(QString val) {
     QSqlQueryModel* model = new QSqlQueryModel();
     QSqlQuery query;
-    query.prepare("SELECT 'LIV' || LPAD(IDLIVRAISON, 3, '0') as ID, DATELIVRAISON as \"Date\", "
+    query.prepare("SELECT IDLIVRAISON as ID, DATELIVRAISON as \"Date\", "
                   "ADRESSELIVRAISON as \"Adresse\", STATUT, TYPETRANSPORT as \"Transport\", "
                   "VEHICULE as \"Véhicule\", PRIXLIVRAISON as \"Prix\", DUREE as \"Durée\" "
                   "FROM LIVRAISONS WHERE IDLIVRAISON LIKE :val OR ADRESSELIVRAISON LIKE :val OR STATUT LIKE :val");
@@ -140,3 +136,13 @@ QSqlQueryModel* Livraison::rechercher(QString val) {
     model->setQuery(query);
     return model;
 }
+bool Livraison::idExists(QString id) {
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM LIVRAISONS WHERE IDLIVRAISON = :id");
+    query.bindValue(":id", id);
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+    return false;
+}
+

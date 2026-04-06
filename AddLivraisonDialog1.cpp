@@ -9,24 +9,11 @@
 #include <QFile>
 #include <QTextStream>
 #include <QStyle>
-#include <QUrl>
-#include <QNetworkRequest>
-#include <QJsonDocument>
-#include <QTimer>
-#include <cstdlib>
 
 
 AddLivraisonDialog::AddLivraisonDialog(QWidget *parent, Livraison* livraisonData)
-    : QDialog(parent), livraisonData(livraisonData), isEdit(livraisonData != nullptr), 
-      addressValidating(false), addressFound(true), waitingForSave(false)
+    : QDialog(parent), livraisonData(livraisonData), isEdit(livraisonData != nullptr)
 {
-    networkManager = new QNetworkAccessManager(this);
-    connect(networkManager, &QNetworkAccessManager::finished, this, &AddLivraisonDialog::onAddressValidationFinished);
-
-    addressDebounceTimer = new QTimer(this);
-    addressDebounceTimer->setSingleShot(true);
-    connect(addressDebounceTimer, &QTimer::timeout, this, &AddLivraisonDialog::onAddressDebounceTimeout);
-
     setupUi();
     if (isEdit) {
         populateFields();
@@ -152,30 +139,6 @@ void AddLivraisonDialog::setupUi()
 
     QFont labelFont("Segoe UI", 11, QFont::DemiBold);
 
-    // ID Field (New)
-    QLabel* idLabel = new QLabel("🆔  ID Livraison (Doit commencer par LIV-)");
-    idLabel->setFont(labelFont);
-    idLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
-    formLayout->addWidget(idLabel);
-
-    idEdit = new QLineEdit();
-    idEdit->setPlaceholderText("LIV-1234");
-    idEdit->setFixedHeight(45);
-    idEdit->setStyleSheet(getInputStyle());
-    if (isEdit && livraisonData) {
-        idEdit->setText(livraisonData->getID());
-        idEdit->setEnabled(false); // Can't change ID on edit
-    } else {
-        idEdit->setText("LIV-");
-    }
-    formLayout->addWidget(idEdit);
-
-    errorId = new QLabel("⚠ Cet ID existe déjà ou est invalide (Format: LIV-...)");
-    errorId->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-    errorId->setVisible(false);
-    formLayout->addWidget(errorId);
-    connect(idEdit, &QLineEdit::textChanged, this, &AddLivraisonDialog::onIdChanged);
-
     // Adresse
     QLabel* adresseLabel = new QLabel("📍  Adresse de livraison");
     adresseLabel->setFont(labelFont);
@@ -189,7 +152,7 @@ void AddLivraisonDialog::setupUi()
     formLayout->addWidget(adresseEdit);
 
     errorAdresse = new QLabel("⚠ L'adresse ne peut pas être vide");
-    errorAdresse->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
+    errorAdresse->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: -15px; margin-left: 5px;");
     errorAdresse->setVisible(false);
     formLayout->addWidget(errorAdresse);
     connect(adresseEdit, &QTextEdit::textChanged, this, &AddLivraisonDialog::onAdresseChanged);
@@ -214,20 +177,17 @@ void AddLivraisonDialog::setupUi()
     vehiculeLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
     formLayout->addWidget(vehiculeLabel);
     
-    vehiculeEdit = new QComboBox();
-    vehiculeEdit->addItems({
-        "Van Agile-01",
-        "Van Swift-02",
-        "Camionnette PortFlow-03",
-        "Fourgon Logistics-04",
-        "Bateau de Transport-05"
-    });
+    vehiculeEdit = new QLineEdit();
+    vehiculeEdit->setPlaceholderText("Ex: Van Agile-01");
     vehiculeEdit->setFixedHeight(45);
     vehiculeEdit->setStyleSheet(getInputStyle());
     formLayout->addWidget(vehiculeEdit);
 
-    errorVehicule = new QLabel(""); // Keep initialized but hidden/empty as it's no longer used
+    errorVehicule = new QLabel("⚠ Le nom du véhicule est obligatoire");
+    errorVehicule->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: -15px; margin-left: 5px;");
     errorVehicule->setVisible(false);
+    formLayout->addWidget(errorVehicule);
+    connect(vehiculeEdit, &QLineEdit::textChanged, this, &AddLivraisonDialog::onVehiculeChanged);
 
     // Row for Transport and Price
     QHBoxLayout* row2 = new QHBoxLayout();
@@ -315,7 +275,7 @@ void AddLivraisonDialog::populateFields()
     else dateEdit->setDate(QDate::currentDate());
 
     adresseEdit->setPlainText(livraisonData->getAdresse());
-    vehiculeEdit->setCurrentText(livraisonData->getVehicule());
+    vehiculeEdit->setText(livraisonData->getVehicule());
     transportEdit->setCurrentText(livraisonData->getTransport());
     QString p = livraisonData->getPrix();
     if (!p.isEmpty() && !p.endsWith("DT") && !p.endsWith("$") && !p.endsWith("€")) {
@@ -324,40 +284,16 @@ void AddLivraisonDialog::populateFields()
     prixEdit->setText(p);
 }
 
-void AddLivraisonDialog::onIdChanged() {
-    QString id = idEdit->text().trimmed();
-    bool validFormat = id.startsWith("LIV-") && id.length() > 4;
-    bool exists = false;
-    
-    if (validFormat && !isEdit) {
-        exists = Livraison::idExists(id);
-    }
-    
-    bool ok = validFormat && !exists;
-    updateFieldStyle(idEdit, ok);
-    
-    if (exists) {
-        errorId->setText("⚠ Cet ID existe déjà dans la base de données");
-        errorId->setVisible(true);
-    } else if (!validFormat) {
-        errorId->setText("⚠ L'ID doit commencer par 'LIV-' suivi de caractères");
-        errorId->setVisible(true);
-    } else {
-        errorId->setVisible(false);
-    }
-}
-
 Livraison AddLivraisonDialog::getData() const
 {
     Livraison data;
     data.setDate(dateEdit->date().toString("dd/MM/yyyy"));
     data.setAdresse(adresseEdit->toPlainText());
-    data.setVehicule(vehiculeEdit->currentText());
+    data.setVehicule(vehiculeEdit->text());
     data.setTransport(transportEdit->currentText());
     
     QString prix = prixEdit->text().trimmed();
     data.setPrix(prix);
-    data.setID(idEdit->text().trimmed());
     
     // Status is automated: "En attente" by default for new, preserved for edit
     if (isEdit && livraisonData) {
@@ -377,36 +313,13 @@ Livraison AddLivraisonDialog::getData() const
 }
 
 void AddLivraisonDialog::onAdresseChanged() {
-    QString addr = adresseEdit->toPlainText().trimmed();
-    
-    // Address was modified, reset validation state
-    addressFound = false;
-    waitingForSave = false;
-    
-    if (addr.isEmpty()) {
-        addressDebounceTimer->stop();
-        updateFieldStyle(adresseEdit, false);
-        errorAdresse->setText("⚠ L'adresse ne peut pas être vide");
-        errorAdresse->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-        errorAdresse->setVisible(true);
-    } else {
-        adresseEdit->setProperty("state", "");
-        adresseEdit->style()->unpolish(adresseEdit);
-        adresseEdit->style()->polish(adresseEdit);
-        
-        errorAdresse->setText("⌛ Recherche et vérification de la localisation...");
-        errorAdresse->setStyleSheet("color: #64748B; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-        errorAdresse->setVisible(true);
-        
-        addressDebounceTimer->start(1200);
-    }
+    updateFieldStyle(adresseEdit, !adresseEdit->toPlainText().trimmed().isEmpty());
+    errorAdresse->setVisible(adresseEdit->toPlainText().trimmed().isEmpty());
 }
 
-void AddLivraisonDialog::onAddressDebounceTimeout() {
-    QString addr = adresseEdit->toPlainText().trimmed();
-    if (!addr.isEmpty()) {
-        validateAddressViaAPI(addr);
-    }
+void AddLivraisonDialog::onVehiculeChanged() {
+    updateFieldStyle(vehiculeEdit, !vehiculeEdit->text().trimmed().isEmpty());
+    errorVehicule->setVisible(vehiculeEdit->text().trimmed().isEmpty());
 }
 
 void AddLivraisonDialog::onPrixChanged() {
@@ -431,21 +344,15 @@ void AddLivraisonDialog::updateFieldStyle(QWidget* field, bool isValid) {
 bool AddLivraisonDialog::validateInputs() {
     bool ok = true;
     
-    // Validate ID
-    QString id = idEdit->text().trimmed();
-    bool idOk = id.startsWith("LIV-") && id.length() > 4;
-    if (idOk && !isEdit) {
-        idOk = !Livraison::idExists(id);
-    }
-    if (!idOk) {
-        updateFieldStyle(idEdit, false);
-        errorId->setVisible(true);
-        ok = false;
-    }
-
     if (adresseEdit->toPlainText().trimmed().isEmpty()) {
         updateFieldStyle(adresseEdit, false);
         errorAdresse->setVisible(true);
+        ok = false;
+    }
+    
+    if (vehiculeEdit->text().trimmed().isEmpty()) {
+        updateFieldStyle(vehiculeEdit, false);
+        errorVehicule->setVisible(true);
         ok = false;
     }
     
@@ -459,67 +366,8 @@ bool AddLivraisonDialog::validateInputs() {
     return ok;
 }
 
-void AddLivraisonDialog::validateAddressViaAPI(const QString& address) {
-    if (addressValidating) return;
-    
-    addressValidating = true;
-    errorAdresse->setText("⌛ Validation de l'adresse par satellite...");
-    errorAdresse->setStyleSheet("color: #2563EB; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-    errorAdresse->setVisible(true);
-
-    QString url = "https://nominatim.openstreetmap.org/search?q=" + QUrl::toPercentEncoding(address) + "&format=json&limit=1";
-    QNetworkRequest request((QUrl(url)));
-    request.setHeader(QNetworkRequest::UserAgentHeader, "PortFlowApp/1.0"); // Nominatim requires User-Agent
-    networkManager->get(request);
-}
-
-void AddLivraisonDialog::onAddressValidationFinished(QNetworkReply* reply) {
-    addressValidating = false;
-    
-    if (reply->error() == QNetworkReply::NoError) {
-        QByteArray response = reply->readAll();
-        QJsonDocument json = QJsonDocument::fromJson(response);
-        QJsonArray array = json.array();
-        
-        addressFound = !array.isEmpty();
-        
-        if (addressFound) {
-            errorAdresse->setText("✅ Adresse valide confirmée par satellite !");
-            errorAdresse->setStyleSheet("color: #10B981; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-            errorAdresse->setVisible(true);
-            updateFieldStyle(adresseEdit, true);
-            
-            if (waitingForSave) handleSave();
-        } else {
-            errorAdresse->setText("⚠ Adresse introuvable ou invalide");
-            errorAdresse->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-            errorAdresse->setVisible(true);
-            updateFieldStyle(adresseEdit, false);
-        }
-    } else {
-        // Network error, assume valid for now but show warning?
-        addressFound = true; // Fallback
-        errorAdresse->setVisible(false);
-        updateFieldStyle(adresseEdit, true);
-        if (waitingForSave) handleSave();
-    }
-    reply->deleteLater();
-}
-
 void AddLivraisonDialog::handleSave() {
     if (validateInputs()) {
-        // Only proceed if address has been validated through API
-        if (!addressFound && !addressValidating) {
-            waitingForSave = true;
-            validateAddressViaAPI(adresseEdit->toPlainText().trimmed());
-            return;
-        }
-        
-        if (addressValidating) {
-            waitingForSave = true;
-            return;
-        }
-        
         accept();
     }
 }

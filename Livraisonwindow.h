@@ -46,8 +46,6 @@ private:
     QWidget* createStatusBadge(const QString& status);
     QWidget* createActionButtons(int row);
     void loadStyleSheet();
-    QString generateLivraisonId();
-
 
     Livraison livraisons;
     QTableWidget* table;
