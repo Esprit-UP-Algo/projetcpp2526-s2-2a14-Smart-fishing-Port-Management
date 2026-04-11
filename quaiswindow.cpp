@@ -261,8 +261,8 @@ public:
                            .arg(clientCompany)                                           // %4
                            .arg(startDate.toString("dd MMMM yyyy"))                     // %5
                            .arg(duration)                                                // %6
-                           .arg(quai.getNumero())                                            // %7
-                           .arg((QString("Quai ") + QString::number(quai.getNumero())))                                           // %8
+                           .arg(quai.getReference())                                         // %7
+                           .arg(quai.getNomQuai())                                           // %8
                            .arg(quai.getCapacite())                                      // %9
 
                            .arg(quai.getEtat())                                        // %11
@@ -363,6 +363,7 @@ public:
         QVBoxLayout* infoLay = new QVBoxLayout();
         infoLay->setSpacing(2);
         QLabel* titlePreview = new QLabel((QString("Quai ") + QString::number(quai.getNumero())) + "  —  " + QString::number(quai.getNumero()));
+        titlePreview->setText(quai.getNomQuai() + "  -  " + quai.getReference());
         titlePreview->setFont(QFont("Segoe UI", 11, QFont::Bold));
         titlePreview->setStyleSheet("color: #065F46; background: transparent; border: none;");
         QLabel* detailsPreview = new QLabel(
@@ -381,6 +382,7 @@ public:
         QVBoxLayout* formLay = new QVBoxLayout(formArea);
         formLay->setContentsMargins(20, 14, 20, 8);
         formLay->setSpacing(6);
+
 
         auto addField = [&](const QString& labelText, QLineEdit*& fieldPtr,
                             const QString& placeholder, QLabel*& errLblPtr) {
@@ -1006,7 +1008,7 @@ void QuaisWindow::setupQuaiTable()
     quaiTable->horizontalHeader()->setFixedHeight(50);
     quaiTable->setStyleSheet("QTableWidget { background-color: white; border: 2px solid #d1d5db; border-radius: 16px; gridline-color: #d1d5db; } QTableWidget::item { padding: 12px; border-right: 1px solid #d1d5db; border-bottom: 1px solid #d1d5db; color: #1f2937; background-color: white; font-family: 'Segoe UI'; font-size: 11pt; } QTableWidget::item:selected { background-color: #EBF5FF; color: #2563EB; } QHeaderView::section { background-color: #d1d5db; color: #1f2937; padding: 12px; border: none; font-weight: 600; font-family: 'Segoe UI'; font-size: 11pt; }");
 
-    quaiTable->setColumnWidth(0, 100);
+    quaiTable->setColumnWidth(0, 140);
     quaiTable->setColumnWidth(1, 120);
     quaiTable->setColumnWidth(2, 100);
     quaiTable->setColumnWidth(3, 160);
@@ -1018,11 +1020,12 @@ void QuaisWindow::loadQuaisFromDatabase()
     quais.clear(); // clear the current list
 
     QSqlQuery query;
-    if (!query.exec("SELECT NUMERO, CAPACITE, LOCATION, ETAT, TARIF_LOCATION, DUREE_LOCATION FROM QUAIS")) {
+    if (!query.exec("SELECT NUMERO, CAPACITE, LOCATION, ETAT, TARIF_LOCATION, DUREE_LOCATION FROM QUAIS ORDER BY IDQUAI")) {
         qDebug() << "Database query error:" << query.lastError().text();
         return;
     }
 
+    int ordreNom = 1;
     while (query.next()) {
         int numero           = query.value("NUMERO").toInt();
         int capacite         = query.value("CAPACITE").toInt();
@@ -1032,6 +1035,7 @@ void QuaisWindow::loadQuaisFromDatabase()
         QString dureeLocation = query.value("DUREE_LOCATION").toString();
 
         Quai q(numero, capacite, etat, tarifLocation, location, dureeLocation);
+        q.setOrdreNom(ordreNom++);
 
         quais.append(q);
     }
@@ -1047,7 +1051,8 @@ void QuaisWindow::populateTable(const QString& filterText)
         // Filter if needed
         if (!filterText.isEmpty()) {
             QString searchLower = filterText.toLower();
-            if (!(QString("Quai ") + QString::number(q.getNumero())).toLower().contains(searchLower) &&
+            if (!q.getNomQuai().toLower().contains(searchLower) &&
+                !q.getReference().toLower().contains(searchLower) &&
                 !q.getEtat().toLower().contains(searchLower) &&
                 !q.getDureeLocation().toLower().contains(searchLower) &&
                 !QString::number(q.getNumero()).contains(searchLower))
@@ -1059,13 +1064,13 @@ void QuaisWindow::populateTable(const QString& filterText)
         quaiTable->setRowHeight(row, 65);
 
         // Numero
-        QTableWidgetItem* numeroItem = new QTableWidgetItem(QString::number(q.getNumero()));
+        QTableWidgetItem* numeroItem = new QTableWidgetItem(q.getReference());
         numeroItem->setForeground(QBrush(QColor("#5D9CEC")));
         numeroItem->setFont(QFont("Segoe UI", 11, QFont::Bold));
         quaiTable->setItem(row, 0, numeroItem);
 
         // Name
-        quaiTable->setItem(row, 1, new QTableWidgetItem(QString("Quai %1").arg(q.getNumero())));
+        quaiTable->setItem(row, 1, new QTableWidgetItem(q.getNomQuai()));
 
         // Capacity
         quaiTable->setItem(row, 2, new QTableWidgetItem(QString::number(q.getCapacite())));

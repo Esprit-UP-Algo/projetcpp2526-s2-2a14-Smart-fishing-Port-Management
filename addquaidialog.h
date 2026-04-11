@@ -6,6 +6,7 @@
 class QLineEdit;
 class QComboBox;
 class QPushButton;
+class QLabel;
 class Quai;
 
 class AddQuaiDialog : public QDialog   // ✅ MUST be QDialog
@@ -20,12 +21,15 @@ private slots:
     void saveQuai();
 
 private:
+    void updateGeneratedReference();
+
     QLineEdit* numeroInput;
     QLineEdit* locationInput;
     QLineEdit* capaciteInput;
     QLineEdit* tarifInput;
     QLineEdit* dureeInput;
     QComboBox* etatInput;
+    QLabel* referenceValueLabel;
 
     QPushButton* saveBtn;
     QPushButton* cancelBtn;

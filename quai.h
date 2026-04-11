@@ -12,6 +12,7 @@ struct HistoricData {
 class Quai {
 private:
     int numero;
+    int ordreNom;
     int capacite;
     QString etat;
     double tarif;
@@ -28,11 +29,14 @@ public:
     bool ajouter(); // Add this line in the public section
     // Getters
     int getNumero() const;
+    int getOrdreNom() const;
     int getCapacite() const;
     QString getEtat() const;
     double getTarif() const;
     QString getLocation() const;
     QString getDureeLocation() const;
+    QString getReference() const;
+    QString getNomQuai() const;
     static QList<HistoricData> historiqueParDefaut();
     static int calculerTempsEstime(int longueurActuelle, const QList<HistoricData>& historique = {});
     static int calculerCapaciteRecommandee(int longueurActuelle);
@@ -41,6 +45,7 @@ public:
 
     // Setters
     void setNumero(int numero);
+    void setOrdreNom(int ordre);
     void setCapacite(int capacite);
     void setEtat(const QString &etat);
     void setTarif(double tarif);

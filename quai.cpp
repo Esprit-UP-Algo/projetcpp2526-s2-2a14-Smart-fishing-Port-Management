@@ -6,14 +6,14 @@
 
 // Default constructor
 Quai::Quai()
-    : numero(0), capacite(0), etat("Disponible"),
+    : numero(0), ordreNom(0), capacite(0), etat("Disponible"),
     tarif(0.0), location(""), dureeLocation("")
 {}
 
 // Parameterized constructor
 Quai::Quai(int numero, int capacite, QString etat, double tarif,
            QString location, const QString& dureeLocation)
-    : numero(numero), capacite(capacite), etat(etat), tarif(tarif),
+    : numero(numero), ordreNom(0), capacite(capacite), etat(etat), tarif(tarif),
     location(location), dureeLocation(dureeLocation)
 {}
 
@@ -43,11 +43,21 @@ bool Quai::ajouter()
 
 // Getters
 int Quai::getNumero() const { return numero; }
+int Quai::getOrdreNom() const { return ordreNom; }
 int Quai::getCapacite() const { return capacite; }
 QString Quai::getEtat() const { return etat; }
 double Quai::getTarif() const { return tarif; }
 QString Quai::getLocation() const { return location; }
 QString Quai::getDureeLocation() const { return dureeLocation; }
+QString Quai::getReference() const
+{
+    const QString numeroTexte = QString("%1").arg(std::abs(numero), 6, 10, QChar('0'));
+    return QString("TUN-%1-%2").arg(numeroTexte.left(3), numeroTexte.mid(3, 3));
+}
+QString Quai::getNomQuai() const
+{
+    return QString("Quai %1").arg(ordreNom > 0 ? ordreNom : numero);
+}
 
 QList<HistoricData> Quai::historiqueParDefaut()
 {
@@ -96,6 +106,7 @@ bool Quai::peutAccueillirLongueur(int longueurActuelle) const
 
 // Setters
 void Quai::setNumero(int n) { numero = n; }
+void Quai::setOrdreNom(int ordre) { ordreNom = ordre; }
 void Quai::setCapacite(int c) { capacite = c; }
 void Quai::setEtat(const QString &e) { etat = e; }
 void Quai::setTarif(double t) { tarif = t; }
