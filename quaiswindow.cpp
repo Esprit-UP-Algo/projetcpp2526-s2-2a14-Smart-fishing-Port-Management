@@ -1,5 +1,6 @@
 #include "quaiswindow.h"
 #include <algorithm>
+#include <limits>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -37,10 +38,12 @@
 #include <QTextLength>
 #include <QDateTime>
 #include <QStandardPaths>
+#include <QVariantMap>
 #include <QDateEdit>
 #include <QPageSize>
 
 #include <QtSql/QSqlError>
+#include <QtSql/QSqlDatabase>
 #include <QtSql/QSqlRecord>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
@@ -48,8 +51,19 @@
 #include <QDoubleValidator>
 
 #include "addquaidialog.h"
+#include "Bateauwindow.h"
 
 #include "addquaidialog.h"
+
+static QString boatDisplayLabel(const QVariantMap& bateauInfo)
+{
+    const QString nom = bateauInfo.value("nom").toString();
+    const QString immatriculation = bateauInfo.value("immatriculation").toString();
+    if (immatriculation.isEmpty()) {
+        return nom;
+    }
+    return QString("%1 (%2)").arg(nom, immatriculation);
+}
 
 // ==================== END CIRCULAR PROGRESS ====================
 
@@ -866,12 +880,16 @@ QFrame* QuaisWindow::createHeader()
         dlg->exec();
     });
 
+    QPushButton* smartAssignBtn = makeBtn("IA  Affecter un bateau", "#EA580C", "#C2410C");
+    connect(smartAssignBtn, &QPushButton::clicked, this, &QuaisWindow::onAutoAssignBoat);
+
     QPushButton* addBtn   = makeBtn("➕  Nouveau Quai",   "#2563EB", "#1D4ED8");
 
     connect(addBtn, &QPushButton::clicked, this, &QuaisWindow::onAddQuai);
 
     lay->addWidget(statsBtn);
     lay->addWidget(pdfBtn);
+    lay->addWidget(smartAssignBtn);
     lay->addWidget(addBtn);
     return hdr;
 }
@@ -1103,6 +1121,43 @@ QWidget* QuaisWindow::createActionButtons(int row)
     return widget;
 }
 
+bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication)
+{
+    const int longueur = bateauInfo.value("longueur").toInt();
+    tempsEstime = Quai::calculerTempsEstime(longueur);
+
+    int meilleurIndex = -1;
+    int meilleurScore = std::numeric_limits<int>::max();
+
+    for (int i = 0; i < quais.size(); ++i) {
+        const Quai& q = quais[i];
+        if (q.getEtat() != "Disponible" || !q.peutAccueillirLongueur(longueur)) {
+            continue;
+        }
+
+        const int ecartCapacite = q.getCapacite() - longueur;
+        const int score = (ecartCapacite * 100) + static_cast<int>(q.getTarif() * 10.0);
+        if (score < meilleurScore) {
+            meilleurScore = score;
+            meilleurIndex = i;
+        }
+    }
+
+    if (meilleurIndex < 0) {
+        explication = QString("Aucun quai disponible ne peut accueillir un bateau de %1 m. La capacité du quai représente la longueur maximale autorisée.")
+                          .arg(longueur);
+        return false;
+    }
+
+    quaiChoisi = quais[meilleurIndex];
+    explication = QString("Temps estimé : %1 min. Quai %2 retenu avec une longueur maximale de %3 m pour un bateau de %4 m.")
+                      .arg(tempsEstime)
+                      .arg(quaiChoisi.getNumero())
+                      .arg(quaiChoisi.getCapacite())
+                      .arg(longueur);
+    return true;
+}
+
 void QuaisWindow::onSearch(const QString& text) { populateTable(text); }
 
 void QuaisWindow::onAddQuai()
@@ -1113,6 +1168,191 @@ void QuaisWindow::onAddQuai()
         populateTable(searchInput->text());
     }
 }
+
+void QuaisWindow::onAutoAssignBoat()
+{
+    QSqlQuery boatQuery;
+    if (!boatQuery.exec(
+            "SELECT IDBATEAU, NOMBATEAU, IMMATRICULATION, NVL(LONGEUR, 0) AS LONGEUR, NVL(CAPACITE, 0) AS CAPACITE "
+            "FROM BATEAUX "
+            "WHERE ETAT IN ('Au port', 'En maintenance') "
+            "ORDER BY NOMBATEAU")) {
+        QMessageBox::critical(this, "Erreur", "Impossible de charger les bateaux :\n" + boatQuery.lastError().text());
+        return;
+    }
+
+    QList<QVariantMap> bateaux;
+    while (boatQuery.next()) {
+        QVariantMap bateau;
+        bateau.insert("id", boatQuery.value("IDBATEAU").toString());
+        bateau.insert("nom", boatQuery.value("NOMBATEAU").toString());
+        bateau.insert("immatriculation", boatQuery.value("IMMATRICULATION").toString());
+        bateau.insert("longueur", boatQuery.value("LONGEUR").toInt());
+        bateau.insert("capacite", boatQuery.value("CAPACITE").toInt());
+        bateaux.append(bateau);
+    }
+
+    if (bateaux.isEmpty()) {
+        QMessageBox::warning(this, "Aucun bateau", "Aucun bateau au port ou en maintenance n'est disponible pour une affectation automatique.");
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Affectation intelligente");
+    dialog.setModal(true);
+    dialog.setFixedSize(520, 360);
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(14);
+
+    QLabel* title = new QLabel("Affectation intelligente d'un quai");
+    title->setFont(QFont("Segoe UI", 14, QFont::Bold));
+    title->setStyleSheet("color:#1e3a5f;");
+    mainLayout->addWidget(title);
+
+    QLabel* subtitle = new QLabel("La prédiction utilise l'historique des temps de dockage pour des bateaux de longueur proche.");
+    subtitle->setWordWrap(true);
+    subtitle->setStyleSheet("color:#64748b;");
+    mainLayout->addWidget(subtitle);
+
+    QComboBox* boatCombo = new QComboBox();
+    boatCombo->setFixedHeight(40);
+    for (const QVariantMap& bateau : bateaux) {
+        boatCombo->addItem(boatDisplayLabel(bateau), bateau);
+    }
+    mainLayout->addWidget(boatCombo);
+
+    QFrame* infoCard = new QFrame();
+    infoCard->setStyleSheet("QFrame{background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px;}");
+    QVBoxLayout* infoLayout = new QVBoxLayout(infoCard);
+    infoLayout->setContentsMargins(14, 14, 14, 14);
+    infoLayout->setSpacing(8);
+
+    QLabel* longueurLabel = new QLabel();
+    QLabel* capaciteLabel = new QLabel();
+    QLabel* estimationLabel = new QLabel();
+    infoLayout->addWidget(longueurLabel);
+    infoLayout->addWidget(capaciteLabel);
+    infoLayout->addWidget(estimationLabel);
+    mainLayout->addWidget(infoCard);
+
+    auto refreshPreview = [boatCombo, longueurLabel, capaciteLabel, estimationLabel]() {
+        const QVariantMap bateau = boatCombo->currentData().toMap();
+        const int longueur = bateau.value("longueur").toInt();
+        const int estimation = Quai::calculerTempsEstime(longueur);
+
+        longueurLabel->setText(QString("Longueur du bateau : %1 m").arg(longueur));
+        capaciteLabel->setText(QString("Longueur minimale requise du quai : %1 m").arg(longueur));
+        estimationLabel->setText(QString("Temps estimé de dockage : %1 minutes").arg(estimation));
+    };
+    refreshPreview();
+    connect(boatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [refreshPreview](int) {
+        refreshPreview();
+    });
+
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch();
+
+    QPushButton* cancelButton = new QPushButton("Annuler");
+    QPushButton* assignButton = new QPushButton("Affecter automatiquement");
+    cancelButton->setFixedHeight(40);
+    assignButton->setFixedHeight(40);
+    assignButton->setStyleSheet("QPushButton{background:#EA580C; color:white; border:none; border-radius:10px; padding:0 16px; font-weight:bold;}"
+                                "QPushButton:hover{background:#C2410C;}");
+    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
+    connect(assignButton, &QPushButton::clicked, &dialog, &QDialog::accept);
+
+    buttonLayout->addWidget(cancelButton);
+    buttonLayout->addWidget(assignButton);
+    mainLayout->addLayout(buttonLayout);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const QVariantMap bateau = boatCombo->currentData().toMap();
+    if (bateau.value("longueur").toInt() <= 0) {
+        QMessageBox::warning(this, "Longueur invalide", "Le bateau sélectionné doit avoir une longueur valide pour utiliser l'affectation intelligente.");
+        return;
+    }
+
+    Quai quaiChoisi;
+    int tempsEstime = 0;
+    QString explication;
+    if (!assignerQuaiAutomatiquement(bateau, quaiChoisi, tempsEstime, explication)) {
+        QMessageBox::warning(this, "Aucun quai compatible", explication);
+        return;
+    }
+
+    QSqlDatabase db = QSqlDatabase::database();
+    const bool startedTransaction = db.transaction();
+
+    QSqlQuery oldQuaiQuery;
+    oldQuaiQuery.prepare("SELECT IDQUAI FROM BATEAUX WHERE IDBATEAU = :id");
+    oldQuaiQuery.bindValue(":id", bateau.value("id").toString());
+
+    QVariant ancienIdQuai;
+    if (!oldQuaiQuery.exec() || !oldQuaiQuery.next()) {
+        if (startedTransaction) db.rollback();
+        QMessageBox::critical(this, "Erreur", "Impossible de lire le quai actuel du bateau.");
+        return;
+    }
+    ancienIdQuai = oldQuaiQuery.value(0);
+
+    QSqlQuery updateBoatQuery;
+    updateBoatQuery.prepare(
+        "UPDATE BATEAUX "
+        "SET IDQUAI = (SELECT IDQUAI FROM QUAIS WHERE NUMERO = :numero), ETAT = :etat "
+        "WHERE IDBATEAU = :id");
+    updateBoatQuery.bindValue(":numero", quaiChoisi.getNumero());
+    updateBoatQuery.bindValue(":etat", "Au port");
+    updateBoatQuery.bindValue(":id", bateau.value("id").toString());
+
+    QSqlQuery updateQuaiQuery;
+    updateQuaiQuery.prepare("UPDATE QUAIS SET ETAT = 'Occupé' WHERE NUMERO = :numero");
+    updateQuaiQuery.bindValue(":numero", quaiChoisi.getNumero());
+
+    if (!updateBoatQuery.exec() || !updateQuaiQuery.exec()) {
+        if (startedTransaction) db.rollback();
+        QMessageBox::critical(this, "Erreur SQL", updateBoatQuery.lastError().isValid() ? updateBoatQuery.lastError().text()
+                                                                                         : updateQuaiQuery.lastError().text());
+        return;
+    }
+
+    if (ancienIdQuai.isValid() && !ancienIdQuai.isNull()) {
+        QSqlQuery countQuery;
+        countQuery.prepare("SELECT COUNT(*) FROM BATEAUX WHERE IDQUAI = :idquai AND IDBATEAU <> :idbateau");
+        countQuery.bindValue(":idquai", ancienIdQuai);
+        countQuery.bindValue(":idbateau", bateau.value("id").toString());
+
+        if (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() == 0) {
+            QSqlQuery freeOldQuaiQuery;
+            freeOldQuaiQuery.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE IDQUAI = :idquai AND ETAT = 'Occupé'");
+            freeOldQuaiQuery.bindValue(":idquai", ancienIdQuai);
+            freeOldQuaiQuery.exec();
+        }
+    }
+
+    if (startedTransaction && !db.commit()) {
+        db.rollback();
+        QMessageBox::critical(this, "Erreur", "La transaction d'affectation n'a pas pu être validée.");
+        return;
+    }
+
+    loadQuaisFromDatabase();
+    populateTable(searchInput->text());
+    BateauWindow::refreshAllTables();
+
+    QMessageBox::information(
+        this,
+        "Affectation réussie",
+        QString("%1 a été affecté automatiquement au quai %2.\n%3")
+            .arg(boatDisplayLabel(bateau))
+            .arg(quaiChoisi.getNumero())
+            .arg(explication));
+}
+
 void QuaisWindow::onEditQuai(int row) {
     if (row < 0 || row >= quais.size()) return;
 

@@ -12,8 +12,13 @@ Bateau::Bateau(QString id, QString nom, QString imm, QString cap, QString lon, Q
 
 bool Bateau::ajouter() {
     QSqlQuery query;
-    query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT) "
-                  "VALUES (:id, :nom, :imm, :cap, :lon, :age, TO_DATE(:date, 'DD/MM/YYYY'), :idE, :idQ, :etat)");
+    if (idQuai.isEmpty()) {
+        query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT) "
+                      "VALUES (:id, :nom, :imm, :cap, :lon, :age, TO_DATE(:date, 'DD/MM/YYYY'), :idE, NULL, :etat)");
+    } else {
+        query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT) "
+                      "VALUES (:id, :nom, :imm, :cap, :lon, :age, TO_DATE(:date, 'DD/MM/YYYY'), :idE, :idQ, :etat)");
+    }
     
     query.bindValue(":id", idBateau.toInt());
     query.bindValue(":nom", nomBateau);
@@ -23,7 +28,9 @@ bool Bateau::ajouter() {
     query.bindValue(":age", ageBateau.isEmpty() ? QVariant() : ageBateau.toInt());
     query.bindValue(":date", dateMaintenance);
     query.bindValue(":idE", idEmploye.isEmpty() ? QVariant() : idEmploye.toInt());
-    query.bindValue(":idQ", idQuai.isEmpty() ? QVariant() : idQuai.toInt());
+    if (!idQuai.isEmpty()) {
+        query.bindValue(":idQ", idQuai.toInt());
+    }
     query.bindValue(":etat", etat);
 
     if (query.exec()) return true;
@@ -33,9 +40,14 @@ bool Bateau::ajouter() {
 
 QSqlQueryModel* Bateau::afficher() {
     QSqlQueryModel* model = new QSqlQueryModel();
-    // Index 0:ID, 1:Nom, 2:Immat, 3:Cap, 4:Lon, 5:Age, 6:Date, 7:EmpName, 8:QuaiLoc, 9:EmpID, 10:QuaiID, 11:Etat (String)
+    // Index 0:ID, 1:Nom, 2:Immat, 3:Cap, 4:Lon, 5:Age, 6:Date, 7:EmpName, 8:QuaiLabel, 9:EmpID, 10:QuaiID, 11:Etat (String)
     model->setQuery("SELECT b.IDBATEAU, b.NOMBATEAU, b.IMMATRICULATION, b.CAPACITE, b.LONGEUR, b.AGE_BATEAU, "
-                    "TO_CHAR(b.DATE_DERNIERE_MAINTENANCE, 'DD/MM/YYYY'), e.NOM, q.LOCATION, "
+                    "TO_CHAR(b.DATE_DERNIERE_MAINTENANCE, 'DD/MM/YYYY'), e.NOM, "
+                    "CASE "
+                    "WHEN q.IDQUAI IS NULL THEN 'Aucun quai' "
+                    "WHEN q.LOCATION IS NULL OR TRIM(q.LOCATION) = '' THEN 'Quai ' || q.NUMERO "
+                    "ELSE 'Quai ' || q.NUMERO || ' (' || q.LOCATION || ')' "
+                    "END, "
                     "b.ID_EMPLOYE, b.IDQUAI, b.ETAT "
                     "FROM BATEAUX b "
                     "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "
@@ -54,9 +66,15 @@ bool Bateau::supprimer(QString id) {
 
 bool Bateau::modifier(QString id) {
     QSqlQuery query;
-    query.prepare("UPDATE BATEAUX SET NOMBATEAU=:nom, IMMATRICULATION=:imm, CAPACITE=:cap, LONGEUR=:lon, "
-                  "AGE_BATEAU=:age, DATE_DERNIERE_MAINTENANCE=TO_DATE(:date, 'DD/MM/YYYY'), ID_EMPLOYE=:idE, IDQUAI=:idQ, ETAT=:etat "
-                  "WHERE IDBATEAU=:id");
+    if (idQuai.isEmpty()) {
+        query.prepare("UPDATE BATEAUX SET NOMBATEAU=:nom, IMMATRICULATION=:imm, CAPACITE=:cap, LONGEUR=:lon, "
+                      "AGE_BATEAU=:age, DATE_DERNIERE_MAINTENANCE=TO_DATE(:date, 'DD/MM/YYYY'), ID_EMPLOYE=:idE, IDQUAI=NULL, ETAT=:etat "
+                      "WHERE IDBATEAU=:id");
+    } else {
+        query.prepare("UPDATE BATEAUX SET NOMBATEAU=:nom, IMMATRICULATION=:imm, CAPACITE=:cap, LONGEUR=:lon, "
+                      "AGE_BATEAU=:age, DATE_DERNIERE_MAINTENANCE=TO_DATE(:date, 'DD/MM/YYYY'), ID_EMPLOYE=:idE, IDQUAI=:idQ, ETAT=:etat "
+                      "WHERE IDBATEAU=:id");
+    }
     
     query.bindValue(":nom", nomBateau);
     query.bindValue(":imm", immatriculation);
@@ -65,7 +83,9 @@ bool Bateau::modifier(QString id) {
     query.bindValue(":age", ageBateau.isEmpty() ? QVariant() : ageBateau.toInt());
     query.bindValue(":date", dateMaintenance);
     query.bindValue(":idE", idEmploye.isEmpty() ? QVariant() : idEmploye.toInt());
-    query.bindValue(":idQ", idQuai.isEmpty() ? QVariant() : idQuai.toInt());
+    if (!idQuai.isEmpty()) {
+        query.bindValue(":idQ", idQuai.toInt());
+    }
     query.bindValue(":etat", etat);
     query.bindValue(":id", id.toInt());
 
@@ -83,7 +103,12 @@ QSqlQueryModel* Bateau::trier(QString critere, QString ordre) {
         realCritere = "b.DATE_DERNIERE_MAINTENANCE";
 
     QString queryString = QString("SELECT b.IDBATEAU, b.NOMBATEAU, b.IMMATRICULATION, b.CAPACITE, b.LONGEUR, b.AGE_BATEAU, "
-                                  "TO_CHAR(b.DATE_DERNIERE_MAINTENANCE, 'DD/MM/YYYY'), e.NOM, q.LOCATION, "
+                                  "TO_CHAR(b.DATE_DERNIERE_MAINTENANCE, 'DD/MM/YYYY'), e.NOM, "
+                                  "CASE "
+                                  "WHEN q.IDQUAI IS NULL THEN 'Aucun quai' "
+                                  "WHEN q.LOCATION IS NULL OR TRIM(q.LOCATION) = '' THEN 'Quai ' || q.NUMERO "
+                                  "ELSE 'Quai ' || q.NUMERO || ' (' || q.LOCATION || ')' "
+                                  "END, "
                                   "b.ID_EMPLOYE, b.IDQUAI, b.ETAT "
                                   "FROM BATEAUX b "
                                   "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "
@@ -98,7 +123,12 @@ QSqlQueryModel* Bateau::rechercher(QString val) {
     QSqlQueryModel* model = new QSqlQueryModel();
     QSqlQuery query;
     query.prepare("SELECT b.IDBATEAU, b.NOMBATEAU, b.IMMATRICULATION, b.CAPACITE, b.LONGEUR, b.AGE_BATEAU, "
-                  "TO_CHAR(b.DATE_DERNIERE_MAINTENANCE, 'DD/MM/YYYY'), e.NOM, q.LOCATION, "
+                  "TO_CHAR(b.DATE_DERNIERE_MAINTENANCE, 'DD/MM/YYYY'), e.NOM, "
+                  "CASE "
+                  "WHEN q.IDQUAI IS NULL THEN 'Aucun quai' "
+                  "WHEN q.LOCATION IS NULL OR TRIM(q.LOCATION) = '' THEN 'Quai ' || q.NUMERO "
+                  "ELSE 'Quai ' || q.NUMERO || ' (' || q.LOCATION || ')' "
+                  "END, "
                   "b.ID_EMPLOYE, b.IDQUAI, b.ETAT "
                   "FROM BATEAUX b "
                   "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "

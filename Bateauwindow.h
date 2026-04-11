@@ -8,6 +8,7 @@
 #include <QPushButton>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QList>
 #include <QVBoxLayout>
 #include "bateau.h"
 
@@ -17,6 +18,7 @@ class BateauWindow : public QMainWindow
 public:
     explicit BateauWindow(QWidget *parent = nullptr);
     ~BateauWindow();
+    static void refreshAllTables();
 
 private slots:
     void onSearch(const QString& text);
@@ -47,6 +49,8 @@ private:
     QTableWidget*   table      = nullptr;
     QLineEdit*      searchInput= nullptr;
     QComboBox*      sortCombo  = nullptr;
+
+    static QList<BateauWindow*> s_instances;
 };
 
 #endif // BATEAUWINDOW_H

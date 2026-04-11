@@ -8,6 +8,7 @@
 #include <QList>
 #include <QComboBox>
 #include <QFrame>
+#include <QVariantMap>
 #include <QWidget>
 #include <QPainter>
 #include <QPropertyAnimation>
@@ -166,6 +167,10 @@ private slots:
     void onSort(int index);
     void afficherStatistiques();
     void onGenerateContract(int row);
+    void onAutoAssignBoat();
+
+private:
+    bool assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
 };
 
 #endif // QUAISWINDOW_H

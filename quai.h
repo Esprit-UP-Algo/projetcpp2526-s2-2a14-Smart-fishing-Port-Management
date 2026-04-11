@@ -1,7 +1,13 @@
 #ifndef QUAI_H
 #define QUAI_H
 
+#include <QList>
 #include <QString>
+
+struct HistoricData {
+    int longueur;
+    int tempsDockage;
+};
 
 class Quai {
 private:
@@ -27,6 +33,10 @@ public:
     double getTarif() const;
     QString getLocation() const;
     QString getDureeLocation() const;
+    static QList<HistoricData> historiqueParDefaut();
+    static int calculerTempsEstime(int longueurActuelle, const QList<HistoricData>& historique = {});
+    static int calculerCapaciteRecommandee(int longueurActuelle);
+    bool peutAccueillirLongueur(int longueurActuelle) const;
 
 
     // Setters

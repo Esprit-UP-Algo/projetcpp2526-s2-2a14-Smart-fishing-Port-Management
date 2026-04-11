@@ -2,6 +2,7 @@
 #include <QtSql/QSqlQuery>
 #include <QtSql/QSqlError>
 #include <QDebug>
+#include <cmath>
 
 // Default constructor
 Quai::Quai()
@@ -47,6 +48,51 @@ QString Quai::getEtat() const { return etat; }
 double Quai::getTarif() const { return tarif; }
 QString Quai::getLocation() const { return location; }
 QString Quai::getDureeLocation() const { return dureeLocation; }
+
+QList<HistoricData> Quai::historiqueParDefaut()
+{
+    return {
+        {8, 35}, {10, 40}, {12, 45}, {14, 48}, {16, 55},
+        {18, 58}, {20, 62}, {22, 68}, {24, 72}, {26, 79},
+        {28, 83}, {30, 90}, {32, 95}, {35, 105}, {38, 115}
+    };
+}
+
+int Quai::calculerTempsEstime(int longueurActuelle, const QList<HistoricData>& historique)
+{
+    const QList<HistoricData> data = historique.isEmpty() ? historiqueParDefaut() : historique;
+
+    int sommeTemps = 0;
+    int sommeLongueur = 0;
+    int count = 0;
+
+    for (const HistoricData& entree : data) {
+        if (std::abs(entree.longueur - longueurActuelle) <= 10) {
+            sommeTemps += entree.tempsDockage;
+            sommeLongueur += entree.longueur;
+            ++count;
+        }
+    }
+
+    if (count > 0) {
+        const int moyenneTemps = sommeTemps / count;
+        const int moyenneLongueur = sommeLongueur / count;
+        const int ajustement = (longueurActuelle - moyenneLongueur) * 2;
+        return std::max(20, moyenneTemps + ajustement);
+    }
+
+    return 60;
+}
+
+int Quai::calculerCapaciteRecommandee(int longueurActuelle)
+{
+    return longueurActuelle;
+}
+
+bool Quai::peutAccueillirLongueur(int longueurActuelle) const
+{
+    return capacite >= longueurActuelle;
+}
 
 // Setters
 void Quai::setNumero(int n) { numero = n; }

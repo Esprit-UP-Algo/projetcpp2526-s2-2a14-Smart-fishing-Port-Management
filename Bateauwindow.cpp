@@ -28,14 +28,29 @@
 #include <QHBoxLayout>
 #include <algorithm>
 
+QList<BateauWindow*> BateauWindow::s_instances;
+
 BateauWindow::BateauWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    s_instances.append(this);
     setupUi();
     populateTable();
 }
 
-BateauWindow::~BateauWindow() {}
+BateauWindow::~BateauWindow()
+{
+    s_instances.removeAll(this);
+}
+
+void BateauWindow::refreshAllTables()
+{
+    for (BateauWindow* window : s_instances) {
+        if (window) {
+            window->populateTable();
+        }
+    }
+}
 
 void BateauWindow::setupUi()
 {
