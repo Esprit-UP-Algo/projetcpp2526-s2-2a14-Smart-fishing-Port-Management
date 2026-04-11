@@ -65,6 +65,28 @@ static QString boatDisplayLabel(const QVariantMap& bateauInfo)
     return QString("%1 (%2)").arg(nom, immatriculation);
 }
 
+static int estimateQuaiAvailabilityMinutes(int quaiNumero)
+{
+    QSqlQuery query;
+    query.prepare(
+        "SELECT NVL(MAX(LONGEUR), 0) "
+        "FROM BATEAUX "
+        "WHERE IDQUAI = (SELECT IDQUAI FROM QUAIS WHERE NUMERO = :numero) "
+        "AND ETAT IN ('Au port', 'En maintenance')");
+    query.bindValue(":numero", quaiNumero);
+
+    if (!query.exec() || !query.next()) {
+        return 60;
+    }
+
+    const int longueurOccupee = query.value(0).toInt();
+    if (longueurOccupee <= 0) {
+        return 60;
+    }
+
+    return Quai::calculerTempsEstime(longueurOccupee);
+}
+
 // ==================== END CIRCULAR PROGRESS ====================
 
 // ==================== ADD CONTRACT GENERATOR CLASS HERE ====================
@@ -1124,6 +1146,7 @@ QWidget* QuaisWindow::createActionButtons(int row)
 bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication)
 {
     const int longueur = bateauInfo.value("longueur").toInt();
+    const QString etatBateau = bateauInfo.value("etat").toString();
     tempsEstime = Quai::calculerTempsEstime(longueur);
 
     int meilleurIndex = -1;
@@ -1143,18 +1166,54 @@ bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Qua
         }
     }
 
-    if (meilleurIndex < 0) {
+    if (meilleurIndex >= 0) {
+        quaiChoisi = quais[meilleurIndex];
+        explication = QString("Temps estimé : %1 min. Quai %2 retenu avec une longueur maximale de %3 m pour un bateau de %4 m.")
+                          .arg(tempsEstime)
+                          .arg(quaiChoisi.getNumero())
+                          .arg(quaiChoisi.getCapacite())
+                          .arg(longueur);
+        return true;
+    }
+
+    if (etatBateau != "En mer") {
         explication = QString("Aucun quai disponible ne peut accueillir un bateau de %1 m. La capacité du quai représente la longueur maximale autorisée.")
                           .arg(longueur);
         return false;
     }
 
-    quaiChoisi = quais[meilleurIndex];
-    explication = QString("Temps estimé : %1 min. Quai %2 retenu avec une longueur maximale de %3 m pour un bateau de %4 m.")
+    int meilleurQuaiReserve = -1;
+    int meilleurDelai = std::numeric_limits<int>::max();
+    int meilleurScoreReserve = std::numeric_limits<int>::max();
+
+    for (int i = 0; i < quais.size(); ++i) {
+        const Quai& q = quais[i];
+        if (q.getEtat() == "Maintenance" || !q.peutAccueillirLongueur(longueur)) {
+            continue;
+        }
+
+        const int delaiDisponibilite = (q.getEtat() == "Disponible") ? 0 : estimateQuaiAvailabilityMinutes(q.getNumero());
+        const int ecartCapacite = q.getCapacite() - longueur;
+        const int score = (delaiDisponibilite * 1000) + (ecartCapacite * 100) + static_cast<int>(q.getTarif() * 10.0);
+
+        if (score < meilleurScoreReserve) {
+            meilleurScoreReserve = score;
+            meilleurDelai = delaiDisponibilite;
+            meilleurQuaiReserve = i;
+        }
+    }
+
+    if (meilleurQuaiReserve < 0) {
+        explication = QString("Aucun quai actuel ou futur n'est compatible avec un bateau de %1 m.")
+                          .arg(longueur);
+        return false;
+    }
+
+    quaiChoisi = quais[meilleurQuaiReserve];
+    explication = QString("Temps estimé du bateau : %1 min. Aucun quai n'est libre, donc le quai %2 est réservé en second choix avec une disponibilité estimée dans %3 min.")
                       .arg(tempsEstime)
                       .arg(quaiChoisi.getNumero())
-                      .arg(quaiChoisi.getCapacite())
-                      .arg(longueur);
+                      .arg(meilleurDelai);
     return true;
 }
 
@@ -1171,12 +1230,20 @@ void QuaisWindow::onAddQuai()
 
 void QuaisWindow::onAutoAssignBoat()
 {
+    const bool hasAvailableQuai = std::any_of(quais.begin(), quais.end(), [](const Quai& q) {
+        return q.getEtat() == "Disponible";
+    });
+
     QSqlQuery boatQuery;
     if (!boatQuery.exec(
-            "SELECT IDBATEAU, NOMBATEAU, IMMATRICULATION, NVL(LONGEUR, 0) AS LONGEUR, NVL(CAPACITE, 0) AS CAPACITE "
+            "SELECT IDBATEAU, NOMBATEAU, IMMATRICULATION, NVL(LONGEUR, 0) AS LONGEUR, NVL(CAPACITE, 0) AS CAPACITE, ETAT "
             "FROM BATEAUX "
-            "WHERE ETAT IN ('Au port', 'En maintenance') "
-            "ORDER BY NOMBATEAU")) {
+            "WHERE ETAT IN ('Au port', 'En maintenance', 'En mer') "
+            "ORDER BY CASE "
+            "WHEN ETAT = 'Au port' THEN 1 "
+            "WHEN ETAT = 'En maintenance' THEN 2 "
+            "WHEN ETAT = 'En mer' THEN 3 "
+            "ELSE 4 END, NOMBATEAU")) {
         QMessageBox::critical(this, "Erreur", "Impossible de charger les bateaux :\n" + boatQuery.lastError().text());
         return;
     }
@@ -1189,11 +1256,15 @@ void QuaisWindow::onAutoAssignBoat()
         bateau.insert("immatriculation", boatQuery.value("IMMATRICULATION").toString());
         bateau.insert("longueur", boatQuery.value("LONGEUR").toInt());
         bateau.insert("capacite", boatQuery.value("CAPACITE").toInt());
+        bateau.insert("etat", boatQuery.value("ETAT").toString());
         bateaux.append(bateau);
     }
 
     if (bateaux.isEmpty()) {
-        QMessageBox::warning(this, "Aucun bateau", "Aucun bateau au port ou en maintenance n'est disponible pour une affectation automatique.");
+        QMessageBox::warning(
+            this,
+            "Aucun bateau",
+            "Aucun bateau n'est disponible pour une affectation automatique.");
         return;
     }
 
@@ -1241,10 +1312,11 @@ void QuaisWindow::onAutoAssignBoat()
         const QVariantMap bateau = boatCombo->currentData().toMap();
         const int longueur = bateau.value("longueur").toInt();
         const int estimation = Quai::calculerTempsEstime(longueur);
+        const QString etat = bateau.value("etat").toString();
 
         longueurLabel->setText(QString("Longueur du bateau : %1 m").arg(longueur));
         capaciteLabel->setText(QString("Longueur minimale requise du quai : %1 m").arg(longueur));
-        estimationLabel->setText(QString("Temps estimé de dockage : %1 minutes").arg(estimation));
+        estimationLabel->setText(QString("État : %1 | Temps estimé de dockage : %2 minutes").arg(etat, QString::number(estimation)));
     };
     refreshPreview();
     connect(boatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [refreshPreview](int) {
@@ -1277,6 +1349,14 @@ void QuaisWindow::onAutoAssignBoat()
         return;
     }
 
+    if (hasAvailableQuai && bateau.value("etat").toString() == "En mer") {
+        QMessageBox::information(
+            this,
+            "Second choix",
+            "Les bateaux en mer restent un second choix. Tant qu'un quai est libre, l'affectation automatique priorise les bateaux au port ou en maintenance.");
+        return;
+    }
+
     Quai quaiChoisi;
     int tempsEstime = 0;
     QString explication;
@@ -1303,17 +1383,17 @@ void QuaisWindow::onAutoAssignBoat()
     QSqlQuery updateBoatQuery;
     updateBoatQuery.prepare(
         "UPDATE BATEAUX "
-        "SET IDQUAI = (SELECT IDQUAI FROM QUAIS WHERE NUMERO = :numero), ETAT = :etat "
+        "SET IDQUAI = (SELECT IDQUAI FROM QUAIS WHERE NUMERO = :numero) "
         "WHERE IDBATEAU = :id");
     updateBoatQuery.bindValue(":numero", quaiChoisi.getNumero());
-    updateBoatQuery.bindValue(":etat", "Au port");
     updateBoatQuery.bindValue(":id", bateau.value("id").toString());
 
     QSqlQuery updateQuaiQuery;
     updateQuaiQuery.prepare("UPDATE QUAIS SET ETAT = 'Occupé' WHERE NUMERO = :numero");
     updateQuaiQuery.bindValue(":numero", quaiChoisi.getNumero());
 
-    if (!updateBoatQuery.exec() || !updateQuaiQuery.exec()) {
+    const bool assignationImmediate = quaiChoisi.getEtat() == "Disponible";
+    if (!updateBoatQuery.exec() || (assignationImmediate && !updateQuaiQuery.exec())) {
         if (startedTransaction) db.rollback();
         QMessageBox::critical(this, "Erreur SQL", updateBoatQuery.lastError().isValid() ? updateBoatQuery.lastError().text()
                                                                                          : updateQuaiQuery.lastError().text());
