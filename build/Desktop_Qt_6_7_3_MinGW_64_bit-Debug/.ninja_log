@@ -1,0 +1,10 @@
+# ninja log v6
+8	2075	7966586873081201	gestion_peche_autogen/timestamp	b2bd5c524317d5c0
+8	2075	7966586873081201	gestion_peche_autogen/mocs_compilation.cpp	b2bd5c524317d5c0
+8	2075	7966586873081201	C:/Users/yoser/OneDrive/Documents/GitHub/projetcpp2526-s2-2a14-Smart-fishing-Port-Management/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/gestion_peche_autogen/timestamp	b2bd5c524317d5c0
+8	2075	7966586873081201	C:/Users/yoser/OneDrive/Documents/GitHub/projetcpp2526-s2-2a14-Smart-fishing-Port-Management/build/Desktop_Qt_6_7_3_MinGW_64_bit-Debug/gestion_peche_autogen/mocs_compilation.cpp	b2bd5c524317d5c0
+2088	4434	7966586874342222	CMakeFiles/gestion_peche.dir/main.cpp.obj	7a2933d860933035
+2085	4594	7966586874312236	CMakeFiles/gestion_peche.dir/gestion_peche_autogen/mocs_compilation.cpp.obj	4deb8e2d89b5e6d3
+2099	4605	7966586874451291	CMakeFiles/gestion_peche.dir/Pechedialog.cpp.obj	9e9f65ccf5714f51
+2094	4931	7966586874411259	CMakeFiles/gestion_peche.dir/Pechewindow.cpp.obj	c64f51130f9658fb
+4931	5544	7966586902773735	gestion_peche.exe	ea421855077e9f2e
