@@ -419,7 +419,9 @@ void BateauDialog::setEmployeeList(const QList<QPair<QString, QString>>& employe
 
 void BateauDialog::setQuaiList(const QList<QPair<QString, QString>>& quais) {
     quaiCombo->clear();
+    quaiCombo->addItem("Aucun quai", "");
     for (const auto& pair : quais) quaiCombo->addItem(pair.second, pair.first);
+    quaiCombo->setCurrentIndex(0);
 }
 
 bool BateauDialog::validateInputs() {
