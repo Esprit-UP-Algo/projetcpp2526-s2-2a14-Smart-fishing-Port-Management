@@ -53,8 +53,6 @@
 #include "addquaidialog.h"
 #include "Bateauwindow.h"
 
-#include "addquaidialog.h"
-
 static QString boatDisplayLabel(const QVariantMap& bateauInfo)
 {
     const QString nom = bateauInfo.value("nom").toString();
@@ -1426,6 +1424,7 @@ void QuaisWindow::onAutoAssignBoat()
 
     loadQuaisFromDatabase();
     populateTable(searchInput->text());
+    BateauWindow::refreshAllTables();
 
     QMessageBox::information(
         this,
