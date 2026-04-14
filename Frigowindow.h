@@ -36,6 +36,7 @@ private slots:
     void onGeneratePDF();
     void onShowStatistics();
     void onSendSMS();
+    void onSimulateSensor();
 
 private:
     void setupUi();

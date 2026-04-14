@@ -16,6 +16,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include "FrigoStatisticsDialog.h"
+#include "temperaturealert.h"
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -269,16 +270,19 @@ QFrame* FrigoWindow::createHeader()
     QPushButton* smsBtn   = makeBtn("📱  Envoi SMS",     "#F59E0B", "#D97706");
     QPushButton* pdfBtn   = makeBtn("📄  Exporter PDF",  "#059669", "#047857");
     QPushButton* addBtn   = makeBtn("➕  Nouveau Frigo", "#2563EB", "#1D4ED8");
+    QPushButton* sensorBtn = makeBtn("🔔  Alerte Capteur", "#F43F5E", "#E11D48");
 
     connect(statsBtn, &QPushButton::clicked, this, &FrigoWindow::onShowStatistics);
     connect(smsBtn,   &QPushButton::clicked, this, &FrigoWindow::onSendSMS);
     connect(pdfBtn,   &QPushButton::clicked, this, &FrigoWindow::onGeneratePDF);
     connect(addBtn,   &QPushButton::clicked, this, &FrigoWindow::onAddFrigo);
+    connect(sensorBtn, &QPushButton::clicked, this, &FrigoWindow::onSimulateSensor);
 
     lay->addWidget(statsBtn);
     lay->addWidget(smsBtn);
     lay->addWidget(pdfBtn);
     lay->addWidget(addBtn);
+    lay->addWidget(sensorBtn);
     return hdr;
 }
 
@@ -831,6 +835,38 @@ void FrigoWindow::onDeleteFrigoById(const QString& id)
         } else {
             QMessageBox::critical(this, "Erreur", "La suppression a échoué. Vérifiez que ce frigo n'est pas référencé par des pêches.");
         }
+    }
+}
+
+void FrigoWindow::onSimulateSensor()
+{
+    int row = table->currentRow();
+    if (row < 0 && table->rowCount() > 0) {
+        row = 0; // Pick first if none selected
+    }
+    
+    if (row < 0) {
+        QMessageBox::warning(this, "Simulateur Arduino", "Aucun frigo disponible pour simuler l'alerte.");
+        return;
+    }
+
+    // Get data from table
+    QString ref = table->item(row, 0)->text();
+    QString tempStr = table->item(row, 5)->text().replace(" °C", "");
+    double threshold = tempStr.toDouble();
+    
+    // Simulate Arduino sensing a temperature drop
+    // We simulate a reading that is 5 degrees lower than the current setting
+    double currentSensed = threshold - 5.5;
+
+    // Logic: if current lower than threshold -> Alert
+    if (currentSensed < threshold) {
+        TemperatureAlert* alert = new TemperatureAlert(ref, threshold, currentSensed, this);
+        alert->exec();
+    } else {
+        QMessageBox::information(this, "Simulateur Arduino", 
+            QString("Capteur stable pour %1.\nTempérature: %2 °C (Seuil: %3 °C)")
+            .arg(ref).arg(currentSensed).arg(threshold));
     }
 }
 
