@@ -8,6 +8,7 @@
 #include <QList>
 #include <QComboBox>
 #include <QFrame>
+#include <QLabel>
 #include <QVariantMap>
 #include <QWidget>
 #include <QPainter>
@@ -137,6 +138,7 @@ public:
 private:
     // UI
     QTableWidget* quaiTable;
+    QLabel* warningsContentLabel;
     QLineEdit* searchInput;
     QComboBox* sortCombo;
 

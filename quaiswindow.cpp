@@ -86,6 +86,16 @@ static QString availabilityDeadlineSettingsKey(int quaiNumber)
     return QString("quais/availability_deadlines/%1").arg(quaiNumber);
 }
 
+static QString quaiSessionStartSettingsKey(int quaiNumber)
+{
+    return QString("quais/energy/session_start/%1").arg(quaiNumber);
+}
+
+static QString quaiSessionHistorySettingsKey(int quaiNumber)
+{
+    return QString("quais/energy/session_history/%1").arg(quaiNumber);
+}
+
 static QDateTime loadPersistedAvailabilityDeadline(int quaiNumber)
 {
     QSettings settings("PortFlow", "PortFlow");
@@ -101,6 +111,154 @@ static void persistAvailabilityDeadline(int quaiNumber, const QDateTime& deadlin
         settings.setValue(key, deadline);
     else
         settings.remove(key);
+}
+
+static QDateTime loadPersistedSessionStart(int quaiNumber)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    return settings.value(quaiSessionStartSettingsKey(quaiNumber)).toDateTime();
+}
+
+static void persistSessionStart(int quaiNumber, const QDateTime& start)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    const QString key = quaiSessionStartSettingsKey(quaiNumber);
+
+    if (start.isValid())
+        settings.setValue(key, start);
+    else
+        settings.remove(key);
+}
+
+static QStringList loadPersistedSessionHistory(int quaiNumber)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    return settings.value(quaiSessionHistorySettingsKey(quaiNumber)).toStringList();
+}
+
+static void appendPersistedSessionHistory(int quaiNumber, const QDateTime& start, const QDateTime& end)
+{
+    if (!start.isValid() || !end.isValid() || end <= start)
+        return;
+
+    QSettings settings("PortFlow", "PortFlow");
+    const QString key = quaiSessionHistorySettingsKey(quaiNumber);
+    QStringList history = settings.value(key).toStringList();
+    history.append(start.toString(Qt::ISODate) + "|" + end.toString(Qt::ISODate));
+
+    static constexpr int kMaxSavedSessions = 20;
+    while (history.size() > kMaxSavedSessions)
+        history.removeFirst();
+
+    settings.setValue(key, history);
+}
+
+struct DockUsageMonitoringAnalysis {
+    int quaiNumber = 0;
+    int sessionCount = 0;
+    qint64 totalOccupiedSeconds = 0;
+    qint64 averageOccupiedSeconds = 0;
+    qint64 longestOccupiedSeconds = 0;
+    double utilizationScore = 0.0;
+    double anomalyScore = 0.0;
+    QString statusLabel;
+    QString recommendation;
+    QString anomalySummary;
+    QColor accentColor;
+};
+
+static void accumulateDockUsageMonitoring(DockUsageMonitoringAnalysis& analysis,
+                                          const QDateTime& sessionStart, const QDateTime& sessionEnd)
+{
+    if (!sessionStart.isValid() || !sessionEnd.isValid() || sessionEnd <= sessionStart)
+        return;
+
+    const qint64 sessionSeconds = sessionStart.secsTo(sessionEnd);
+    analysis.totalOccupiedSeconds += sessionSeconds;
+    analysis.longestOccupiedSeconds = std::max(analysis.longestOccupiedSeconds, sessionSeconds);
+    ++analysis.sessionCount;
+}
+
+static DockUsageMonitoringAnalysis buildDockUsageMonitoringAnalysis(const Quai& quai, const QHash<int, QDateTime>& deadlines)
+{
+    DockUsageMonitoringAnalysis analysis;
+    analysis.quaiNumber = quai.getNumero();
+
+    const QStringList history = loadPersistedSessionHistory(quai.getNumero());
+    for (const QString& entry : history) {
+        const QStringList parts = entry.split('|');
+        if (parts.size() != 2)
+            continue;
+
+        const QDateTime start = QDateTime::fromString(parts[0], Qt::ISODate);
+        const QDateTime end = QDateTime::fromString(parts[1], Qt::ISODate);
+        accumulateDockUsageMonitoring(analysis, start, end);
+    }
+
+    const QDateTime activeSessionStart = loadPersistedSessionStart(quai.getNumero());
+    if (activeSessionStart.isValid()) {
+        QDateTime sessionEnd = QDateTime::currentDateTime();
+        const auto deadlineIt = deadlines.constFind(quai.getNumero());
+        if (deadlineIt != deadlines.constEnd() && deadlineIt.value().isValid())
+            sessionEnd = std::min(sessionEnd, deadlineIt.value());
+
+        accumulateDockUsageMonitoring(analysis, activeSessionStart, sessionEnd);
+    }
+
+    if (analysis.sessionCount > 0)
+        analysis.averageOccupiedSeconds = analysis.totalOccupiedSeconds / analysis.sessionCount;
+
+    const double averageHours = analysis.averageOccupiedSeconds / 3600.0;
+    const double longestHours = analysis.longestOccupiedSeconds / 3600.0;
+    const bool underUtilized = (analysis.sessionCount <= 1 && averageHours < 1.5)
+                               || (analysis.sessionCount <= 2 && averageHours < 1.0);
+    const bool overloadPattern = (analysis.sessionCount >= 4 && averageHours > 3.5)
+                                 || longestHours > 8.0;
+    const bool unjustifiedOccupation = isOccupiedState(quai.getEtat()) && longestHours > 6.0;
+
+    analysis.utilizationScore = std::clamp((analysis.sessionCount * 18.0) + (averageHours * 12.0), 0.0, 100.0);
+    if (underUtilized)
+        analysis.anomalyScore += 38.0;
+    if (overloadPattern)
+        analysis.anomalyScore += 34.0;
+    if (unjustifiedOccupation)
+        analysis.anomalyScore += 42.0;
+    analysis.anomalyScore = std::clamp(analysis.anomalyScore, 0.0, 100.0);
+
+    QStringList anomalies;
+    if (underUtilized)
+        anomalies << "Sous-utilisation prolongee";
+    if (overloadPattern)
+        anomalies << "Surcharge frequente";
+    if (unjustifiedOccupation)
+        anomalies << "Occupation incoherente";
+    if (anomalies.isEmpty())
+        anomalies << "Aucune anomalie majeure";
+    analysis.anomalySummary = anomalies.join(" | ");
+
+    if (analysis.anomalyScore >= 65.0) {
+        analysis.statusLabel = "Alerte critique";
+        analysis.recommendation = "Reaffecter l'activite et verifier la logique d'occupation.";
+        analysis.accentColor = QColor("#DC2626");
+    } else if (analysis.anomalyScore >= 30.0) {
+        analysis.statusLabel = "A surveiller";
+        analysis.recommendation = "Surveiller la repartition et reduire les anomalies d'usage.";
+        analysis.accentColor = QColor("#D97706");
+    } else {
+        analysis.statusLabel = "Utilisation stable";
+        analysis.recommendation = "Performance operationnelle coherente.";
+        analysis.accentColor = QColor("#059669");
+    }
+
+    return analysis;
+}
+
+static QString formatDurationLabel(qint64 totalSeconds)
+{
+    const qint64 safeSeconds = std::max<qint64>(0, totalSeconds);
+    const qint64 hours = safeSeconds / 3600;
+    const qint64 minutes = (safeSeconds % 3600) / 60;
+    return QString("%1 h %2 min").arg(hours).arg(minutes, 2, 10, QChar('0'));
 }
 
 class DialogMoveFilter : public QObject
@@ -338,7 +496,7 @@ public:
     ContractDialog(const Quai& quai, QWidget* parent = nullptr)
         : QDialog(parent), m_quai(quai)
     {
-        setFixedSize(560, 620);
+        setFixedSize(640, 720);
         setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
         setAttribute(Qt::WA_TranslucentBackground);
 
@@ -348,7 +506,7 @@ public:
         shadow->setColor(QColor(0, 0, 0, 80));
 
         QWidget* container = new QWidget(this);
-        container->setGeometry(10, 10, 540, 600);
+        container->setGeometry(10, 10, 620, 700);
         container->setGraphicsEffect(shadow);
         container->setStyleSheet("QWidget { background: white; border-radius: 20px; }");
 
@@ -389,7 +547,7 @@ public:
 
         // Quai preview card
         QFrame* previewCard = new QFrame();
-        previewCard->setFixedHeight(72);
+        previewCard->setFixedHeight(88);
         previewCard->setStyleSheet(R"(
             QFrame {
                 background: #F0FDF4;
@@ -404,6 +562,8 @@ public:
         QLabel* iconLbl = new QLabel("⚓");
         iconLbl->setFont(QFont("Segoe UI", 22));
         iconLbl->setStyleSheet("color: #059669; background: transparent; border: none;");
+        iconLbl->setAlignment(Qt::AlignCenter);
+        iconLbl->setFixedSize(42, 42);
         previewLay->addWidget(iconLbl);
 
         QVBoxLayout* infoLay = new QVBoxLayout();
@@ -412,6 +572,7 @@ public:
         QLabel* titlePreview = new QLabel(quai.getNomQuai() + "  —  " + quai.getReference());
         titlePreview->setFont(QFont("Segoe UI", 11, QFont::Bold));
         titlePreview->setStyleSheet("color: #065F46; background: transparent; border: none;");
+        titlePreview->setWordWrap(true);
 
         QLabel* detailsPreview = new QLabel(
             QString("Capacité: %1  |  Tarif: %2 DT/j")
@@ -420,6 +581,7 @@ public:
             );
         detailsPreview->setFont(QFont("Segoe UI", 9));
         detailsPreview->setStyleSheet("color: #6b7280; background: transparent; border: none;");
+        detailsPreview->setWordWrap(true);
 
         infoLay->addWidget(titlePreview);
         infoLay->addWidget(detailsPreview);
@@ -430,8 +592,8 @@ public:
         QWidget* formArea = new QWidget();
         formArea->setStyleSheet("background: transparent;");
         QVBoxLayout* formLay = new QVBoxLayout(formArea);
-        formLay->setContentsMargins(20, 14, 20, 8);
-        formLay->setSpacing(6);
+        formLay->setContentsMargins(24, 18, 24, 10);
+        formLay->setSpacing(8);
 
         auto addField = [&](const QString& labelText, QLineEdit*& fieldPtr,
                             const QString& placeholder, QLabel*& errLblPtr)
@@ -544,7 +706,7 @@ public:
 
         // Buttons
         QHBoxLayout* btnLay = new QHBoxLayout();
-        btnLay->setContentsMargins(20, 8, 20, 20);
+        btnLay->setContentsMargins(24, 10, 24, 24);
         btnLay->setSpacing(12);
 
         QPushButton* cancelBtn = new QPushButton("Annuler");
@@ -990,6 +1152,26 @@ QFrame* QuaisWindow::createTableCard()
 
     quaiTable = new QTableWidget();
     containerLayout->addWidget(quaiTable);
+
+    QWidget* warningsPanel = new QWidget();
+    warningsPanel->setStyleSheet(R"(
+        QWidget { background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 16px; }
+        QLabel { color: #1F2937; font-family: 'Segoe UI'; }
+    )");
+    QVBoxLayout* warningsLayout = new QVBoxLayout(warningsPanel);
+    warningsLayout->setContentsMargins(16, 16, 16, 16);
+    warningsLayout->setSpacing(6);
+
+    QLabel* warningsHeader = new QLabel("Warnings");
+    warningsHeader->setFont(QFont("Segoe UI", 11, QFont::DemiBold));
+    warningsLayout->addWidget(warningsHeader);
+
+    warningsContentLabel = new QLabel("No warnings for the moment");
+    warningsContentLabel->setWordWrap(true);
+    warningsContentLabel->setFont(QFont("Segoe UI", 10));
+    warningsLayout->addWidget(warningsContentLabel);
+
+    containerLayout->addWidget(warningsPanel);
     layout->addWidget(whiteContainer);
 
     return card;
@@ -1055,12 +1237,20 @@ void QuaisWindow::loadQuaisFromDatabase()
         quais.append(q);
 
         if (isOccupiedState(etat)) {
+            if (!loadPersistedSessionStart(numero).isValid()) {
+                QDateTime sessionStart = QDateTime::currentDateTime().addSecs(-estimateCountdownSeconds(q));
+                const QDateTime persistedDeadline = loadPersistedAvailabilityDeadline(numero);
+                if (persistedDeadline.isValid())
+                    sessionStart = persistedDeadline.addSecs(-estimateCountdownSeconds(q));
+                persistSessionStart(numero, sessionStart);
+            }
             ensureAvailabilityTimerForQuai(q);
             if (remainingAvailabilitySeconds(numero) <= 0)
                 expiredQuais.append(numero);
         } else {
             quaiAvailabilityDeadlines.remove(numero);
             persistAvailabilityDeadline(numero, QDateTime());
+            persistSessionStart(numero, QDateTime());
         }
     }
 
@@ -1077,6 +1267,7 @@ void QuaisWindow::loadQuaisFromDatabase()
 
             quaiAvailabilityDeadlines.remove(numero);
             persistAvailabilityDeadline(numero, QDateTime());
+            persistSessionStart(numero, QDateTime());
         }
 
         loadQuaisFromDatabase();
@@ -1086,6 +1277,7 @@ void QuaisWindow::loadQuaisFromDatabase()
 void QuaisWindow::populateTable(const QString& filterText)
 {
     quaiTable->setRowCount(0);
+    QStringList warningEntries;
 
     for (int i = 0; i < quais.size(); ++i) {
         const Quai& q = quais[i];
@@ -1108,6 +1300,16 @@ void QuaisWindow::populateTable(const QString& filterText)
         numeroItem->setForeground(QBrush(QColor("#5D9CEC")));
         numeroItem->setFont(QFont("Segoe UI", 11, QFont::Bold));
         numeroItem->setData(Qt::UserRole, q.getNumero());
+        const DockUsageMonitoringAnalysis monitoringAnalysis = buildDockUsageMonitoringAnalysis(q, quaiAvailabilityDeadlines);
+        if (monitoringAnalysis.anomalyScore >= 65.0) {
+            numeroItem->setBackground(QColor("#FEF2F2"));
+            numeroItem->setToolTip(QString("Monitoring intelligent: %1")
+                                       .arg(monitoringAnalysis.anomalySummary));
+        } else if (monitoringAnalysis.anomalyScore >= 30.0) {
+            numeroItem->setBackground(QColor("#FFF7ED"));
+            numeroItem->setToolTip(QString("Monitoring intelligent: %1")
+                                       .arg(monitoringAnalysis.anomalySummary));
+        }
         quaiTable->setItem(row, 0, numeroItem);
 
         quaiTable->setItem(row, 1, new QTableWidgetItem(q.getNomQuai()));
@@ -1118,7 +1320,15 @@ void QuaisWindow::populateTable(const QString& filterText)
                                        QString("%1 DT / %2").arg(q.getTarif()).arg(q.getDureeLocation())
                                        ));
         quaiTable->setCellWidget(row, 6, createActionButtons(i));
+
+        if (monitoringAnalysis.anomalyScore >= 30.0)
+            warningEntries << QString("Quai %1 : %2").arg(q.getNumero()).arg(monitoringAnalysis.anomalySummary);
     }
+
+    if (warningEntries.isEmpty())
+        warningsContentLabel->setText("No warnings for the moment");
+    else
+        warningsContentLabel->setText(warningEntries.join("\n"));
 }
 
 QWidget* QuaisWindow::createStatusBadge(const QString& status)
@@ -1194,6 +1404,9 @@ int QuaisWindow::findQuaiIndexByNumero(int numero) const
 
 void QuaisWindow::ensureAvailabilityTimerForQuai(const Quai& quai)
 {
+    if (!loadPersistedSessionStart(quai.getNumero()).isValid())
+        persistSessionStart(quai.getNumero(), QDateTime::currentDateTime());
+
     if (quaiAvailabilityDeadlines.contains(quai.getNumero()))
         return;
 
@@ -1237,8 +1450,12 @@ void QuaisWindow::markQuaiAsAvailable(int numero, bool showNotification)
         return;
     }
 
+    const QDateTime sessionStart = loadPersistedSessionStart(numero);
+    const QDateTime sessionEnd = QDateTime::currentDateTime();
+    appendPersistedSessionHistory(numero, sessionStart, sessionEnd);
     quaiAvailabilityDeadlines.remove(numero);
     persistAvailabilityDeadline(numero, QDateTime());
+    persistSessionStart(numero, QDateTime());
 
     loadQuaisFromDatabase();
     populateTable(searchInput->text());
@@ -1259,7 +1476,7 @@ void QuaisWindow::showAvailabilityCountdownPopup(int numero)
     const Quai& quai = quais[quaiIndex];
     QDialog dialog(this);
     dialog.setWindowTitle("Disponibilite du quai");
-    dialog.setFixedSize(500, 320);
+    dialog.setFixedSize(560, 360);
     dialog.setModal(true);
     dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     dialog.setAttribute(Qt::WA_TranslucentBackground);
@@ -1270,7 +1487,7 @@ void QuaisWindow::showAvailabilityCountdownPopup(int numero)
     shadow->setColor(QColor(0, 0, 0, 80));
 
     QWidget* container = new QWidget(&dialog);
-    container->setGeometry(10, 10, 480, 300);
+    container->setGeometry(10, 10, 540, 340);
     container->setGraphicsEffect(shadow);
     container->setStyleSheet("QWidget { background: white; border-radius: 24px; }");
 
@@ -1321,10 +1538,10 @@ void QuaisWindow::showAvailabilityCountdownPopup(int numero)
 
     QLabel* countdown = new QLabel(body);
     countdown->setAlignment(Qt::AlignCenter);
-    countdown->setMinimumHeight(96);
+    countdown->setMinimumHeight(116);
     countdown->setStyleSheet(
         "QLabel { background: #EFF6FF; color: #1D4ED8; border: 2px solid #BFDBFE; "
-        "border-radius: 18px; font: 700 30px 'Segoe UI'; padding: 10px 0; }"
+        "border-radius: 18px; font: 700 28px 'Consolas'; padding: 14px 10px; }"
         );
     bodyLay->addWidget(countdown);
 
@@ -1785,7 +2002,8 @@ void QuaisWindow::onAutoAssignBoat()
         QLabel* icon = new QLabel(iconText);
         icon->setFont(QFont("Segoe UI", 14));
         icon->setStyleSheet("background: transparent;");
-        icon->setFixedWidth(26);
+        icon->setFixedSize(30, 30);
+        icon->setAlignment(Qt::AlignCenter);
 
         QLabel* lbl = new QLabel(labelText);
         lbl->setFont(QFont("Segoe UI", 9));
@@ -2393,10 +2611,21 @@ void QuaisWindow::afficherStatistiques()
     const double occupancyRate  = (totalBerths > 0) ? (double)occupiedBerths / totalBerths * 100.0 : 0.0;
     const double averageRevenue = (totalQuais  > 0) ? totalRevenue / totalQuais : 0.0;
     const double maxQuais       = std::max(totalQuais, 1);
+    QList<DockUsageMonitoringAnalysis> monitoringAnalyses;
+    int alertDockCount = 0;
+    for (const Quai& q : quais) {
+        const DockUsageMonitoringAnalysis analysis = buildDockUsageMonitoringAnalysis(q, quaiAvailabilityDeadlines);
+        if (analysis.anomalyScore >= 30.0)
+            ++alertDockCount;
+        monitoringAnalyses.append(analysis);
+    }
+    std::sort(monitoringAnalyses.begin(), monitoringAnalyses.end(), [](const DockUsageMonitoringAnalysis& a, const DockUsageMonitoringAnalysis& b) {
+        return a.anomalyScore > b.anomalyScore;
+    });
 
     QDialog* dlg = new QDialog(this);
     dlg->setWindowTitle("Statistiques des Quais");
-    dlg->setFixedSize(720, 520);
+    dlg->setFixedSize(920, 760);
     dlg->setModal(true);
     dlg->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     dlg->setAttribute(Qt::WA_TranslucentBackground);
@@ -2407,7 +2636,7 @@ void QuaisWindow::afficherStatistiques()
     shadow->setColor(QColor(0, 0, 0, 80));
 
     QWidget* container = new QWidget(dlg);
-    container->setGeometry(0, 0, 720, 520);
+    container->setGeometry(0, 0, 920, 760);
     container->setGraphicsEffect(shadow);
     container->setStyleSheet("QWidget { background: white; border-radius: 24px; }");
 
@@ -2515,7 +2744,90 @@ void QuaisWindow::afficherStatistiques()
                                  QString::number(maintenanceBerths),
                                  "En Maintenance", "#FEF2F2", "#991B1B"));
 
+    cardsLay->addWidget(makeCard("⚡",
+                                 QString::number(alertDockCount),
+                                 "Quais a surveiller", "#FFF7ED", "#C2410C"));
+
     mainLay->addWidget(cardsFrame);
+
+    QFrame* analyzerFrame = new QFrame();
+    analyzerFrame->setStyleSheet("background: transparent;");
+    QVBoxLayout* analyzerLay = new QVBoxLayout(analyzerFrame);
+    analyzerLay->setContentsMargins(24, 8, 24, 0);
+    analyzerLay->setSpacing(10);
+
+    QLabel* analyzerTitle = new QLabel("Module de Monitoring Intelligent des Quais");
+    analyzerTitle->setFont(QFont("Segoe UI", 13, QFont::Bold));
+    analyzerTitle->setStyleSheet("color: #1f2937; background: transparent;");
+    analyzerLay->addWidget(analyzerTitle);
+
+    QLabel* analyzerSubtitle = new QLabel(
+        QString("Analyse continue de l'occupation pour detecter la sous-utilisation, la surcharge frequente "
+                "et les occupations incoherentes. %1 quai(x) exigent une vigilance particuliere.")
+            .arg(alertDockCount));
+    analyzerSubtitle->setFont(QFont("Segoe UI", 9));
+    analyzerSubtitle->setStyleSheet("color: #6b7280; background: transparent;");
+    analyzerSubtitle->setWordWrap(true);
+    analyzerLay->addWidget(analyzerSubtitle);
+
+    QTableWidget* analyzerTable = new QTableWidget(monitoringAnalyses.size(), 6, analyzerFrame);
+    analyzerTable->setHorizontalHeaderLabels({
+        "Quai", "Sessions", "Occupation moy.", "Occupation max.", "Score anomalie", "Diagnostic"
+    });
+    analyzerTable->horizontalHeader()->setStretchLastSection(true);
+    analyzerTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    analyzerTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
+    analyzerTable->verticalHeader()->setVisible(false);
+    analyzerTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    analyzerTable->setSelectionMode(QAbstractItemView::NoSelection);
+    analyzerTable->setFocusPolicy(Qt::NoFocus);
+    analyzerTable->setAlternatingRowColors(true);
+    analyzerTable->setMinimumHeight(250);
+    analyzerTable->setStyleSheet(R"(
+        QTableWidget {
+            background: #F9FAFB;
+            border: 1px solid #E5E7EB;
+            border-radius: 16px;
+            alternate-background-color: #F3F4F6;
+            gridline-color: #E5E7EB;
+            color: #1F2937;
+        }
+        QHeaderView::section {
+            background: #EFF6FF;
+            color: #1D4ED8;
+            font-weight: bold;
+            border: none;
+            border-bottom: 1px solid #DBEAFE;
+            padding: 8px;
+        }
+    )");
+
+    for (int row = 0; row < monitoringAnalyses.size(); ++row) {
+        const DockUsageMonitoringAnalysis& analysis = monitoringAnalyses[row];
+        const QColor tint = analysis.accentColor.lighter(185);
+
+        auto makeAnalyzerItem = [&](const QString& text, const QString& tooltip = QString()) {
+            QTableWidgetItem* item = new QTableWidgetItem(text);
+            item->setBackground(tint);
+            if (!tooltip.isEmpty())
+                item->setToolTip(tooltip);
+            return item;
+        };
+
+        analyzerTable->setItem(row, 0, makeAnalyzerItem(QString("Quai %1").arg(analysis.quaiNumber)));
+        analyzerTable->setItem(row, 1, makeAnalyzerItem(QString::number(analysis.sessionCount)));
+        analyzerTable->setItem(row, 2, makeAnalyzerItem(formatDurationLabel(analysis.averageOccupiedSeconds)));
+        analyzerTable->setItem(row, 3, makeAnalyzerItem(formatDurationLabel(analysis.longestOccupiedSeconds)));
+        analyzerTable->setItem(row, 4, makeAnalyzerItem(QString("%1%").arg(analysis.anomalyScore, 0, 'f', 1)));
+        analyzerTable->setItem(row, 5, makeAnalyzerItem(
+            QString("%1  |  %2  |  %3").arg(analysis.statusLabel, analysis.anomalySummary, analysis.recommendation),
+            "Evaluation basee sur les donnees d'usage du quai."
+        ));
+        analyzerTable->setRowHeight(row, 40);
+    }
+
+    analyzerLay->addWidget(analyzerTable);
+    mainLay->addWidget(analyzerFrame);
     mainLay->addStretch();
 
     QHBoxLayout* bottomLay = new QHBoxLayout();
@@ -2603,6 +2915,9 @@ void QuaisWindow::onGenerateContract(int row)
         }
     }
 }
+
+
+
 
 
 
