@@ -11,9 +11,75 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDialog>
+#include <QMouseEvent>
+#include <QEvent>
 #include <QRandomGenerator>
 #include "quai.h"
 #include "connection.h"
+
+class AddQuaiDialogMoveFilter : public QObject
+{
+public:
+    AddQuaiDialogMoveFilter(QDialog* dialog, QObject* parent = nullptr)
+        : QObject(parent), m_dialog(dialog)
+    {
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        Q_UNUSED(watched);
+
+        if (!m_dialog)
+            return QObject::eventFilter(watched, event);
+
+        switch (event->type()) {
+        case QEvent::MouseButtonPress: {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                m_dragging = true;
+                m_dragOffset = mouseEvent->globalPosition().toPoint() - m_dialog->frameGeometry().topLeft();
+                return true;
+            }
+            break;
+        }
+        case QEvent::MouseMove: {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (m_dragging && (mouseEvent->buttons() & Qt::LeftButton)) {
+                m_dialog->move(mouseEvent->globalPosition().toPoint() - m_dragOffset);
+                return true;
+            }
+            break;
+        }
+        case QEvent::MouseButtonRelease: {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                m_dragging = false;
+                return true;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QDialog* m_dialog = nullptr;
+    bool m_dragging = false;
+    QPoint m_dragOffset;
+};
+
+static void makeAddQuaiDialogMovable(QDialog* dialog, QWidget* dragHandle)
+{
+    if (!dialog || !dragHandle)
+        return;
+
+    dragHandle->setCursor(Qt::OpenHandCursor);
+    dragHandle->installEventFilter(new AddQuaiDialogMoveFilter(dialog, dragHandle));
+}
 
 static int generateUniqueQuaiNumero()
 {
@@ -143,6 +209,7 @@ AddQuaiDialog::AddQuaiDialog(QWidget *parent)
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
     headerLay->addWidget(closeBtn);
     mainLay->addWidget(header);
+    makeAddQuaiDialogMovable(this, header);
 
     // --- Shared styles ---
     QString fieldStyle = R"(

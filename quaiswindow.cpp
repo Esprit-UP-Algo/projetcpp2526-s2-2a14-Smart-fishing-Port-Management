@@ -40,6 +40,7 @@
 #include <QVariantMap>
 #include <QDateEdit>
 #include <QPageSize>
+#include <QSettings>
 #include <QtSql/QSqlError>
 #include <QtSql/QSqlDatabase>
 #include <QtSql/QSqlRecord>
@@ -47,6 +48,8 @@
 #include <QRegularExpressionValidator>
 #include <QIntValidator>
 #include <QDoubleValidator>
+#include <QMouseEvent>
+#include <QEvent>
 
 #include "addquaidialog.h"
 #include "Bateauwindow.h"
@@ -58,6 +61,110 @@ static QString boatDisplayLabel(const QVariantMap& bateauInfo)
     if (immatriculation.isEmpty())
         return nom;
     return QString("%1 (%2)").arg(nom, immatriculation);
+}
+
+static bool isOccupiedState(const QString& etat)
+{
+    return etat.contains("occup", Qt::CaseInsensitive);
+}
+
+static QString formatRemainingTime(int totalSeconds)
+{
+    const int safeSeconds = std::max(0, totalSeconds);
+    const int hours = safeSeconds / 3600;
+    const int minutes = (safeSeconds % 3600) / 60;
+    const int seconds = safeSeconds % 60;
+
+    return QString("%1:%2:%3")
+        .arg(hours, 2, 10, QChar('0'))
+        .arg(minutes, 2, 10, QChar('0'))
+        .arg(seconds, 2, 10, QChar('0'));
+}
+
+static QString availabilityDeadlineSettingsKey(int quaiNumber)
+{
+    return QString("quais/availability_deadlines/%1").arg(quaiNumber);
+}
+
+static QDateTime loadPersistedAvailabilityDeadline(int quaiNumber)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    return settings.value(availabilityDeadlineSettingsKey(quaiNumber)).toDateTime();
+}
+
+static void persistAvailabilityDeadline(int quaiNumber, const QDateTime& deadline)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    const QString key = availabilityDeadlineSettingsKey(quaiNumber);
+
+    if (deadline.isValid())
+        settings.setValue(key, deadline);
+    else
+        settings.remove(key);
+}
+
+class DialogMoveFilter : public QObject
+{
+public:
+    DialogMoveFilter(QDialog* dialog, QObject* parent = nullptr)
+        : QObject(parent), m_dialog(dialog)
+    {
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        Q_UNUSED(watched);
+
+        if (!m_dialog)
+            return QObject::eventFilter(watched, event);
+
+        switch (event->type()) {
+        case QEvent::MouseButtonPress: {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                m_dragging = true;
+                m_dragOffset = mouseEvent->globalPosition().toPoint() - m_dialog->frameGeometry().topLeft();
+                return true;
+            }
+            break;
+        }
+        case QEvent::MouseMove: {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (m_dragging && (mouseEvent->buttons() & Qt::LeftButton)) {
+                m_dialog->move(mouseEvent->globalPosition().toPoint() - m_dragOffset);
+                return true;
+            }
+            break;
+        }
+        case QEvent::MouseButtonRelease: {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                m_dragging = false;
+                return true;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QDialog* m_dialog = nullptr;
+    bool m_dragging = false;
+    QPoint m_dragOffset;
+};
+
+static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle)
+{
+    if (!dialog || !dragHandle)
+        return;
+
+    dragHandle->setCursor(Qt::OpenHandCursor);
+    dragHandle->installEventFilter(new DialogMoveFilter(dialog, dragHandle));
 }
 
 static int estimateQuaiAvailabilityMinutes(int quaiNumber)
@@ -278,6 +385,7 @@ public:
         connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
         headerLay->addWidget(closeBtn);
         mainLay->addWidget(header);
+        makeDialogMovable(this, header);
 
         // Quai preview card
         QFrame* previewCard = new QFrame();
@@ -491,6 +599,10 @@ QuaisWindow::QuaisWindow(QWidget *parent) : QMainWindow(parent)
 
     setupUI();
     setupQuaiTable();
+    availabilityRefreshTimer = new QTimer(this);
+    availabilityRefreshTimer->setInterval(1000);
+    connect(availabilityRefreshTimer, &QTimer::timeout, this, &QuaisWindow::refreshAvailabilityCountdowns);
+    availabilityRefreshTimer->start();
     loadQuaisFromDatabase();
     populateTable();
 }
@@ -712,6 +824,7 @@ QFrame* QuaisWindow::createHeader()
         connect(closeBtn, &QPushButton::clicked, dlg, &QDialog::reject);
         headerLay->addWidget(closeBtn);
         mainLay->addWidget(header);
+        makeDialogMovable(dlg, header);
 
         QWidget* body = new QWidget();
         body->setStyleSheet("background: transparent;");
@@ -913,11 +1026,13 @@ void QuaisWindow::setupQuaiTable()
     quaiTable->setColumnWidth(3, 160);
     quaiTable->setColumnWidth(4, 130);
     quaiTable->setColumnWidth(5, 150);
+    connect(quaiTable, &QTableWidget::cellClicked, this, &QuaisWindow::onQuaiCellClicked);
 }
 
 void QuaisWindow::loadQuaisFromDatabase()
 {
     quais.clear();
+    QList<int> expiredQuais;
 
     QSqlQuery query;
     if (!query.exec("SELECT NUMERO, CAPACITE, LOCATION, ETAT, TARIF_LOCATION, DUREE_LOCATION "
@@ -938,6 +1053,33 @@ void QuaisWindow::loadQuaisFromDatabase()
         Quai q(numero, capacite, etat, tarifLocation, location, dureeLocation);
         q.setOrdreNom(ordreNom++);
         quais.append(q);
+
+        if (isOccupiedState(etat)) {
+            ensureAvailabilityTimerForQuai(q);
+            if (remainingAvailabilitySeconds(numero) <= 0)
+                expiredQuais.append(numero);
+        } else {
+            quaiAvailabilityDeadlines.remove(numero);
+            persistAvailabilityDeadline(numero, QDateTime());
+        }
+    }
+
+    if (!expiredQuais.isEmpty()) {
+        for (int numero : expiredQuais) {
+            QSqlQuery updateQuery;
+            updateQuery.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE NUMERO = :numero");
+            updateQuery.bindValue(":numero", numero);
+
+            if (!updateQuery.exec()) {
+                qDebug() << "Failed to free expired quai" << numero << ":" << updateQuery.lastError().text();
+                continue;
+            }
+
+            quaiAvailabilityDeadlines.remove(numero);
+            persistAvailabilityDeadline(numero, QDateTime());
+        }
+
+        loadQuaisFromDatabase();
     }
 }
 
@@ -965,6 +1107,7 @@ void QuaisWindow::populateTable(const QString& filterText)
         QTableWidgetItem* numeroItem = new QTableWidgetItem(q.getReference());
         numeroItem->setForeground(QBrush(QColor("#5D9CEC")));
         numeroItem->setFont(QFont("Segoe UI", 11, QFont::Bold));
+        numeroItem->setData(Qt::UserRole, q.getNumero());
         quaiTable->setItem(row, 0, numeroItem);
 
         quaiTable->setItem(row, 1, new QTableWidgetItem(q.getNomQuai()));
@@ -992,7 +1135,7 @@ QWidget* QuaisWindow::createStatusBadge(const QString& status)
 
     if (status == "Disponible")
         badge->setStyleSheet("QLabel { background-color: #D1FAE5; color: #065F46; border-radius: 8px; padding: 6px 16px; }");
-    else if (status == "Occupé")
+    else if (isOccupiedState(status))
         badge->setStyleSheet("QLabel { background-color: #FEF3C7; color: #92400E; border-radius: 8px; padding: 6px 16px; }");
     else
         badge->setStyleSheet("QLabel { background-color: #FEE2E2; color: #991B1B; border-radius: 8px; padding: 6px 16px; }");
@@ -1038,6 +1181,238 @@ QWidget* QuaisWindow::createActionButtons(int row)
     layout->addWidget(contractBtn);
 
     return widget;
+}
+
+int QuaisWindow::findQuaiIndexByNumero(int numero) const
+{
+    for (int i = 0; i < quais.size(); ++i) {
+        if (quais[i].getNumero() == numero)
+            return i;
+    }
+    return -1;
+}
+
+void QuaisWindow::ensureAvailabilityTimerForQuai(const Quai& quai)
+{
+    if (quaiAvailabilityDeadlines.contains(quai.getNumero()))
+        return;
+
+    QDateTime deadline = loadPersistedAvailabilityDeadline(quai.getNumero());
+    if (!deadline.isValid()) {
+        deadline = QDateTime::currentDateTime().addSecs(estimateCountdownSeconds(quai));
+        persistAvailabilityDeadline(quai.getNumero(), deadline);
+    }
+
+    quaiAvailabilityDeadlines.insert(quai.getNumero(), deadline);
+}
+
+int QuaisWindow::estimateCountdownSeconds(const Quai& quai) const
+{
+    int minutes = estimateQuaiAvailabilityMinutes(quai.getNumero());
+    if (minutes <= 0)
+        minutes = Quai::calculerTempsEstime(quai.getCapacite());
+    if (minutes <= 0)
+        minutes = 60;
+    return std::max(60, minutes * 60);
+}
+
+int QuaisWindow::remainingAvailabilitySeconds(int numero) const
+{
+    const auto it = quaiAvailabilityDeadlines.constFind(numero);
+    if (it == quaiAvailabilityDeadlines.constEnd())
+        return 0;
+
+    const qint64 remaining = QDateTime::currentDateTime().secsTo(it.value());
+    return static_cast<int>(std::max<qint64>(0, remaining));
+}
+
+void QuaisWindow::markQuaiAsAvailable(int numero, bool showNotification)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE NUMERO = :numero");
+    query.bindValue(":numero", numero);
+
+    if (!query.exec()) {
+        qDebug() << "Failed to free quai" << numero << ":" << query.lastError().text();
+        return;
+    }
+
+    quaiAvailabilityDeadlines.remove(numero);
+    persistAvailabilityDeadline(numero, QDateTime());
+
+    loadQuaisFromDatabase();
+    populateTable(searchInput->text());
+
+    if (showNotification) {
+        QMessageBox::information(this,
+                                 "Quai disponible",
+                                 QString("Le quai %1 est de nouveau disponible.").arg(numero));
+    }
+}
+
+void QuaisWindow::showAvailabilityCountdownPopup(int numero)
+{
+    const int quaiIndex = findQuaiIndexByNumero(numero);
+    if (quaiIndex < 0)
+        return;
+
+    const Quai& quai = quais[quaiIndex];
+    QDialog dialog(this);
+    dialog.setWindowTitle("Disponibilite du quai");
+    dialog.setFixedSize(500, 320);
+    dialog.setModal(true);
+    dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    dialog.setAttribute(Qt::WA_TranslucentBackground);
+
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(&dialog);
+    shadow->setBlurRadius(40);
+    shadow->setOffset(0, 8);
+    shadow->setColor(QColor(0, 0, 0, 80));
+
+    QWidget* container = new QWidget(&dialog);
+    container->setGeometry(10, 10, 480, 300);
+    container->setGraphicsEffect(shadow);
+    container->setStyleSheet("QWidget { background: white; border-radius: 24px; }");
+
+    QVBoxLayout* layout = new QVBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    QFrame* headerBand = new QFrame();
+    headerBand->setFixedHeight(78);
+    headerBand->setStyleSheet(R"(
+        QFrame {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #2B5EA6, stop:1 #5D9CEC);
+            border-radius: 24px 24px 0 0;
+        }
+    )");
+    QHBoxLayout* headerLay = new QHBoxLayout(headerBand);
+    headerLay->setContentsMargins(28, 0, 18, 0);
+
+    QLabel* title = new QLabel(QString("Timer du quai %1").arg(quai.getNumero()), headerBand);
+    title->setFont(QFont("Segoe UI", 16, QFont::Bold));
+    title->setStyleSheet("color: white; background: transparent;");
+    headerLay->addWidget(title, 1);
+
+    QPushButton* closeBtn = new QPushButton("X", headerBand);
+    closeBtn->setFixedSize(34, 34);
+    closeBtn->setCursor(Qt::PointingHandCursor);
+    closeBtn->setStyleSheet(R"(
+        QPushButton { background: rgba(255,255,255,0.2); color: white; border: none;
+                      border-radius: 17px; font-size: 13px; font-weight: bold; }
+        QPushButton:hover { background: rgba(255,255,255,0.4); }
+    )");
+    connect(closeBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+    headerLay->addWidget(closeBtn);
+    layout->addWidget(headerBand);
+    makeDialogMovable(&dialog, headerBand);
+
+    QWidget* body = new QWidget(container);
+    body->setStyleSheet("background: transparent;");
+    QVBoxLayout* bodyLay = new QVBoxLayout(body);
+    bodyLay->setContentsMargins(28, 22, 28, 0);
+    bodyLay->setSpacing(14);
+
+    QLabel* subtitle = new QLabel(body);
+    subtitle->setWordWrap(true);
+    subtitle->setStyleSheet("color: #64748b; font-size: 13px;");
+    bodyLay->addWidget(subtitle);
+
+    QLabel* countdown = new QLabel(body);
+    countdown->setAlignment(Qt::AlignCenter);
+    countdown->setMinimumHeight(96);
+    countdown->setStyleSheet(
+        "QLabel { background: #EFF6FF; color: #1D4ED8; border: 2px solid #BFDBFE; "
+        "border-radius: 18px; font: 700 30px 'Segoe UI'; padding: 10px 0; }"
+        );
+    bodyLay->addWidget(countdown);
+
+    QLabel* status = new QLabel(body);
+    status->setAlignment(Qt::AlignCenter);
+    status->setWordWrap(true);
+    status->setStyleSheet("color: #0f766e; font-size: 12px; background: #F8FAFC; border-radius: 12px; padding: 12px;");
+    bodyLay->addWidget(status);
+    layout->addWidget(body, 1);
+
+    QHBoxLayout* btnLay = new QHBoxLayout();
+    btnLay->setContentsMargins(28, 14, 28, 24);
+    btnLay->addStretch();
+
+    QPushButton* closeActionBtn = new QPushButton("Fermer", container);
+    closeActionBtn->setFixedHeight(42);
+    closeActionBtn->setMinimumWidth(110);
+    closeActionBtn->setFont(QFont("Segoe UI", 10, QFont::Medium));
+    closeActionBtn->setCursor(Qt::PointingHandCursor);
+    closeActionBtn->setStyleSheet(R"(
+        QPushButton { background: #F3F4F6; color: #374151; border: none;
+                      border-radius: 12px; padding: 0 18px; }
+        QPushButton:hover { background: #E5E7EB; }
+    )");
+    connect(closeActionBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+    btnLay->addWidget(closeActionBtn);
+    layout->addLayout(btnLay);
+
+    QTimer popupTimer(&dialog);
+    popupTimer.setInterval(1000);
+
+    auto refreshPopup = [this, numero, quai, subtitle, countdown, status, &dialog]() {
+        const bool occupied = isOccupiedState(quai.getEtat()) || quaiAvailabilityDeadlines.contains(numero);
+
+        if (!occupied) {
+            subtitle->setText("Ce quai est actuellement disponible.");
+            countdown->setText("Disponible");
+            status->setText("Aucun compte a rebours actif pour ce quai.");
+            return;
+        }
+
+        ensureAvailabilityTimerForQuai(quai);
+        const int remaining = remainingAvailabilitySeconds(numero);
+        subtitle->setText("Temps restant avant retour au statut disponible :");
+        countdown->setText(formatRemainingTime(remaining));
+
+        if (remaining <= 0) {
+            markQuaiAsAvailable(numero, false);
+            status->setText("Le quai est disponible.");
+            dialog.accept();
+            return;
+        }
+
+        status->setText("Le statut repassera automatiquement à Disponible à la fin du compte à rebours.");
+    };
+
+    connect(&popupTimer, &QTimer::timeout, &dialog, refreshPopup);
+    refreshPopup();
+    popupTimer.start();
+    dialog.exec();
+}
+
+void QuaisWindow::onQuaiCellClicked(int row, int column)
+{
+    Q_UNUSED(column);
+
+    QTableWidgetItem* numeroItem = quaiTable->item(row, 0);
+    if (!numeroItem)
+        return;
+
+    const int numero = numeroItem->data(Qt::UserRole).toInt();
+    const int quaiIndex = findQuaiIndexByNumero(numero);
+    if (quaiIndex < 0)
+        return;
+
+    showAvailabilityCountdownPopup(numero);
+}
+
+void QuaisWindow::refreshAvailabilityCountdowns()
+{
+    QList<int> expiredQuais;
+    for (auto it = quaiAvailabilityDeadlines.constBegin(); it != quaiAvailabilityDeadlines.constEnd(); ++it) {
+        if (QDateTime::currentDateTime() >= it.value())
+            expiredQuais.append(it.key());
+    }
+
+    for (int numero : expiredQuais)
+        markQuaiAsAvailable(numero);
 }
 
 bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi,
@@ -1192,6 +1567,7 @@ void QuaisWindow::onAutoAssignBoat()
         connect(xBtn, &QPushButton::clicked, popup, &QDialog::reject);
         hdrLay->addWidget(xBtn);
         lay->addWidget(hdr);
+        makeDialogMovable(popup, hdr);
 
         // Message
         QLabel* msgLbl = new QLabel(message);
@@ -1348,6 +1724,7 @@ void QuaisWindow::onAutoAssignBoat()
     connect(closeBtn, &QPushButton::clicked, dlg, &QDialog::reject);
     headerLay->addWidget(closeBtn);
     mainLay->addWidget(headerBand);
+    makeDialogMovable(dlg, headerBand);
 
     // Body
     QWidget* body = new QWidget();
@@ -1643,6 +2020,7 @@ void QuaisWindow::onEditQuai(int row)
     connect(closeBtn, &QPushButton::clicked, dlg, &QDialog::reject);
     headerLay->addWidget(closeBtn);
     mainLay->addWidget(headerBand);
+    makeDialogMovable(dlg, headerBand);
 
     QWidget* formArea = new QWidget();
     formArea->setStyleSheet("background: transparent;");
@@ -1818,6 +2196,11 @@ void QuaisWindow::onEditQuai(int row)
 
         if (query.exec()) {
             QSqlDatabase::database().commit();
+            q.setEtat(statutCombo->currentText());
+            if (isOccupiedState(statutCombo->currentText()))
+                ensureAvailabilityTimerForQuai(q);
+            else
+                quaiAvailabilityDeadlines.remove(q.getNumero());
             dlg->accept();
             loadQuaisFromDatabase();
             populateTable(searchInput->text());
@@ -2060,6 +2443,7 @@ void QuaisWindow::afficherStatistiques()
     connect(closeBtn, &QPushButton::clicked, dlg, &QDialog::accept);
     headerLay->addWidget(closeBtn);
     mainLay->addWidget(headerBand);
+    makeDialogMovable(dlg, headerBand);
 
     QLabel* subLbl = new QLabel("Vue d'ensemble de l'occupation et des revenus du port");
     subLbl->setFont(QFont("Segoe UI", 10));
@@ -2208,6 +2592,9 @@ void QuaisWindow::onGenerateContract(int row)
             updateQuery.bindValue(":num", quai.getNumero());
             if (updateQuery.exec()) {
                 QSqlDatabase::database().commit();
+                Quai occupiedQuai = quai;
+                occupiedQuai.setEtat(QString::fromUtf8("OccupÃ©"));
+                ensureAvailabilityTimerForQuai(occupiedQuai);
                 loadQuaisFromDatabase();
                 populateTable(searchInput->text());
             } else {
@@ -2216,3 +2603,7 @@ void QuaisWindow::onGenerateContract(int row)
         }
     }
 }
+
+
+
+
