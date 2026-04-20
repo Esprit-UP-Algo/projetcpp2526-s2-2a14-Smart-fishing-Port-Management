@@ -139,21 +139,27 @@ void BateauDialog::setupUi()
     immatriculationInput->setFont(inputFont);
     immatriculationInput->setFixedHeight(50);
     immatriculationInput->setStyleSheet(getInputStyle());
+
+    // Bloquer les caractères non conformes au format TN-YYYY-NUMERO
+    QRegularExpression immatParialRegex("^TN(-\\d{0,4}(-\\d{0,6})?)?$");
+    QRegularExpressionValidator* immatValidator = new QRegularExpressionValidator(immatParialRegex, this);
+    immatriculationInput->setValidator(immatValidator);
+
     formLayout->addWidget(immatriculationInput);
 
-    QLabel* immatErrorLabel = new QLabel("⚠️ Format invalide (lettres, chiffres, tirets uniquement).");
+    QLabel* immatErrorLabel = new QLabel("⚠️ Format invalide ! Attendu : TN-YYYY-NUMERO (ex: TN-2025-001)");
     immatErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
     immatErrorLabel->hide();
     formLayout->addWidget(immatErrorLabel);
 
     connect(immatriculationInput, &QLineEdit::textChanged, this, [=](const QString &text){
-        if(text.isEmpty()) { 
-            immatErrorLabel->hide(); 
-            immatriculationInput->setStyleSheet(getInputStyle()); 
-            return; 
+        if(text.isEmpty()) {
+            immatErrorLabel->hide();
+            immatriculationInput->setStyleSheet(getInputStyle());
+            return;
         }
-        QRegularExpression rx("^[a-zA-Z0-9-]*$");
-        if(!rx.match(text).hasMatch()) {
+        QRegularExpression fullImmat("^TN-\\d{4}-\\d+$");
+        if(!fullImmat.match(text).hasMatch()) {
             immatErrorLabel->show();
             immatriculationInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
         } else {
@@ -175,6 +181,10 @@ void BateauDialog::setupUi()
     capaciteInput->setFont(inputFont);
     capaciteInput->setFixedHeight(50);
     capaciteInput->setStyleSheet(getInputStyle());
+    // Bloquer les lettres : nombres positifs uniquement
+    QDoubleValidator* capValidator = new QDoubleValidator(0.01, 99999.99, 2, this);
+    capValidator->setNotation(QDoubleValidator::StandardNotation);
+    capaciteInput->setValidator(capValidator);
     formLayout->addWidget(capaciteInput);
 
     QLabel* capErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre valide (> 0).");
@@ -211,6 +221,10 @@ void BateauDialog::setupUi()
     longueurInput->setFont(inputFont);
     longueurInput->setFixedHeight(50);
     longueurInput->setStyleSheet(getInputStyle());
+    // Bloquer les lettres : nombres positifs uniquement
+    QDoubleValidator* lonValidator = new QDoubleValidator(0.01, 9999.99, 2, this);
+    lonValidator->setNotation(QDoubleValidator::StandardNotation);
+    longueurInput->setValidator(lonValidator);
     formLayout->addWidget(longueurInput);
 
     QLabel* lonErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre valide (> 0).");
@@ -247,6 +261,9 @@ void BateauDialog::setupUi()
     ageInput->setFont(inputFont);
     ageInput->setFixedHeight(50);
     ageInput->setStyleSheet(getInputStyle());
+    // Bloquer les lettres : entiers uniquement (0-150)
+    QIntValidator* ageValidator = new QIntValidator(0, 150, this);
+    ageInput->setValidator(ageValidator);
     formLayout->addWidget(ageInput);
 
     QLabel* ageErrorLabel = new QLabel("⚠️ Veuillez saisir un nombre entier (pas de lettres).");
@@ -415,10 +432,21 @@ bool BateauDialog::validateInputs() {
         return false; 
     }
 
-    // 2. Immatriculation
+    // 2. Immatriculation - format TN-YYYY-NUMERO obligatoire
     QString immat = immatriculationInput->text().trimmed();
-    if(immat.isEmpty() || immat.length() < 3){ 
-        showError("L'immatriculation est obligatoire et doit contenir au moins 3 caractères."); 
+    QRegularExpression fullImmat("^TN-\\d{4}-\\d+$");
+    if (immat.isEmpty()) {
+        showError("L'immatriculation est obligatoire.");
+        return false;
+    } else if (!fullImmat.match(immat).hasMatch()) {
+        showError("Format d'immatriculation invalide !\nAttendu : TN-YYYY-NUMERO\nExemple : TN-2025-001");
+        return false;
+    }
+
+    // [NOUVEAU] Contrôle unicité via le modèle
+    int currentIdB = (isEdit && bateauData) ? bateauData->getIdBateau().toInt() : -1;
+    if (Bateau::immatriculationExiste(immat, currentIdB)) {
+        showError("Cette immatriculation est déjà utilisée par un autre bateau."); 
         return false; 
     }
 

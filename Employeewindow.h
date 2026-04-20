@@ -26,6 +26,8 @@ struct Employee {
     QString salary;
     QString date;
     QString status;  // Actif / Congé / Inactif
+    QString phone;
+    QString email;
 };
 
 class EmployeeWindow : public QMainWindow
@@ -46,6 +48,7 @@ private slots:
     void onReglementInterieur();
     void onDemandeConge();
     void onAttestationTravail();
+    void onRegisterFaceID();
     void onViewStats();
     void toggleDarkMode();
     void onSettingsClicked();

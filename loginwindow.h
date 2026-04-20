@@ -20,6 +20,7 @@ public:
 
 private slots:
     void onLogin();
+    void onFaceIDLogin();
     void onForgotPassword();
 
 private:

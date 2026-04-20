@@ -4,12 +4,15 @@
 #include <QFormLayout>
 #include <QFrame>
 #include <QDebug>
+#include <QSystemTrayIcon>
+#include <QIcon>
+#include <QDate>
 
-PredictMaintenanceDialog::PredictMaintenanceDialog(int age, int moisMaintenance, const QString& etat, QWidget *parent)
-    : QDialog(parent), m_age(age), m_moisMaintenance(moisMaintenance), m_etat(etat)
+PredictMaintenanceDialog::PredictMaintenanceDialog(int age, int moisMaintenance, int frequence, const QString& etat, QWidget *parent)
+    : QDialog(parent), m_age(age), m_moisMaintenance(moisMaintenance), m_frequence(frequence), m_etat(etat)
 {
     setWindowTitle("Prédiction de Maintenance");
-    setFixedSize(450, 420);
+    setFixedSize(450, 480);
     setStyleSheet("QDialog { background-color: white; }");
 
     QString etatLower = etat.trimmed().toLower();
@@ -56,49 +59,71 @@ PredictMaintenanceDialog::PredictMaintenanceDialog(int age, int moisMaintenance,
     lblEtat->setFont(valueFont);
     formLayout->addRow(lblEtatTitle, lblEtat);
 
-    QLabel* lblFreqTitle = new QLabel("Fréquence des sorties\n(ex: mensuelles):");
+    QLabel* lblFreqTitle = new QLabel("Fréquence des sorties\n(Automatique):");
     lblFreqTitle->setFont(labelFont);
-    spinFrequence = new QSpinBox();
-    spinFrequence->setRange(0, 1000);
-    spinFrequence->setValue(1); // Default value
-    spinFrequence->setFont(valueFont);
-    spinFrequence->setStyleSheet("QSpinBox { border: 1px solid #cbd5e1; border-radius: 5px; padding: 5px; background: white; }");
-    formLayout->addRow(lblFreqTitle, spinFrequence);
+    QLabel* lblFreq = new QLabel(QString::number(m_frequence) + " sorties (Total)");
+    lblFreq->setFont(valueFont);
+    formLayout->addRow(lblFreqTitle, lblFreq);
 
     mainLayout->addWidget(formFrame);
 
-    QPushButton* calcBtn = new QPushButton("Calculer la prédiction");
-    calcBtn->setFont(QFont("Segoe UI", 11, QFont::Bold));
-    calcBtn->setCursor(Qt::PointingHandCursor);
-    calcBtn->setStyleSheet("QPushButton { background-color: #2563eb; color: white; border-radius: 8px; padding: 10px; }"
-                           "QPushButton:hover { background-color: #1d4ed8; }");
-    mainLayout->addWidget(calcBtn);
-
-    resultLabel = new QLabel("Cliquez sur calculer pour obtenir la recommandation.");
+    resultLabel = new QLabel("");
     resultLabel->setWordWrap(true);
     resultLabel->setAlignment(Qt::AlignCenter);
     resultLabel->setFont(QFont("Segoe UI", 11));
-    resultLabel->setStyleSheet("background-color: #f1f5f9; padding: 15px; border-radius: 8px; color: #475569;");
     mainLayout->addWidget(resultLabel);
 
-    QPushButton* closeBtn = new QPushButton("Fermer");
-    closeBtn->setCursor(Qt::PointingHandCursor);
-    closeBtn->setStyleSheet("QPushButton { background-color: #e2e8f0; color: #334155; border-radius: 8px; padding: 8px; }"
-                            "QPushButton:hover { background-color: #cbd5e1; }");
-    mainLayout->addWidget(closeBtn, 0, Qt::AlignCenter);
-
-    connect(calcBtn, &QPushButton::clicked, this, &PredictMaintenanceDialog::calculateScore);
-    connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
-
-    // Initial first calculation
+    // Initial calculation to populate resultLabel
     calculateScore();
+
+    QHBoxLayout* btnLayout = new QHBoxLayout();
+    
+    btnAccept = new QPushButton("Ok (Valider)");
+    btnAccept->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    btnAccept->setCursor(Qt::PointingHandCursor);
+    btnAccept->setStyleSheet("QPushButton { background-color: #2563eb; color: white; border-radius: 8px; padding: 10px; }"
+                             "QPushButton:hover { background-color: #1d4ed8; }");
+                             
+    btnCustom = new QPushButton("Annuler (Choisir date)");
+    btnCustom->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    btnCustom->setCursor(Qt::PointingHandCursor);
+    btnCustom->setStyleSheet("QPushButton { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; }"
+                             "QPushButton:hover { background-color: #e2e8f0; }");
+
+    btnLayout->addWidget(btnAccept);
+    btnLayout->addWidget(btnCustom);
+    mainLayout->addLayout(btnLayout);
+
+    customDateWidget = new QWidget();
+    QHBoxLayout* customLayout = new QHBoxLayout(customDateWidget);
+    customLayout->setContentsMargins(0, 0, 0, 0);
+    
+    dateEdit = new QDateEdit(QDate::currentDate());
+    dateEdit->setCalendarPopup(true);
+    dateEdit->setFont(QFont("Segoe UI", 10));
+    dateEdit->setStyleSheet("QDateEdit { border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px; }");
+    
+    btnConfirmCustom = new QPushButton("Valider");
+    btnConfirmCustom->setCursor(Qt::PointingHandCursor);
+    btnConfirmCustom->setStyleSheet("QPushButton { background-color: #059669; color: white; border-radius: 6px; padding: 5px 15px; }");
+    
+    customLayout->addWidget(new QLabel("Nouvelle date :"));
+    customLayout->addWidget(dateEdit);
+    customLayout->addWidget(btnConfirmCustom);
+    
+    customDateWidget->setVisible(false);
+    mainLayout->addWidget(customDateWidget);
+
+    connect(btnAccept, &QPushButton::clicked, this, &PredictMaintenanceDialog::onAcceptBtn);
+    connect(btnCustom, &QPushButton::clicked, this, &PredictMaintenanceDialog::onCustomBtn);
+    connect(btnConfirmCustom, &QPushButton::clicked, this, &PredictMaintenanceDialog::onConfirmCustomBtn);
 }
 
 PredictMaintenanceDialog::~PredictMaintenanceDialog() {}
 
 void PredictMaintenanceDialog::calculateScore()
 {
-    double freq = spinFrequence->value();
+    double freq = m_frequence;
     
     // Formule: score = (âge * 0.3) + (fréquence * 0.4) + (mois * 0.2) + (état * 0.1)
     double score = (m_age * 0.3) + (freq * 0.4) + (m_moisMaintenance * 0.2) + (m_etatVal * 0.1);
@@ -107,25 +132,50 @@ void PredictMaintenanceDialog::calculateScore()
     QString bgColor;
     QString icon;
 
+    int daysToAdd = 0;
     if (score < 5.0) {
         decision = "OK - Pas de maintenance nécessaire";
         bgColor = "#16a34a"; // Vert
         icon = "✅";
+        daysToAdd = 180; // 6 mois
     } else if (score >= 5.0 && score <= 7.0) {
         decision = "Surveillance recommandée";
         bgColor = "#ea580c"; // Orange
         icon = "⚠️";
+        daysToAdd = 30; // 1 mois
     } else {
         decision = "Maintenance urgente !";
         bgColor = "#dc2626"; // Rouge
         icon = "🚨";
+        daysToAdd = 0; // Immédiat
     }
 
-    QString text = QString("%1 Résultat\n\nScore calculé : %2\nDécision : %3")
+    m_systemPredictedDate = QDate::currentDate().addDays(daysToAdd);
+    m_finalDate = m_systemPredictedDate;
+
+    QString text = QString("%1 Résultat de l'analyse\n\nDécision : %2\nProchaine maintenance estimée : %3")
                        .arg(icon)
-                       .arg(score, 0, 'f', 2)
-                       .arg(decision);
+                       .arg(decision)
+                       .arg(m_systemPredictedDate.toString("dd/MM/yyyy"));
 
     resultLabel->setText(text);
     resultLabel->setStyleSheet(QString("background-color: %1; color: white; padding: 15px; border-radius: 8px; font-weight: bold; font-family: 'Segoe UI'; font-size: 14px;").arg(bgColor));
 }
+
+void PredictMaintenanceDialog::onAcceptBtn()
+{
+    m_finalDate = m_systemPredictedDate;
+    accept();
+}
+
+void PredictMaintenanceDialog::onCustomBtn()
+{
+    customDateWidget->setVisible(true);
+}
+
+void PredictMaintenanceDialog::onConfirmCustomBtn()
+{
+    m_finalDate = dateEdit->date();
+    accept();
+}
+

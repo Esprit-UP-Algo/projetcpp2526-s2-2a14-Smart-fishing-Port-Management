@@ -2,7 +2,6 @@
 #include "pechedialog.h"
 #include "PecheStatisticsDialog.h"
 #include "PecheExportDialog.h"
-#include "StatisticsDialog.h"
 #include <QDebug>
 #include <QMessageBox>
 #include <QHeaderView>
@@ -112,7 +111,7 @@ QFrame* PecheWindow::createSidebar()
 
     navLay->addWidget(createNavButton("🏠", "Tableau de bord"));
     navLay->addWidget(createNavButton("⛵", "Bateaux"));
-    navLay->addWidget(createNavButton("🐟", "Pêche", true));
+    navLay->addWidget(createNavButton("�", "Pêche", true));
     navLay->addWidget(createNavButton("👥", "Employés"));
     navLay->addWidget(createNavButton("🧊", "Frigos"));
     navLay->addWidget(createNavButton("⚙️", "Paramètres"));
@@ -337,12 +336,13 @@ QFrame* PecheWindow::createTableCard()
 void PecheWindow::setupTable()
 {
     table = new QTableWidget();
-    table->setColumnCount(9);
+    table->setColumnCount(10);
     table->setHorizontalHeaderLabels({
-        "Référence", "Catégorie", "Quantité (Kg)", "Date", "Bateau", "Frigo", "Actions", "ID_BAT", "ID_FRI"
+        "Référence", "Catégorie", "Quantité (Kg)", "Date", "Bateau", "Frigo", "Actions", "ID_BAT", "ID_FRI", "ID_PECH"
     });
     table->setColumnHidden(7, true);
     table->setColumnHidden(8, true);
+    table->setColumnHidden(9, true);
 
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     table->horizontalHeader()->setStretchLastSection(false);
@@ -411,13 +411,13 @@ void PecheWindow::populateTable(const QString& filterText)
         int si = sortCombo ? sortCombo->currentIndex() : 0;
         if (si == 0) model = pecheModel.afficher();
         else {
-            QString critere = "IDLOT", ordre = "ASC";
-            if (si == 1) { critere = "QUANTITELOT"; ordre = "ASC"; }
-            else if (si == 2) { critere = "QUANTITELOT"; ordre = "DESC"; }
-            else if (si == 3) { critere = "DATELOT"; ordre = "ASC"; }
-            else if (si == 4) { critere = "DATELOT"; ordre = "DESC"; }
-            else if (si == 5) { critere = "ESPECELOT"; ordre = "ASC"; }
-            else if (si == 6) { critere = "ESPECELOT"; ordre = "DESC"; }
+            QString critere = "ID", ordre = "ASC";
+            if (si == 1) { critere = "Quantité";  ordre = "ASC"; }
+            else if (si == 2) { critere = "Quantité";  ordre = "DESC"; }
+            else if (si == 3) { critere = "Date";      ordre = "ASC"; }
+            else if (si == 4) { critere = "Date";      ordre = "DESC"; }
+            else if (si == 5) { critere = "Espèce";    ordre = "ASC"; }
+            else if (si == 6) { critere = "Espèce";    ordre = "DESC"; }
             model = pecheModel.trier(critere, ordre);
         }
     }
@@ -458,6 +458,11 @@ void PecheWindow::populateTable(const QString& filterText)
         fItem->setData(Qt::UserRole, model->record(i).value("IDFRIGO").toString());
         fItem->setTextAlignment(Qt::AlignCenter);
         table->setItem(r, 5, fItem);
+
+        // Stocker l'ID du pêcheur dans la colonne cachée 9
+        QTableWidgetItem* pItem = it("");
+        pItem->setData(Qt::UserRole, model->record(i).value("ID_PECHEUR").toString());
+        table->setItem(r, 9, pItem);
 
         table->setCellWidget(r, 6, createActionButtons(r));
     }
@@ -824,6 +829,9 @@ void PecheWindow::onEditPeche(int row) {
     current.setDateCapture(table->item(row, 3)->text());
     current.setIdBateau(table->item(row, 4)->data(Qt::UserRole).toString());
     current.setIdFrigo(table->item(row, 5)->data(Qt::UserRole).toString());
+    // Récupérer l'ID du pêcheur depuis la colonne cachée
+    if (table->item(row, 9))
+        current.setIdPecheur(table->item(row, 9)->data(Qt::UserRole).toString());
 
     PecheDialog d(this, &current);
     if(d.exec()==QDialog::Accepted){ 

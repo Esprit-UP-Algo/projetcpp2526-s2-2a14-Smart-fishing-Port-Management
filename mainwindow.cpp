@@ -12,11 +12,17 @@
 #include <QHBoxLayout>
 #include <QStackedWidget>
 #include <QPropertyAnimation>
+#include "bateau.h"
+#include <QStyle>
+#include <QIcon>
+#include <QStringList>
+#include <QSystemTrayIcon>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr), livraisonPage(nullptr), quaisPage(nullptr)
 {
     setupUi();
+    checkMaintenanceAlerts();
 }
 
 MainWindow::~MainWindow()
@@ -613,4 +619,35 @@ void MainWindow::translateRecursive(QWidget* widget, bool toEnglish)
     for (QObject* child : widget->children()) {
         if (QWidget* w = qobject_cast<QWidget*>(child)) translateRecursive(w, toEnglish);
     }
+}
+
+void MainWindow::checkMaintenanceAlerts() {
+    QStringList boatNames = Bateau::getUpcomingMaintenanceAlerts();
+    
+    if (!boatNames.isEmpty()) {
+        if (!trayIcon) {
+            trayIcon = new QSystemTrayIcon(this);
+            connect(trayIcon, &QSystemTrayIcon::messageClicked, this, &MainWindow::onTrayMessageClicked);
+        }
+        
+        trayIcon->setIcon(QIcon(":/images/images/logo.png"));
+        if (trayIcon->icon().isNull()) {
+            trayIcon->setIcon(this->style()->standardIcon(QStyle::SP_MessageBoxWarning));
+        }
+        trayIcon->show();
+        
+        QString message = "Les bateaux suivants nécessitent une maintenance :\n" + boatNames.join("\n");
+        trayIcon->showMessage("Alerte Maintenance", message, QSystemTrayIcon::Warning, 15000);
+    }
+}
+
+void MainWindow::onTrayMessageClicked() {
+    QStringList boatNames = Bateau::getUpcomingMaintenanceAlerts();
+    if (boatNames.isEmpty()) return;
+
+    QString detail = "Voici la liste détaillée des bateaux nécessitant une maintenance :\n\n";
+    detail += boatNames.join("\n");
+    detail += "\n\nVeuillez vérifier l'état de ces bateaux dans l'onglet 'Bateaux'.";
+
+    QMessageBox::information(this, "PortFlow - Détails Maintenance", detail);
 }

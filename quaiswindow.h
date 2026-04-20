@@ -8,10 +8,14 @@
 #include <QList>
 #include <QComboBox>
 #include <QFrame>
+#include <QLabel>
 #include <QVariantMap>
 #include <QWidget>
 #include <QPainter>
 #include <QPropertyAnimation>
+#include <QHash>
+#include <QDateTime>
+#include <QTimer>
 #include <QtSql/QSqlQuery>  // optional, but good
 #include <QtSql/QSqlRecord>
 
@@ -124,8 +128,6 @@ private:
     QColor m_color;
 };
 
-#include "quai.h"
-
 class QuaisWindow : public QMainWindow
 {
     Q_OBJECT
@@ -136,6 +138,7 @@ public:
 private:
     // UI
     QTableWidget* quaiTable;
+    QLabel* warningsContentLabel;
     QLineEdit* searchInput;
     QComboBox* sortCombo;
 
@@ -171,6 +174,20 @@ private slots:
 
 private:
     bool assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
+    int findQuaiIndexByNumero(int numero) const;
+    void ensureAvailabilityTimerForQuai(const Quai& quai);
+    int estimateCountdownSeconds(const Quai& quai) const;
+    int remainingAvailabilitySeconds(int numero) const;
+    void markQuaiAsAvailable(int numero, bool showNotification = true);
+    void showAvailabilityCountdownPopup(int numero);
+
+private slots:
+    void onQuaiCellClicked(int row, int column);
+    void refreshAvailabilityCountdowns();
+
+private:
+    QHash<int, QDateTime> quaiAvailabilityDeadlines;
+    QTimer* availabilityRefreshTimer = nullptr;
 };
 
 #endif // QUAISWINDOW_H

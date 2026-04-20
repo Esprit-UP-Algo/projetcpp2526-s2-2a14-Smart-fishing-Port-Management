@@ -4,6 +4,7 @@
 #include <QString>
 #include <QSqlQuery>
 #include <QSqlQueryModel>
+#include <QStringList>
 
 class Bateau {
     QString idBateau;
@@ -54,6 +55,12 @@ public:
     
     QSqlQueryModel* trier(QString critere, QString ordre);
     QSqlQueryModel* rechercher(QString val);
+
+    // [NOUVEAU] Unicité
+    static bool immatriculationExiste(QString imm, int idBateauExclu = -1);
+
+    // [NOUVEAU] Alertes maintenance
+    static QStringList getUpcomingMaintenanceAlerts();
 
     static QString getLastError() { return lastError; }
 };

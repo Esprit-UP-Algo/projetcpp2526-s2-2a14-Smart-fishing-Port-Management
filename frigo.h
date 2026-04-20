@@ -10,7 +10,7 @@ class FrigoModel
 {
 public:
     FrigoModel();
-    FrigoModel(QString id, QString ref, double cap, QString type, QString stat, QString dateRes, double temp, double occ);
+    FrigoModel(QString id, QString ref, double cap, QString type, QString stat, QString dateRes, double temp, double occ, QString tel);
 
     // Getters
     QString getId() const { return idFrigo; }
@@ -21,6 +21,7 @@ public:
     QString getDateRes() const { return dateReservation; }
     double getTemp() const { return temperature; }
     double getOcc() const { return occupation; }
+    QString getTelephone() const { return telephone; }
 
     // CRUD
     bool ajouter();
@@ -40,6 +41,7 @@ private:
     QString dateReservation;
     double temperature;
     double occupation;
+    QString telephone;
     QString m_lastError;
 };
 

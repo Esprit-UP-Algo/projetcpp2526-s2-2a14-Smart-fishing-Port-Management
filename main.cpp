@@ -8,6 +8,12 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
 
+    // Propriétés de l'application (doivent être définies tôt pour les notifications)
+    app.setApplicationName("PortFlow");
+    app.setApplicationDisplayName("PortFlow");
+    app.setOrganizationName("PortFlow");
+    app.setStyle("Fusion");
+
     // Initialisation de la connexion à la base de données
     bool test = Connection::getInstance().createconnect();
 
@@ -17,25 +23,7 @@ int main(int argc, char *argv[])
         QMessageBox::critical(nullptr, QObject::tr("Erreur de connexion"),
                               QObject::tr("Impossible de se connecter à la base de données.\n"
                                           "Vérifiez votre configuration ODBC."), QMessageBox::Cancel);
-        // On peut choisir de continuer ou de quitter ici
-        // return -1; 
     }
-
-
-    // Configuration de l'application
-    app.setApplicationName("PortFlow - Gestion Bateaux");
-    app.setOrganizationName("PortFlow");
-    app.setStyle("Fusion");
-
-
-
-    // Set application properties
-    app.setApplicationName("PortFlow");
-    app.setOrganizationName("PortFlow");
-    app.setApplicationDisplayName("PortFlow");
-
-    // Set application style
-    app.setStyle("Fusion");
 
     // Create and show login window
     LoginWindow loginWindow;

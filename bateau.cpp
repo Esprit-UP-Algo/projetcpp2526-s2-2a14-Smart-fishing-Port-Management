@@ -1,6 +1,8 @@
 #include "bateau.h"
 #include <QSqlError>
 #include <QDebug>
+#include <QRegularExpression>
+#include <QVariant>
 
 QString Bateau::lastError = "";
 
@@ -11,6 +13,19 @@ Bateau::Bateau(QString id, QString nom, QString imm, QString cap, QString lon, Q
       ageBateau(age), dateMaintenance(date), idEmploye(idE), idQuai(idQ), etat(etatC) {}
 
 bool Bateau::ajouter() {
+    // Validation du format (TN-YYYY-NUMERO)
+    QRegularExpression immatRegex("^TN-\\d{4}-\\d+$");
+    if (!immatRegex.match(immatriculation).hasMatch()) {
+        lastError = "Format d'immatriculation invalide (Attendu: TN-YYYY-NUMERO).";
+        return false;
+    }
+
+    // [NOUVEAU] Unicité
+    if (immatriculationExiste(immatriculation)) {
+        lastError = "Cette immatriculation appartient déjà à un autre bateau.";
+        return false;
+    }
+
     QSqlQuery query;
     if (idQuai.isEmpty()) {
         query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT) "
@@ -40,7 +55,7 @@ bool Bateau::ajouter() {
 
 QSqlQueryModel* Bateau::afficher() {
     QSqlQueryModel* model = new QSqlQueryModel();
-    // Index 0:ID, 1:Nom, 2:Immat, 3:Cap, 4:Lon, 5:Age, 6:Date, 7:EmpName, 8:QuaiLabel, 9:EmpID, 10:QuaiID, 11:Etat (String)
+    // Index 0:ID, 1:Nom, 2:Immat, 3:Cap, 4:Lon, 5:Age, 6:Date, 7:EmpName, 8:QuaiLoc, 9:EmpID, 10:QuaiID, 11:Etat (String)
     model->setQuery("SELECT b.IDBATEAU, b.NOMBATEAU, b.IMMATRICULATION, b.CAPACITE, b.LONGEUR, b.AGE_BATEAU, "
                     "TO_CHAR(b.DATE_DERNIERE_MAINTENANCE, 'DD/MM/YYYY'), e.NOM, "
                     "CASE "
@@ -48,7 +63,8 @@ QSqlQueryModel* Bateau::afficher() {
                     "WHEN q.LOCATION IS NULL OR TRIM(q.LOCATION) = '' THEN 'Quai ' || q.NUMERO "
                     "ELSE 'Quai ' || q.NUMERO || ' (' || q.LOCATION || ')' "
                     "END, "
-                    "b.ID_EMPLOYE, b.IDQUAI, b.ETAT "
+                    "b.ID_EMPLOYE, b.IDQUAI, b.ETAT, "
+                    "TO_CHAR(b.DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY') "
                     "FROM BATEAUX b "
                     "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "
                     "LEFT JOIN QUAIS q ON b.IDQUAI = q.IDQUAI");
@@ -65,6 +81,35 @@ bool Bateau::supprimer(QString id) {
 }
 
 bool Bateau::modifier(QString id) {
+    // Validation du format (TN-YYYY-NUMERO)
+    QRegularExpression immatRegex("^TN-\\d{4}-\\d+$");
+    if (!immatRegex.match(immatriculation).hasMatch()) {
+        lastError = "Format d'immatriculation invalide (Attendu: TN-YYYY-NUMERO).";
+        return false;
+    }
+
+    // [NOUVEAU] Unicité (en excluant le bateau actuel)
+    if (immatriculationExiste(immatriculation, id.toInt())) {
+        lastError = "Cette immatriculation appartient déjà à un autre bateau.";
+        return false;
+    }
+
+    // Vérifier si le bateau passe "En mer" pour la première fois (ou de nouveau) pour incrémenter le compteur
+    QSqlQuery oldQuery;
+    oldQuery.prepare("SELECT ETAT FROM BATEAUX WHERE IDBATEAU = :id");
+    oldQuery.bindValue(":id", id.toInt());
+    QString etatActuel = "";
+    if (oldQuery.exec() && oldQuery.next()) {
+        etatActuel = oldQuery.value(0).toString();
+    }
+
+    if (etatActuel != "En mer" && etat == "En mer") {
+        QSqlQuery incQuery;
+        incQuery.prepare("UPDATE BATEAUX SET FREQUENCE_SORTIES = COALESCE(FREQUENCE_SORTIES, 0) + 1 WHERE IDBATEAU = :id");
+        incQuery.bindValue(":id", id.toInt());
+        incQuery.exec();
+    }
+
     QSqlQuery query;
     if (idQuai.isEmpty()) {
         query.prepare("UPDATE BATEAUX SET NOMBATEAU=:nom, IMMATRICULATION=:imm, CAPACITE=:cap, LONGEUR=:lon, "
@@ -109,7 +154,8 @@ QSqlQueryModel* Bateau::trier(QString critere, QString ordre) {
                                   "WHEN q.LOCATION IS NULL OR TRIM(q.LOCATION) = '' THEN 'Quai ' || q.NUMERO "
                                   "ELSE 'Quai ' || q.NUMERO || ' (' || q.LOCATION || ')' "
                                   "END, "
-                                  "b.ID_EMPLOYE, b.IDQUAI, b.ETAT "
+                                  "b.ID_EMPLOYE, b.IDQUAI, b.ETAT, "
+                                  "TO_CHAR(b.DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY') "
                                   "FROM BATEAUX b "
                                   "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "
                                   "LEFT JOIN QUAIS q ON b.IDQUAI = q.IDQUAI "
@@ -129,7 +175,8 @@ QSqlQueryModel* Bateau::rechercher(QString val) {
                   "WHEN q.LOCATION IS NULL OR TRIM(q.LOCATION) = '' THEN 'Quai ' || q.NUMERO "
                   "ELSE 'Quai ' || q.NUMERO || ' (' || q.LOCATION || ')' "
                   "END, "
-                  "b.ID_EMPLOYE, b.IDQUAI, b.ETAT "
+                  "b.ID_EMPLOYE, b.IDQUAI, b.ETAT, "
+                  "TO_CHAR(b.DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY') "
                   "FROM BATEAUX b "
                   "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "
                   "LEFT JOIN QUAIS q ON b.IDQUAI = q.IDQUAI "
@@ -138,4 +185,39 @@ QSqlQueryModel* Bateau::rechercher(QString val) {
     query.exec();
     model->setQuery(std::move(query));
     return model;
+}
+
+bool Bateau::immatriculationExiste(QString imm, int idBateauExclu) {
+    QSqlQuery query;
+    if (idBateauExclu == -1) {
+        query.prepare("SELECT COUNT(*) FROM BATEAUX WHERE IMMATRICULATION = :imm");
+    } else {
+        query.prepare("SELECT COUNT(*) FROM BATEAUX WHERE IMMATRICULATION = :imm AND IDBATEAU != :id");
+        query.bindValue(":id", idBateauExclu);
+    }
+    query.bindValue(":imm", imm);
+    
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+    return false;
+}
+
+QStringList Bateau::getUpcomingMaintenanceAlerts() {
+    QStringList alerts;
+    QSqlQuery query;
+    // Sélectionne les bateaux dont la date de prochaine maintenance est aujourd'hui ou demain (J-1)
+    query.prepare("SELECT NOMBATEAU, TO_CHAR(DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY') FROM BATEAUX "
+                  "WHERE DATE_PROCHAINE_MAINTENANCE BETWEEN CURRENT_DATE AND (CURRENT_DATE + 1)");
+    
+    if (query.exec()) {
+        while (query.next()) {
+            QString name = query.value(0).toString();
+            QString date = query.value(1).toString();
+            alerts << QString("%1 (%2)").arg(name, date);
+        }
+    } else {
+        qDebug() << "Erreur lors de la récupération des alertes de maintenance:" << query.lastError().text();
+    }
+    return alerts;
 }

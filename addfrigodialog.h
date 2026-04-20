@@ -42,6 +42,7 @@ private:
     QLineEdit* occEdit;
     QComboBox* statusBox;
     QComboBox* fishBox;
+    QComboBox* phoneBox;
     QDateEdit* dateResEdit;
 
     // Error labels

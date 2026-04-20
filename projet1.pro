@@ -3,7 +3,7 @@ QT += network
 
 CONFIG   += c++17
 TEMPLATE = app
-TARGET = Project1
+TARGET = PortFlow
 
 # Source files
 SOURCES += main.cpp \
@@ -37,7 +37,9 @@ SOURCES += main.cpp \
            loginwindow.cpp \
            peche.cpp \
            quai.cpp \
-           quaiswindow.cpp
+           quaiswindow.cpp \
+           temperaturealert.cpp \
+           SmtpClient.cpp
 
 # Header files
 HEADERS += mainwindow.h \
@@ -70,7 +72,9 @@ HEADERS += mainwindow.h \
            loginwindow.h \
            peche.h \
            quai.h \
-           quaiswindow.h
+           quaiswindow.h \
+           temperaturealert.h \
+           SmtpClient.h
 
 # UI Form files
 FORMS += mainwindow.ui \

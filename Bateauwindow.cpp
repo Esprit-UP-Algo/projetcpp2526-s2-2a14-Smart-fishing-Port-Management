@@ -12,6 +12,11 @@
 #include <QPdfWriter>
 #include <QPainter>
 #include <QDateTime>
+#include <QDate>
+#include <QBrush>
+#include <QColor>
+#include <QInputDialog>
+#include <QSqlQuery>
 #include <QScrollArea>
 #include <QDialog>
 #include <QTableWidget>
@@ -33,6 +38,10 @@ QList<BateauWindow*> BateauWindow::s_instances;
 BateauWindow::BateauWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    // Make sure column exists
+    QSqlQuery alter;
+    alter.exec("ALTER TABLE BATEAUX ADD DATE_PROCHAINE_MAINTENANCE DATE");
+    
     s_instances.append(this);
     setupUi();
     populateTable();
@@ -51,6 +60,7 @@ void BateauWindow::refreshAllTables()
         }
     }
 }
+
 
 void BateauWindow::setupUi()
 {
@@ -187,12 +197,14 @@ QFrame* BateauWindow::createHeader()
         return btn;
     };
     QPushButton* statsBtn = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
+    QPushButton* predBtn  = makeBtn("🔮  Prédiction", "#D97706", "#B45309");
     QPushButton* pdfBtn   = makeBtn("📄  Exporter PDF",  "#059669", "#047857");
     QPushButton* addBtn   = makeBtn("➕  Nouveau Bateau",  "#2563EB", "#1D4ED8");
     connect(statsBtn, &QPushButton::clicked, this, &BateauWindow::onShowStatistics);
+    connect(predBtn,  &QPushButton::clicked, this, &BateauWindow::onPredictMaintenanceGlobal);
     connect(pdfBtn,   &QPushButton::clicked, this, &BateauWindow::onGeneratePDF);
     connect(addBtn,   &QPushButton::clicked, this, &BateauWindow::onAddBateau);
-    lay->addWidget(statsBtn); lay->addWidget(pdfBtn); lay->addWidget(addBtn);
+    lay->addWidget(statsBtn); lay->addWidget(predBtn); lay->addWidget(pdfBtn); lay->addWidget(addBtn);
     return hdr;
 }
 
@@ -256,12 +268,11 @@ QFrame* BateauWindow::createTableCard()
 
 void BateauWindow::setupTable()
 {
-    table->setColumnCount(13);
-    table->setHorizontalHeaderLabels({"ID", "Nom Bateau", "Immatriculation", "Capacité (T)", "Longueur (m)", "Âge (ans)", "Dernière Maintenance", "Employé", "Quai", "État du Bateau", "Actions", "ID_EMP", "ID_QUAI"});
+    table->setColumnCount(14);
+    table->setHorizontalHeaderLabels({"ID", "Nom Bateau", "Immatriculation", "Capacité (T)", "Longueur (m)", "Âge (ans)", "Dernière Maintenance", "Prochaine Maint. (Est.)", "Employé", "Quai", "État du Bateau", "Actions", "ID_EMP", "ID_QUAI"});
     table->setColumnHidden(0, true);
-    table->setColumnHidden(11, true);
     table->setColumnHidden(12, true);
-    // Col 9 (État) is now visible
+    table->setColumnHidden(13, true);
 
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table->horizontalHeader()->setStretchLastSection(false);
@@ -335,7 +346,7 @@ void BateauWindow::populateTable(const QString& filterText)
     for(int i = 0; i < model->rowCount(); ++i) {
         int r = table->rowCount();
         table->insertRow(r); table->setRowHeight(r, 65);
-        for(int j = 0; j < 9; ++j) {
+        for(int j = 0; j < 7; ++j) {
             QString val = model->data(model->index(i, j)).toString();
             if (j == 3 && !val.isEmpty()) val += " T";
             if (j == 4 && !val.isEmpty()) val += " m";
@@ -344,14 +355,49 @@ void BateauWindow::populateTable(const QString& filterText)
             item->setTextAlignment(Qt::AlignCenter); item->setFont(cellFont);
             table->setItem(r, j, item);
         }
-        // Column 9: État du Bateau
+
+        // Vérifier si une prédiction existe dans la map pour cette immatriculation
+        QString immat = model->data(model->index(i, 2)).toString();
+        QTableWidgetItem* nextMaintItem = nullptr;
+        
+        QString nextMaintStr = model->data(model->index(i, 12)).toString();
+        if (!nextMaintStr.isEmpty()) {
+            nextMaintItem = new QTableWidgetItem(nextMaintStr);
+            QDate nextMaintDate = QDate::fromString(nextMaintStr, "dd/MM/yyyy");
+            
+            // Calcul du niveau d'urgence pour la couleur
+            qint64 daysTo = QDate::currentDate().daysTo(nextMaintDate);
+            if (daysTo <= 0) {
+                nextMaintItem->setForeground(QBrush(QColor("#dc2626"))); // Rouge
+            } else if (daysTo <= 30) {
+                nextMaintItem->setForeground(QBrush(QColor("#ea580c"))); // Orange
+            } else {
+                nextMaintItem->setForeground(QBrush(QColor("#16a34a"))); // Vert
+            }
+        } else {
+            nextMaintItem = new QTableWidgetItem("-");
+            nextMaintItem->setForeground(QBrush(QColor("#64748b"))); // Gris foncé par défaut
+        }
+        
+        nextMaintItem->setTextAlignment(Qt::AlignCenter); 
+        nextMaintItem->setFont(cellFont);
+        table->setItem(r, 7, nextMaintItem);
+
+        // Employé & Quai
+        for(int j = 7; j <= 8; ++j) {
+            QTableWidgetItem* item = new QTableWidgetItem(model->data(model->index(i, j)).toString());
+            item->setTextAlignment(Qt::AlignCenter); item->setFont(cellFont);
+            table->setItem(r, j + 1, item); // Décalé de +1
+        }
+
+        // Column 10: État du Bateau
         QString etat = model->data(model->index(i, 11)).toString();
-        table->setCellWidget(r, 9, createDisponibleBadge(etat));
+        table->setCellWidget(r, 10, createDisponibleBadge(etat));
         // Action buttons
-        table->setCellWidget(r, 10, createActionButtons(r));
+        table->setCellWidget(r, 11, createActionButtons(r));
         // Hidden IDs
-        table->setItem(r, 11, new QTableWidgetItem(model->data(model->index(i, 9)).toString()));
-        table->setItem(r, 12, new QTableWidgetItem(model->data(model->index(i, 10)).toString()));
+        table->setItem(r, 12, new QTableWidgetItem(model->data(model->index(i, 9)).toString()));
+        table->setItem(r, 13, new QTableWidgetItem(model->data(model->index(i, 10)).toString()));
     }
     delete model;
 }
@@ -386,18 +432,15 @@ QWidget* BateauWindow::createActionButtons(int row)
         b->setStyleSheet(QString("QPushButton{background:%1;border:none;border-radius:8px;font-size:14px;} QPushButton:hover{background:%2;}").arg(bg,hov));
         return b;
     };
-    QPushButton* p = mk("🔮","#e0e7ff","#c7d2fe");
     QPushButton* e = mk("✏️","#fef9c3","#fde68a");
     QPushButton* d = mk("🗑️","#fee2e2","#fecaca");
     
-    p->setToolTip("Prédire la maintenance");
     e->setToolTip("Modifier");
     d->setToolTip("Supprimer");
 
-    connect(p,&QPushButton::clicked,[this,row](){ onPredictMaintenance(row); });
     connect(e,&QPushButton::clicked,[this,row](){ onEditBateau(row); });
     connect(d,&QPushButton::clicked,[this,row](){ onDeleteBateau(row); });
-    l->addWidget(p); l->addWidget(e); l->addWidget(d);
+    l->addWidget(e); l->addWidget(d);
     return w;
 }
 
@@ -628,8 +671,8 @@ void BateauWindow::onEditBateau(int row)
     b.setLongueur(table->item(row, 4)->text().split(" ").first());
     b.setAgeBateau(table->item(row, 5)->text().split(" ").first());
     b.setDateMaintenance(table->item(row, 6)->text());
-    b.setIdEmploye(table->item(row, 11)->text());
-    b.setIdQuai(table->item(row, 12)->text());
+    b.setIdEmploye(table->item(row, 12)->text());
+    b.setIdQuai(table->item(row, 13)->text());
     
     // Status from badge text or model? Easier to get from Model when populating.
     // Or just check radio button logic in Dialog correctly.
@@ -638,7 +681,7 @@ void BateauWindow::onEditBateau(int row)
     // Actually, populateFields() in Dialog needs it.
     
     // For now, let's assume it's retrieved from the badge label
-    QWidget* badge = table->cellWidget(row, 9);
+    QWidget* badge = table->cellWidget(row, 10);
     if(badge) {
         QLabel* l = badge->findChild<QLabel*>();
         if(l) {
@@ -678,28 +721,52 @@ void BateauWindow::onLogout()
     if (QMessageBox::question(this, "Quitter", "Voulez-vous quitter ?", QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) this->close();
 }
 
-void BateauWindow::onPredictMaintenance(int row)
+
+
+void BateauWindow::onPredictMaintenanceGlobal()
 {
-    QString ageStr = table->item(row, 5)->text().replace(" ans", "").trimmed();
-    int age = ageStr.toInt();
+    bool ok;
+    QString immat = QInputDialog::getText(this, "Prédiction Maintenance", "Entrez l'immatriculation du bateau :", QLineEdit::Normal, "", &ok);
+    if (!ok || immat.trimmed().isEmpty()) return;
 
-    QString dateStr = table->item(row, 6)->text();
-    QDate maintDate = QDate::fromString(dateStr, "dd/MM/yyyy");
-    int moisMaintenance = 0;
-    if (maintDate.isValid()) {
-        int yearDiff = QDate::currentDate().year() - maintDate.year();
-        int monthDiff = QDate::currentDate().month() - maintDate.month();
-        moisMaintenance = yearDiff * 12 + monthDiff;
-        if (moisMaintenance < 0) moisMaintenance = 0;
+    QSqlQuery query;
+    query.prepare("SELECT AGE_BATEAU, TO_CHAR(DATE_DERNIERE_MAINTENANCE, 'DD/MM/YYYY'), ETAT, IDBATEAU, COALESCE(FREQUENCE_SORTIES, 0) FROM BATEAUX WHERE IMMATRICULATION = :immat");
+    query.bindValue(":immat", immat.trimmed());
+
+    if (query.exec() && query.next()) {
+        int age = query.value(0).toInt();
+        QString dateStr = query.value(1).toString();
+        QString etat = query.value(2).toString();
+        QString idBateau = query.value(3).toString();
+        int frequence = query.value(4).toInt();
+
+        QDate maintDate = QDate::fromString(dateStr, "dd/MM/yyyy");
+        int moisMaintenance = 0;
+        if (maintDate.isValid()) {
+            int yearDiff = QDate::currentDate().year() - maintDate.year();
+            int monthDiff = QDate::currentDate().month() - maintDate.month();
+            moisMaintenance = yearDiff * 12 + monthDiff;
+            if (moisMaintenance < 0) moisMaintenance = 0;
+        }
+
+        if (etat.isEmpty()) {
+            etat = "Au port";
+        }
+
+        PredictMaintenanceDialog diag(age, moisMaintenance, frequence, etat, this);
+        if (diag.exec() == QDialog::Accepted) {
+            QDate chosenDate = diag.getSelectedDate();
+            QString nextDateStr = chosenDate.toString("dd/MM/yyyy");
+            
+            QSqlQuery updateQuery;
+            updateQuery.prepare("UPDATE BATEAUX SET DATE_PROCHAINE_MAINTENANCE = TO_DATE(:ndate, 'DD/MM/YYYY') WHERE IMMATRICULATION = :immat");
+            updateQuery.bindValue(":ndate", nextDateStr);
+            updateQuery.bindValue(":immat", immat.trimmed());
+            updateQuery.exec();
+            
+            populateTable(searchInput->text()); // Mettre à jour le tableau
+        }
+    } else {
+        QMessageBox::warning(this, "Erreur", "Bateau introuvable avec cette immatriculation.");
     }
-
-    QString etat = "Au port";
-    QWidget* badge = table->cellWidget(row, 9);
-    if(badge) {
-        QLabel* l = badge->findChild<QLabel*>();
-        if(l) etat = l->text();
-    }
-
-    PredictMaintenanceDialog diag(age, moisMaintenance, etat, this);
-    diag.exec();
 }

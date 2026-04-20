@@ -15,6 +15,7 @@
 #include <QFrame>
 #include <QStackedWidget>
 #include <QPropertyAnimation>
+#include <QSystemTrayIcon>
 
 class MainWindow : public QMainWindow
 {
@@ -36,6 +37,7 @@ private slots:
     void toggleLanguage();
     void onLogout();
     void onSettingsClicked();
+    void onTrayMessageClicked();
 
 private:
     void setupUi();
@@ -47,6 +49,7 @@ private:
     
     void updateThemeRecursive(QWidget* widget, bool isDark);
     void translateRecursive(QWidget* widget, bool toEnglish);
+    void checkMaintenanceAlerts();
 
     QStackedWidget* stackedWidget;
     QVector<QPair<QString, QString>> notifications;
@@ -70,6 +73,7 @@ private:
     QWidget* bateauPage;
     QWidget* livraisonPage;
     QWidget* quaisPage;
+    QSystemTrayIcon* trayIcon = nullptr;
 
 };
 

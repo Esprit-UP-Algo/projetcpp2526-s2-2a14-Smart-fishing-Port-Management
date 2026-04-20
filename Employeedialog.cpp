@@ -135,12 +135,45 @@ void EmployeeDialog::setupUi()
     formLayout->addWidget(cinErrorLabel);
     connect(cinInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateCin);
 
+    QLabel* phoneLabel = new QLabel("Téléphone");
+    phoneLabel->setFont(labelFont);
+    phoneLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
+    formLayout->addWidget(phoneLabel);
+    phoneInput = new QLineEdit();
+    phoneInput->setPlaceholderText("98765432");
+    phoneInput->setMaxLength(8);
+    phoneInput->setFont(inputFont);
+    phoneInput->setFixedHeight(50);
+    phoneInput->setStyleSheet(getInputStyle());
+    formLayout->addWidget(phoneInput);
+    phoneErrorLabel = new QLabel("");
+    phoneErrorLabel->setStyleSheet("color: #E74C3C; font-size: 11px; font-weight: bold; margin-top: -5px;");
+    phoneErrorLabel->hide();
+    formLayout->addWidget(phoneErrorLabel);
+    connect(phoneInput, &QLineEdit::textChanged, this, &EmployeeDialog::validatePhone);
+
+    QLabel* emailLabel = new QLabel("Email");
+    emailLabel->setFont(labelFont);
+    emailLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
+    formLayout->addWidget(emailLabel);
+    emailInput = new QLineEdit();
+    emailInput->setPlaceholderText("nom@gmail.com");
+    emailInput->setFont(inputFont);
+    emailInput->setFixedHeight(50);
+    emailInput->setStyleSheet(getInputStyle());
+    formLayout->addWidget(emailInput);
+    emailErrorLabel = new QLabel("");
+    emailErrorLabel->setStyleSheet("color: #E74C3C; font-size: 11px; font-weight: bold; margin-top: -5px;");
+    emailErrorLabel->hide();
+    formLayout->addWidget(emailErrorLabel);
+    connect(emailInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateEmail);
+
     QLabel* positionLabel = new QLabel("Position");
     positionLabel->setFont(labelFont);
     positionLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
     formLayout->addWidget(positionLabel);
     positionCombo = new QComboBox();
-    positionCombo->addItems({"Marin", "RH", "Technicien", "Sécurité"});
+    positionCombo->addItems({"Marin", "Pêcheur", "RH", "Technicien", "Sécurité"});
     positionCombo->setFont(inputFont);
     positionCombo->setFixedHeight(50);
     positionCombo->setStyleSheet(getInputStyle());
@@ -232,6 +265,8 @@ void EmployeeDialog::populateFields()
     firstNameInput->setText(employeeData->firstName);
     lastNameInput->setText(employeeData->lastName);
     cinInput->setText(employeeData->cin);
+    phoneInput->setText(employeeData->phone);
+    emailInput->setText(employeeData->email);
     int posIndex = positionCombo->findText(employeeData->position);
     if (posIndex >= 0) positionCombo->setCurrentIndex(posIndex);
     QString cleanSal = employeeData->salary;
@@ -249,6 +284,8 @@ Employee EmployeeDialog::getData() const
     employee.firstName = firstNameInput->text();
     employee.lastName = lastNameInput->text();
     employee.cin = cinInput->text();
+    employee.phone = phoneInput->text();
+    employee.email = emailInput->text();
     employee.position = positionCombo->currentText();
     employee.salary = salaryInput->text();
     employee.date = dateInput->date().toString("dd/MM/yyyy");
@@ -286,14 +323,32 @@ void EmployeeDialog::validateSalary(const QString &text)
     else salaryErrorLabel->hide();
 }
 
+void EmployeeDialog::validatePhone(const QString &text)
+{
+    if (text.isEmpty()) { phoneErrorLabel->setText("Le numéro de téléphone est obligatoire"); phoneErrorLabel->show(); }
+    else if (text.contains(QRegularExpression("[^0-9]"))) { phoneErrorLabel->setText("utiliser que des chiffres"); phoneErrorLabel->show(); }
+    else if (text.length() != 8) { phoneErrorLabel->setText(QString("Le numéro doit comporter 8 chiffres (%1/8)").arg(text.length())); phoneErrorLabel->show(); }
+    else phoneErrorLabel->hide();
+}
+
+void EmployeeDialog::validateEmail(const QString &text)
+{
+    QRegularExpression emailRegex("^[A-Za-z0-9._%+-]+@gmail\\.com$");
+    if (text.isEmpty()) { emailErrorLabel->setText("L'email est obligatoire"); emailErrorLabel->show(); }
+    else if (!emailRegex.match(text).hasMatch()) { emailErrorLabel->setText("L'email doit être sous forme nom@gmail.com"); emailErrorLabel->show(); }
+    else emailErrorLabel->hide();
+}
+
 void EmployeeDialog::onSaveClicked()
 {
     validateCin(cinInput->text());
+    validatePhone(phoneInput->text());
+    validateEmail(emailInput->text());
     validateFirstName(firstNameInput->text());
     validateLastName(lastNameInput->text());
     validateSalary(salaryInput->text());
 
-    if (!cinErrorLabel->isHidden() || !firstNameErrorLabel->isHidden() || !lastNameErrorLabel->isHidden() || !salaryErrorLabel->isHidden()) return;
+    if (!cinErrorLabel->isHidden() || !firstNameErrorLabel->isHidden() || !lastNameErrorLabel->isHidden() || !salaryErrorLabel->isHidden() || !phoneErrorLabel->isHidden() || !emailErrorLabel->isHidden()) return;
 
     QString currentCin = cinInput->text();
     QSqlQuery checkQuery;

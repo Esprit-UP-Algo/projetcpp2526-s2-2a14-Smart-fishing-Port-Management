@@ -1,5 +1,5 @@
-#ifndef ADDLIVRAISONDIALOG_H
-#define ADDLIVRAISONDIALOG_H
+#ifndef ADDLIVRAISONDIALOG1_H
+#define ADDLIVRAISONDIALOG1_H
 
 #include <QDialog>
 #include <QLineEdit>

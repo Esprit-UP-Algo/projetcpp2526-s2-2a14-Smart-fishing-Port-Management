@@ -1,3 +1,6 @@
+
+
+
 #include "frigowindow.h"
 #include "addfrigodialog.h"
 #include <QDebug>
@@ -262,17 +265,20 @@ QFrame* FrigoWindow::createHeader()
         return btn;
     };
 
-    QPushButton* statsBtn = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
-    QPushButton* smsBtn   = makeBtn("📱  Envoi SMS",     "#F59E0B", "#D97706");
-    QPushButton* pdfBtn   = makeBtn("📄  Exporter PDF",  "#059669", "#047857");
-    QPushButton* addBtn   = makeBtn("➕  Nouveau Frigo", "#2563EB", "#1D4ED8");
+    QPushButton* statsBtn  = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
+    QPushButton* classBtn  = makeBtn("🌿  Classification", "#10B981", "#059669");
+    QPushButton* smsBtn    = makeBtn("📱  Envoi SMS",      "#F59E0B", "#D97706");
+    QPushButton* pdfBtn    = makeBtn("📄  Exporter PDF",   "#059669", "#047857");
+    QPushButton* addBtn    = makeBtn("➕  Nouveau Frigo",  "#2563EB", "#1D4ED8");
 
     connect(statsBtn, &QPushButton::clicked, this, &FrigoWindow::onShowStatistics);
+    connect(classBtn, &QPushButton::clicked, this, &FrigoWindow::onShowClassification);
     connect(smsBtn,   &QPushButton::clicked, this, &FrigoWindow::onSendSMS);
     connect(pdfBtn,   &QPushButton::clicked, this, &FrigoWindow::onGeneratePDF);
-    connect(addBtn, &QPushButton::clicked, this, &FrigoWindow::onAddFrigo);
+    connect(addBtn,   &QPushButton::clicked, this, &FrigoWindow::onAddFrigo);
 
     lay->addWidget(statsBtn);
+    lay->addWidget(classBtn);
     lay->addWidget(smsBtn);
     lay->addWidget(pdfBtn);
     lay->addWidget(addBtn);
@@ -373,8 +379,8 @@ QFrame* FrigoWindow::createTableCard()
 void FrigoWindow::setupTable()
 {
     table = new QTableWidget();
-    table->setColumnCount(8);
-    table->setHorizontalHeaderLabels({"Référence", "Capacité", "Poisson", "Statut", "Date Rés.", "Température", "Occupation", "Actions"});
+    table->setColumnCount(9);
+    table->setHorizontalHeaderLabels({"Référence", "Capacité", "Poisson", "Statut", "Date Rés.", "Température", "Occupation", "Téléphone", "Actions"});
 
     table->horizontalHeader()->setStretchLastSection(true);
     table->verticalHeader()->setVisible(false);
@@ -400,7 +406,6 @@ void FrigoWindow::setupTable()
             border-right: 1px solid #d1d5db;
             border-bottom: 1px solid #d1d5db;
             color: #1f2937;
-            background-color: white;
             font-family: 'Segoe UI';
             font-size: 11pt;
         }
@@ -432,6 +437,7 @@ void FrigoWindow::setupTable()
     table->setColumnWidth(4, 120);   // Date Rés.
     table->setColumnWidth(5, 120);   // Température
     table->setColumnWidth(6, 120);   // Occupation
+    table->setColumnWidth(7, 140);   // Téléphone
 }
 
 void FrigoWindow::populateTable(const QString& filterText)
@@ -487,11 +493,55 @@ void FrigoWindow::populateTable(const QString& filterText)
         QString dateStr = dat.type() == QVariant::Date || dat.type() == QVariant::DateTime ? dat.toDate().toString("dd/MM/yyyy") : dat.toString().left(10);
         addItem(4, dateStr); // Date Réservation
         
-        addItem(5, model->record(i).value(6).toString() + " °C"); // Température
-        addItem(6, model->record(i).value(7).toString() + " %"); // Occupation
+        // Classification sans nouvelle colonne — Coloration de la cellule Température (QLabel Badge pour fiabilité)
+        QString fishType = model->record(i).value(3).toString();
+        double currentTemp = model->record(i).value(6).toDouble();
         
-        // Actions
-        table->setCellWidget(r, 7, createActionButtons(r)); // Use current row index for actions
+        auto getQualityInfo = [](const QString& type, double temp) -> QPair<QString, QString> {
+            if (type == "Sans") return {"transparent", "#1f2937"};
+            
+            QMap<QString, QPair<double, double>> ranges;
+            ranges["Sardine"] = {0.0, 4.0};
+            ranges["Thon"]    = {-1.0, 2.0};
+            ranges["Merlan"]  = {0.0, 3.0};
+            ranges["Crevette"]= {-2.0, 1.0};
+            ranges["Saumon"]  = {0.0, 2.0};
+            
+            if (!ranges.contains(type)) return {"#D1FAE5", "#065F46"}; 
+            
+            double min = ranges[type].first;
+            double max = ranges[type].second;
+            
+            if (temp >= min && temp <= max) return {"#D1FAE5", "#065F46"}; // Vert
+            if (temp < min - 2 || temp > max + 2) return {"#FEE2E2", "#991B1B"}; // Rouge
+            return {"#FEF3C7", "#92400E"}; // Orange
+        };
+
+        QPair<QString, QString> colors = getQualityInfo(fishType, currentTemp);
+        
+        QWidget* tempContainer = new QWidget();
+        QHBoxLayout* tempLayout = new QHBoxLayout(tempContainer);
+        tempLayout->setContentsMargins(5, 5, 5, 5);
+        
+        QLabel* tempBadge = new QLabel(model->record(i).value(6).toString() + " °C");
+        tempBadge->setAlignment(Qt::AlignCenter);
+        tempBadge->setMinimumHeight(35);
+        tempBadge->setStyleSheet(QString(
+            "background-color: %1; "
+            "color: %2; "
+            "border-radius: 8px; "
+            "font-weight: bold; "
+            "padding: 5px;"
+        ).arg(colors.first, colors.second));
+        
+        tempLayout->addWidget(tempBadge);
+        table->setCellWidget(r, 5, tempContainer);
+
+        addItem(6, model->record(i).value(7).toString() + " %"); // Occupation
+        addItem(7, model->record(i).value(8).toString()); // Téléphone
+        
+        // Actions — passer l'ID de la BD directement dans le widget
+        table->setCellWidget(r, 8, createActionButtons(r, dbId));
     }
     
     // Détruire proprement la requête pour libérer totalement ODBC
@@ -548,7 +598,7 @@ QWidget* FrigoWindow::createStatusBadge(const QString& status)
     return widget;
 }
 
-QWidget* FrigoWindow::createActionButtons(int row)
+QWidget* FrigoWindow::createActionButtons(int row, const QString& dbId)
 {
     QWidget* widget = new QWidget();
     QHBoxLayout* layout = new QHBoxLayout(widget);
@@ -575,7 +625,7 @@ QWidget* FrigoWindow::createActionButtons(int row)
     connect(editBtn, &QPushButton::clicked, [this, row]() { onEditFrigo(row); });
     layout->addWidget(editBtn);
 
-    // Delete button
+    // Delete button — utilise l'ID de la BD directement (fix bug suppression)
     QPushButton* deleteBtn = new QPushButton("🗑️");
     deleteBtn->setFixedSize(36, 36);
     deleteBtn->setCursor(Qt::PointingHandCursor);
@@ -591,7 +641,9 @@ QWidget* FrigoWindow::createActionButtons(int row)
             background-color: #FECACA;
         }
     )");
-    connect(deleteBtn, &QPushButton::clicked, [this, row]() { onDeleteFrigo(row); });
+    connect(deleteBtn, &QPushButton::clicked, [this, dbId]() {
+        onDeleteFrigoById(dbId);
+    });
     layout->addWidget(deleteBtn);
 
     return widget;
@@ -656,7 +708,7 @@ void FrigoWindow::onGeneratePDF()
     QString dbId = item->data(Qt::UserRole).toString();
 
     QSqlQuery query;
-    query.prepare("SELECT REFERENCE, CAPACITE, TYPE_POISSON, STATUT, DATE_RESERVATION, TEMPERATURE, OCCUPATION FROM FRIGOS WHERE IDFRIGO = :id");
+    query.prepare("SELECT REFERENCE, CAPACITE, TYPE_POISSON, STATUT, DATE_RESERVATION, TEMPERATURE, OCCUPATION, TELEPHONE FROM FRIGOS WHERE IDFRIGO = :id");
     query.bindValue(":id", dbId);
 
     if (!query.exec() || !query.next()) {
@@ -711,6 +763,7 @@ void FrigoWindow::onGeneratePDF()
     p.drawText(20, y, "Température : " + temp + " °C"); y += 40;
     p.drawText(20, y, "Occupation : " + occ + " %"); y += 40;
     p.drawText(20, y, "Type de poisson : " + fish); y += 40;
+    p.drawText(20, y, "Téléphone Employé : " + query.value("TELEPHONE").toString()); y += 40;
     p.drawText(20, y, "Statut actuel : " + stat); y += 40;
 
     // Simulation d'un prix de stockage
@@ -742,7 +795,8 @@ void FrigoWindow::onAddFrigo()
         
         FrigoModel toSave(newId, newFrigoData.getRef(), newFrigoData.getCap(), 
                           newFrigoData.getType(), newFrigoData.getStat(), 
-                          newFrigoData.getDateRes(), newFrigoData.getTemp(), newFrigoData.getOcc());
+                          newFrigoData.getDateRes(), newFrigoData.getTemp(), newFrigoData.getOcc(),
+                          newFrigoData.getTelephone());
 
         if (toSave.ajouter()) {
             populateTable();
@@ -776,7 +830,8 @@ void FrigoWindow::onEditFrigo(int row)
             query.value("STATUT").toString(),
             dateResStr,
             query.value("TEMPERATURE").toDouble(),
-            query.value("OCCUPATION").toDouble()
+            query.value("OCCUPATION").toDouble(),
+            query.value("TELEPHONE").toString()
         );
 
         AddFrigoDialog dialog(this, &current);
@@ -798,7 +853,25 @@ void FrigoWindow::onDeleteFrigo(int row)
     QTableWidgetItem* item = table->item(row, 0);
     if (!item) return;
     QString id = item->data(Qt::UserRole).toString();
-    QString ref = item->text();
+    onDeleteFrigoById(id);
+}
+
+void FrigoWindow::onDeleteFrigoById(const QString& id)
+{
+    if (id.isEmpty()) {
+        QMessageBox::critical(this, "Erreur", "Identifiant du frigo introuvable.");
+        return;
+    }
+
+    // Récupérer la référence pour afficher dans la confirmation
+    QSqlQuery refQuery;
+    refQuery.prepare("SELECT REFERENCE FROM FRIGOS WHERE IDFRIGO = :id");
+    refQuery.bindValue(":id", id);
+    QString ref = id;
+    if (refQuery.exec() && refQuery.next()) {
+        ref = refQuery.value(0).toString();
+    }
+    refQuery.finish();
 
     if (QMessageBox::question(this, "Confirmation",
         QString("Voulez-vous vraiment supprimer le frigo '%1' ?").arg(ref)) == QMessageBox::Yes) {
@@ -806,7 +879,7 @@ void FrigoWindow::onDeleteFrigo(int row)
             populateTable();
             QMessageBox::information(this, "Succès", "Frigo supprimé.");
         } else {
-            QMessageBox::critical(this, "Erreur", "La suppression a échoué.");
+            QMessageBox::critical(this, "Erreur", "La suppression a échoué. Vérifiez que ce frigo n'est pas référencé par des pêches.");
         }
     }
 }
@@ -822,14 +895,22 @@ void FrigoWindow::onSendSMS()
 
     QString ref = table->item(row, 0)->text();
     QString temp = table->item(row, 5)->text();
+    QString storedPhone = table->item(row, 7)->text().trimmed();
+    QString defaultPhone = storedPhone;
+    
+    if (!storedPhone.isEmpty() && !storedPhone.startsWith("216")) {
+        defaultPhone = "216" + storedPhone;
+    } else if (storedPhone.isEmpty()) {
+        defaultPhone = "216";
+    }
 
     bool okNum;
     QString phone = QInputDialog::getText(
         this,
         "Destinataire",
-        "Numéro (+216XXXXXXXX) :",
+        "Numéro (216XXXXXXXX) :",
         QLineEdit::Normal,
-        "+216",
+        defaultPhone,
         &okNum
         );
 
@@ -906,13 +987,10 @@ void FrigoWindow::onSendSMS()
 
     mainObject["sms"] = smsArray;
 
-
     QJsonDocument doc(mainObject);
-
 
     QNetworkReply *reply =
         manager->post(request, doc.toJson());
-
 
     connect(reply,
             &QNetworkReply::finished,
@@ -944,4 +1022,74 @@ void FrigoWindow::onSendSMS()
                 reply->deleteLater();
                 manager->deleteLater();
             });
+}
+
+void FrigoWindow::onShowClassification()
+{
+    QDialog* dlg = new QDialog(this);
+    dlg->setWindowTitle("Guide de Classification - PortFlow");
+    dlg->setMinimumSize(550, 550);
+    // On force le fond blanc et le texte sombre pour tout le dialogue
+    dlg->setStyleSheet("QDialog { background-color: white; } QLabel { color: #1e293b; }");
+
+    QVBoxLayout* mainLay = new QVBoxLayout(dlg);
+    mainLay->setContentsMargins(30,30,30,30);
+    mainLay->setSpacing(15);
+
+    QLabel* title = new QLabel(QString::fromUtf8("🌡️ Températures de Conservation"));
+    title->setFont(QFont("Segoe UI", 18, QFont::Bold));
+    title->setStyleSheet("color: #1e3a5f;"); // Bleu foncé pour le titre
+    mainLay->addWidget(title);
+
+    auto addSpecies = [&](const QString& name, const QString& range) {
+        QFrame* rowFrame = new QFrame();
+        rowFrame->setStyleSheet("background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;");
+        QHBoxLayout* row = new QHBoxLayout(rowFrame);
+        
+        QLabel* n = new QLabel(QString::fromUtf8(name.toUtf8()));
+        n->setFont(QFont("Segoe UI", 12, QFont::Bold));
+        n->setStyleSheet("color: #1e293b; border: none;"); 
+        
+        QLabel* r = new QLabel(QString::fromUtf8(range.toUtf8()));
+        r->setFont(QFont("Segoe UI", 11, QFont::Bold));
+        r->setStyleSheet("color: #2563eb; background: #eff6ff; padding: 5px; border: none;");
+        
+        row->addWidget(n);
+        row->addStretch();
+        row->addWidget(r);
+        mainLay->addWidget(rowFrame);
+    };
+
+    addSpecies("🐟 Sardine", "0.0°C  à  4.0°C");
+    addSpecies("🍣 Thon", "-1.0°C  à  2.0°C");
+    addSpecies("🐟 Merlan", "0.0°C  à  3.0°C");
+    addSpecies("🍤 Crevette", "-2.0°C  à  1.0°C");
+    addSpecies("🐟 Saumon", "0.0°C  à  2.0°C");
+
+    // Légende
+    QLabel* leg = new QLabel(QString::fromUtf8("Légende (Couleurs dans le tableau) :"));
+    leg->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    mainLay->addWidget(leg);
+
+    QHBoxLayout* legend = new QHBoxLayout();
+    auto makeLeg = [&](const QString& col, const QString& txt, const QString& tCol) {
+        QLabel* l = new QLabel(txt);
+        l->setFixedHeight(35);
+        l->setAlignment(Qt::AlignCenter);
+        l->setStyleSheet(QString("background: %1; color: %2; border-radius: 5px; font-weight: bold;").arg(col, tCol));
+        legend->addWidget(l, 1);
+    };
+    makeLeg("#D1FAE5", "Optimal", "#065F46");
+    makeLeg("#FEF3C7", "Alerte", "#92400E");
+    makeLeg("#FEE2E2", "Danger", "#991B1B");
+    mainLay->addLayout(legend);
+
+    mainLay->addStretch();
+    QPushButton* close = new QPushButton("Fermer");
+    close->setFixedHeight(45);
+    close->setStyleSheet("background: #2563eb; color: white; border-radius: 10px; font-weight: bold;");
+    connect(close, &QPushButton::clicked, dlg, &QDialog::accept);
+    mainLay->addWidget(close);
+
+    dlg->exec();
 }

@@ -16,6 +16,8 @@
 #include <QMenu>
 #include <QAction>
 #include <QRegularExpression>
+#include <QFileInfo>
+#include <QDir>
 
 EmployeeWindow::EmployeeWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -297,16 +299,20 @@ QFrame* EmployeeWindow::createHeader()
     QAction* reglementAct = new QAction("📜  Règlement Intérieur", this);
     QAction* congeAct = new QAction("📅  Demande de Congé", this);
     QAction* attestationAct = new QAction("📄  Attestation de Travail", this);
+    QAction* registerFaceAct = new QAction("📸  Register Face ID", this);
     
     adminMenu->addAction(reglementAct);
     adminMenu->addAction(congeAct);
     adminMenu->addAction(attestationAct);
+    adminMenu->addSeparator();
+    adminMenu->addAction(registerFaceAct);
     
     adminBtn->setMenu(adminMenu);
     
     connect(reglementAct, &QAction::triggered, this, &EmployeeWindow::onReglementInterieur);
     connect(congeAct, &QAction::triggered, this, &EmployeeWindow::onDemandeConge);
     connect(attestationAct, &QAction::triggered, this, &EmployeeWindow::onAttestationTravail);
+    connect(registerFaceAct, &QAction::triggered, this, &EmployeeWindow::onRegisterFaceID);
     
     lay->addWidget(adminBtn);
 
@@ -404,8 +410,8 @@ QFrame* EmployeeWindow::createTableCard()
 void EmployeeWindow::setupTable()
 {
     table = new QTableWidget();
-    table->setColumnCount(8);
-    table->setHorizontalHeaderLabels({"Prénom", "Nom", "CIN", "Position", "Salaire", "Date", "Statut", "Actions"});
+    table->setColumnCount(10);
+    table->setHorizontalHeaderLabels({"Prénom", "Nom", "CIN", "Téléphone", "Email", "Position", "Salaire", "Date", "Statut", "Actions"});
 
     table->horizontalHeader()->setStretchLastSection(true);
     table->verticalHeader()->setVisible(false);
@@ -459,19 +465,21 @@ void EmployeeWindow::setupTable()
     table->setColumnWidth(0, 110);  // Prénom
     table->setColumnWidth(1, 110);  // Nom
     table->setColumnWidth(2, 100);  // CIN
-    table->setColumnWidth(3, 110);  // Position
-    table->setColumnWidth(4, 90);   // Salaire
-    table->setColumnWidth(5, 100);  // Date
-    table->setColumnWidth(6, 90);   // Statut
+    table->setColumnWidth(3, 100);  // Phone
+    table->setColumnWidth(4, 150);  // Email
+    table->setColumnWidth(5, 110);  // Position
+    table->setColumnWidth(6, 90);   // Salaire
+    table->setColumnWidth(7, 100);  // Date
+    table->setColumnWidth(8, 90);   // Statut
 }
 
 void EmployeeWindow::loadEmployeesFromDb()
 {
     employees.clear();
     QSqlQuery query;
-    bool success = query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN FROM EMPLOYEES");
+    bool success = query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN, TELEPHONE, EMAIL FROM EMPLOYEES");
     if (!success) {
-        query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN FROM EMPLOYEE");
+        query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN, TELEPHONE, EMAIL FROM EMPLOYEE");
     }
 
     while (query.next()) {
@@ -502,6 +510,8 @@ void EmployeeWindow::loadEmployeesFromDb()
 
         e.status = query.value(6).toString();
         e.cin = query.value(7).toString();
+        e.phone = query.value(8).toString();
+        e.email = query.value(9).toString();
         employees.append(e);
     }
 }
@@ -521,7 +531,9 @@ void EmployeeWindow::populateTable(const QString& filterText)
             if (!emp.id.toLower().contains(searchLower) &&
                 !emp.firstName.toLower().contains(searchLower) &&
                 !emp.lastName.toLower().contains(searchLower) &&
-                !emp.position.toLower().contains(searchLower)) {
+                !emp.position.toLower().contains(searchLower) &&
+                !emp.phone.toLower().contains(searchLower) &&
+                !emp.email.toLower().contains(searchLower)) {
                 continue;
             }
         }
@@ -546,26 +558,36 @@ void EmployeeWindow::populateTable(const QString& filterText)
         cinItem->setFont(cellFont);
         table->setItem(row, 2, cinItem);
 
+        // Téléphone
+        QTableWidgetItem* phoneItem = new QTableWidgetItem(emp.phone);
+        phoneItem->setFont(cellFont);
+        table->setItem(row, 3, phoneItem);
+
+        // Email
+        QTableWidgetItem* emailItem = new QTableWidgetItem(emp.email);
+        emailItem->setFont(cellFont);
+        table->setItem(row, 4, emailItem);
+
         // Position
         QTableWidgetItem* positionItem = new QTableWidgetItem(emp.position);
         positionItem->setFont(cellFont);
-        table->setItem(row, 3, positionItem);
+        table->setItem(row, 5, positionItem);
 
         // Salaire
         QTableWidgetItem* salaireItem = new QTableWidgetItem(emp.salary);
         salaireItem->setFont(cellFont);
-        table->setItem(row, 4, salaireItem);
+        table->setItem(row, 6, salaireItem);
 
         // Date
         QTableWidgetItem* dateItem = new QTableWidgetItem(emp.date);
         dateItem->setFont(cellFont);
-        table->setItem(row, 5, dateItem);
+        table->setItem(row, 7, dateItem);
 
         // Statut
-        table->setCellWidget(row, 6, createStatusBadge(emp.status));
+        table->setCellWidget(row, 8, createStatusBadge(emp.status));
 
         // Actions (Modifier et Supprimer)
-        table->setCellWidget(row, 7, createActionButtons(i));
+        table->setCellWidget(row, 9, createActionButtons(i));
     }
 }
 
@@ -932,11 +954,13 @@ void EmployeeWindow::onAddEmployee()
         newEmployee.id = generateEmployeeId();
 
         QSqlQuery query1;
-        query1.prepare("INSERT INTO EMPLOYEES (ID_EMPLOYE, PRENOM, NOM, CIN, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT) VALUES (:id, :pre, :nom, :cin, :pos, :sal, :date, :stat)");
+        query1.prepare("INSERT INTO EMPLOYEES (ID_EMPLOYE, PRENOM, NOM, CIN, TELEPHONE, EMAIL, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT) VALUES (:id, :pre, :nom, :cin, :phone, :email, :pos, :sal, :date, :stat)");
         query1.bindValue(":id", newEmployee.id.toInt());
         query1.bindValue(":pre", newEmployee.firstName);
         query1.bindValue(":nom", newEmployee.lastName);
         query1.bindValue(":cin", newEmployee.cin);
+        query1.bindValue(":phone", newEmployee.phone);
+        query1.bindValue(":email", newEmployee.email);
         query1.bindValue(":pos", newEmployee.position);
         
         QString cleanSal = newEmployee.salary;
@@ -949,11 +973,13 @@ void EmployeeWindow::onAddEmployee()
         if(!query1.exec()) {
             QString err1 = query1.lastError().text();
             QSqlQuery query2;
-            query2.prepare("INSERT INTO EMPLOYEE (ID_EMPLOYE, PRENOM, NOM, CIN, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT) VALUES (:id, :pre, :nom, :cin, :pos, :sal, :date, :stat)");
+            query2.prepare("INSERT INTO EMPLOYEE (ID_EMPLOYE, PRENOM, NOM, CIN, TELEPHONE, EMAIL, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT) VALUES (:id, :pre, :nom, :cin, :phone, :email, :pos, :sal, :date, :stat)");
             query2.bindValue(":id", newEmployee.id.toInt());
             query2.bindValue(":pre", newEmployee.firstName);
             query2.bindValue(":nom", newEmployee.lastName);
             query2.bindValue(":cin", newEmployee.cin);
+            query2.bindValue(":phone", newEmployee.phone);
+            query2.bindValue(":email", newEmployee.email);
             query2.bindValue(":pos", newEmployee.position);
             query2.bindValue(":sal", cleanSal.toDouble());
             query2.bindValue(":date", QDate::fromString(newEmployee.date, "dd/MM/yyyy"));
@@ -982,11 +1008,13 @@ void EmployeeWindow::onEditEmployee(int row)
         updatedEmployee.id = employees[row].id;
 
         QSqlQuery query1;
-        query1.prepare("UPDATE EMPLOYEES SET PRENOM=:pre, NOM=:nom, CIN=:cin, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=:date, STATUT=:stat WHERE ID_EMPLOYE=:id");
+        query1.prepare("UPDATE EMPLOYEES SET PRENOM=:pre, NOM=:nom, CIN=:cin, TELEPHONE=:phone, EMAIL=:email, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=:date, STATUT=:stat WHERE ID_EMPLOYE=:id");
         query1.bindValue(":id", updatedEmployee.id.toInt());
         query1.bindValue(":pre", updatedEmployee.firstName);
         query1.bindValue(":nom", updatedEmployee.lastName);
         query1.bindValue(":cin", updatedEmployee.cin);
+        query1.bindValue(":phone", updatedEmployee.phone);
+        query1.bindValue(":email", updatedEmployee.email);
         query1.bindValue(":pos", updatedEmployee.position);
         
         QString cleanSalUpd = updatedEmployee.salary;
@@ -999,11 +1027,13 @@ void EmployeeWindow::onEditEmployee(int row)
         if(!query1.exec()) {
             QString err1 = query1.lastError().text();
             QSqlQuery query2;
-            query2.prepare("UPDATE EMPLOYEE SET PRENOM=:pre, NOM=:nom, CIN=:cin, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=:date, STATUT=:stat WHERE ID_EMPLOYE=:id");
+            query2.prepare("UPDATE EMPLOYEE SET PRENOM=:pre, NOM=:nom, CIN=:cin, TELEPHONE=:phone, EMAIL=:email, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=:date, STATUT=:stat WHERE ID_EMPLOYE=:id");
             query2.bindValue(":id", updatedEmployee.id.toInt());
             query2.bindValue(":pre", updatedEmployee.firstName);
             query2.bindValue(":nom", updatedEmployee.lastName);
             query2.bindValue(":cin", updatedEmployee.cin);
+            query2.bindValue(":phone", updatedEmployee.phone);
+            query2.bindValue(":email", updatedEmployee.email);
             query2.bindValue(":pos", updatedEmployee.position);
             query2.bindValue(":sal", cleanSalUpd.toDouble());
             query2.bindValue(":date", QDate::fromString(updatedEmployee.date, "dd/MM/yyyy"));
@@ -1254,4 +1284,84 @@ void EmployeeWindow::applyTheme()
     }
     
     populateTable(searchInput->text());
+}
+void EmployeeWindow::onRegisterFaceID()
+{
+    int currentRow = table->currentRow();
+    if (currentRow < 0) {
+        QMessageBox::warning(this, "Selection Required", "Please select an employee to register their face.");
+        return;
+    }
+
+    QTableWidgetItem* item = table->item(currentRow, 0);
+    int empIndex = item->data(Qt::UserRole).toInt();
+    const Employee& emp = employees[empIndex];
+
+    QMessageBox::information(this, "Face Registration", 
+        "Starting face registration for: " + emp.firstName + " " + emp.lastName + 
+        "\n\nA camera window will open. Please look at the camera and press 'Space' to capture.");
+
+    QProcess *process = new QProcess(this);
+    
+    // Force UTF-8 environment for Python to handle DeepFace emojis
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    
+    // Smart path searching
+    QString scriptPath = "face_id/face_auth.py";
+    QFileInfo checkFile(scriptPath);
+    
+    if (!checkFile.exists()) {
+        // Try looking in the parent directory (useful when running from build/debug)
+        scriptPath = "../face_id/face_auth.py";
+        checkFile.setFile(scriptPath);
+    }
+    
+    if (!checkFile.exists()) {
+        // Try looking specifically in the source folder if we can guess it
+        scriptPath = "../../projet1/face_id/face_auth.py";
+        checkFile.setFile(scriptPath);
+    }
+    
+    if (!checkFile.exists()) {
+        // Final fallback: use the path shown in your error message
+        scriptPath = "C:/Users/manne/Downloads/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-new (1)/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-new/face_id/face_auth.py";
+    }
+
+    QStringList arguments;
+    arguments << scriptPath << "register" << (emp.firstName + "_" + emp.lastName) << emp.position;
+
+    process->start("python", arguments);
+    
+    if (!process->waitForStarted()) {
+        process->start("py", arguments);
+    }
+    
+    if (!process->waitForStarted()) {
+        // Hardcoded fallback for default Python 3.12 installation path
+        QString userProfile = QDir::homePath();
+        QString fallbackPath = userProfile + "/AppData/Local/Programs/Python/Python312/python.exe";
+        process->start(fallbackPath, arguments);
+    }
+    
+    if (!process->waitForStarted()) {
+        QMessageBox::critical(this, "Error", "Could not start Python. Please ensure you checked 'Add to PATH' when installing Python 3.12.");
+        return;
+    }
+
+    process->waitForFinished(-1); 
+
+    QString output = process->readAllStandardOutput();
+    QString error = process->readAllStandardError();
+    
+    qDebug() << "Python STDOUT:" << output;
+    qDebug() << "Python STDERR:" << error;
+
+    if (output.contains("SUCCESS")) {
+        QMessageBox::information(this, "Success", "Face registered successfully for " + emp.firstName);
+    } else {
+        QString fullError = output + "\n" + error;
+        QMessageBox::warning(this, "Failed", "Registration failed or cancelled.\n\nDetails:\n" + (fullError.isEmpty() ? "No output from python." : fullError));
+    }
 }

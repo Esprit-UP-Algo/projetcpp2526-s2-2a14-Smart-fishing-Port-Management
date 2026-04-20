@@ -8,6 +8,12 @@
 #include <QBrush>
 #include <QPixmap>
 #include <QDebug>
+#include <QProcess>
+#include <QMessageBox>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QFileInfo>
+#include <QDir>
 
 LoginWindow::LoginWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -207,6 +213,26 @@ QFrame* LoginWindow::createLoginCard()
     connect(loginBtn, &QPushButton::clicked, this, &LoginWindow::onLogin);
     layout->addWidget(loginBtn);
 
+    // Face ID button
+    QPushButton* faceIdBtn = new QPushButton("Login with Face ID");
+    faceIdBtn->setFont(btnFont);
+    faceIdBtn->setCursor(Qt::PointingHandCursor);
+    faceIdBtn->setFixedHeight(50);
+    faceIdBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: #2ECC71;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        QPushButton:hover {
+            background-color: #27AE60;
+        }
+    )");
+    connect(faceIdBtn, &QPushButton::clicked, this, &LoginWindow::onFaceIDLogin);
+    layout->addWidget(faceIdBtn);
+
     // Forgot password link
     QPushButton* forgotPassword = new QPushButton("Mot de passe oublié?");
     QFont forgotFont("Segoe UI", 10);
@@ -308,6 +334,82 @@ void LoginWindow::onLogin()
         this->close();
     } else {
         qDebug() << "Please fill in all fields";
+    }
+}
+
+void LoginWindow::onFaceIDLogin()
+{
+    qDebug() << "Face ID Login clicked";
+    
+    QProcess *process = new QProcess(this);
+    
+    // Force UTF-8 environment for Python
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONIOENCODING", "utf-8");
+    process->setProcessEnvironment(env);
+    
+    // Smart path searching
+    QString scriptPath = "face_id/face_auth.py";
+    QFileInfo checkFile(scriptPath);
+    
+    if (!checkFile.exists()) {
+        scriptPath = "../face_id/face_auth.py";
+        checkFile.setFile(scriptPath);
+    }
+    
+    if (!checkFile.exists()) {
+        scriptPath = "C:/Users/manne/Downloads/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-new (1)/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-new/face_id/face_auth.py";
+    }
+
+    QStringList arguments;
+    arguments << scriptPath << "verify";
+
+    process->start("python", arguments);
+    
+    if (!process->waitForStarted()) {
+        process->start("py", arguments);
+    }
+    
+    if (!process->waitForStarted()) {
+        // Hardcoded fallback for default Python 3.12 installation path
+        QString userProfile = QDir::homePath();
+        QString fallbackPath = userProfile + "/AppData/Local/Programs/Python/Python312/python.exe";
+        process->start(fallbackPath, arguments);
+    }
+    
+    if (!process->waitForStarted()) {
+        QMessageBox::critical(this, "Error", "Could not start Python. Please ensure you checked 'Add to PATH' when installing Python 3.12.");
+        return;
+    }
+
+    // Wait for the process to finish (no timeout to allow for model downloading)
+    if (!process->waitForFinished(-1)) { 
+        QMessageBox::warning(this, "Error", "Face recognition process failed.");
+        return;
+    }
+
+    QString output = process->readAllStandardOutput();
+    qDebug() << "Python Output:" << output;
+
+    // Find the JSON part in the output (some logs might be present)
+    int jsonStart = output.indexOf("{");
+    if (jsonStart != -1) {
+        QString jsonStr = output.mid(jsonStart);
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+        QJsonObject obj = doc.object();
+
+        if (obj["status"].toString() == "success") {
+            // Redirect based on role or just open main window
+            MainWindow* mainWin = new MainWindow();
+            mainWin->show();
+            this->close();
+        } else {
+            QString errorMsg = obj["message"].toString();
+            if (errorMsg.isEmpty()) errorMsg = "Face not recognized.";
+            QMessageBox::warning(this, "Failed", errorMsg);
+        }
+    } else {
+        QMessageBox::critical(this, "Error", "Internal AI Module Error.\n" + output);
     }
 }
 

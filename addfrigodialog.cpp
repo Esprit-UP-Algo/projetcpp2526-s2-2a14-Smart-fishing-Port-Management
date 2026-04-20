@@ -11,6 +11,7 @@
 #include <QDate>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QRegularExpressionValidator>
 
 AddFrigoDialog::AddFrigoDialog(QWidget *parent, FrigoModel* frigoData)
     : QDialog(parent), frigoData(frigoData), isEdit(frigoData != nullptr)
@@ -73,7 +74,12 @@ void AddFrigoDialog::setupUi()
     refEdit->setMinimumHeight(45);
     refError = createErrorLabel();
 
-    grid->addWidget(createLabel("Référence"), 0, 0, 1, 2);
+    // Bloquer la saisie : autoriser uniquement le format FRG-NUMERO en cours de frappe
+    QRegularExpression frgRegex("^FRG(-\\d{0,6})?$");
+    QRegularExpressionValidator* frgValidator = new QRegularExpressionValidator(frgRegex, this);
+    refEdit->setValidator(frgValidator);
+
+    grid->addWidget(createLabel("Référence  (format: FRG-NUMERO)"), 0, 0, 1, 2);
     grid->addWidget(refError, 1, 0, 1, 2);
     grid->addWidget(refEdit, 2, 0, 1, 2);
 
@@ -129,9 +135,24 @@ void AddFrigoDialog::setupUi()
     }
     occError = createErrorLabel();
 
-    grid->addWidget(createLabel("Occupation (%)"), 8, 1);
-    grid->addWidget(occError, 9, 1);
-    grid->addWidget(occEdit, 10, 1);
+    grid->addWidget(createLabel("Occupation (%)"), 10, 0);
+    grid->addWidget(occError, 11, 0);
+    grid->addWidget(occEdit, 12, 0);
+
+    // Ligne 5: Téléphone Employé
+    phoneBox = new QComboBox();
+    phoneBox->setStyleSheet(getInputStyle());
+    phoneBox->setMinimumHeight(45);
+    phoneBox->setEditable(true); // Allow manual entry if needed, but primarily for selection
+    
+    // Populer avec les téléphones des employés
+    QSqlQuery qEmp("SELECT DISTINCT TELEPHONE FROM EMPLOYEES WHERE TELEPHONE IS NOT NULL");
+    while (qEmp.next()) {
+        phoneBox->addItem(qEmp.value(0).toString());
+    }
+
+    grid->addWidget(createLabel("Téléphone Employé"), 10, 1);
+    grid->addWidget(phoneBox, 12, 1);
 
     mainContentLayout->addLayout(grid);
 
@@ -196,13 +217,14 @@ bool AddFrigoDialog::validateInputs()
 
     // Validation Référence
     QString ref = refEdit->text().trimmed();
+    QRegularExpression frgFull("^FRG-\\d+$");
     if (ref.isEmpty()) {
-        refError->setText("La référence est obligatoire.");
+        refError->setText("⚠️ La référence est obligatoire.");
         refError->show();
         refEdit->setStyleSheet(errorStyle);
         isValid = false;
-    } else if (!ref.contains(QRegularExpression("^FRG-?[0-9]+$"))) {
-        refError->setText("Format: FRG-001");
+    } else if (!frgFull.match(ref).hasMatch()) {
+        refError->setText("⚠️ Format invalide ! Attendu : FRG-NUMERO (ex: FRG-001)");
         refError->show();
         refEdit->setStyleSheet(errorStyle);
         isValid = false;
@@ -291,6 +313,7 @@ void AddFrigoDialog::populateFields()
     occEdit->setText(QString::number(frigoData->getOcc()));
     statusBox->setCurrentText(frigoData->getStat());
     fishBox->setCurrentText(frigoData->getType());
+    phoneBox->setCurrentText(frigoData->getTelephone());
     
     QDate dt = QDate::fromString(frigoData->getDateRes(), "dd/MM/yyyy");
     if (dt.isValid()) dateResEdit->setDate(dt);
@@ -301,7 +324,8 @@ FrigoModel AddFrigoDialog::getData() const
     return FrigoModel("", refEdit->text(), capEdit->text().toDouble(), 
                       fishBox->currentText(), statusBox->currentText(), 
                       dateResEdit->date().toString("dd/MM/yyyy"), 
-                      tempEdit->text().toDouble(), occEdit->text().toDouble());
+                      tempEdit->text().toDouble(), occEdit->text().toDouble(),
+                      phoneBox->currentText());
 }
 
 // Legacy methods kept for build compatibility if needed

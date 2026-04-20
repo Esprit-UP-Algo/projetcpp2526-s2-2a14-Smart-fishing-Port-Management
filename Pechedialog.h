@@ -2,6 +2,7 @@
 #define PECHEDIALOG_H
 
 #include <QDialog>
+#include <QLabel>
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDateEdit>
@@ -26,15 +27,21 @@ private:
 
 private slots:
     void onSave();
-    void onSuggestStorage();
+    void refreshFridgeCombo(const QString &espece);
+    void autoSelectFridge();
 
 private:
     QLineEdit* referenceInput;
+    QLabel* refErrorLabel;
     QComboBox* especeCombo;
     QLineEdit* quantiteInput;
+    QLabel* qteErrorLabel;
     QDateEdit* dateInput;
     QComboBox* boatCombo;
     QComboBox* fridgeCombo;
+    QComboBox* fishermanCombo;
+    QPushButton* autoSelectBtn;
+    QLabel* autoMsgLabel;
 
     Peche* pecheData;
     bool isEdit;

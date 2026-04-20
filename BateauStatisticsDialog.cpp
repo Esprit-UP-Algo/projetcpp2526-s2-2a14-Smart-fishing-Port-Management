@@ -1,217 +1,92 @@
 #include "BateauStatisticsDialog.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QPushButton>
-#include <QScrollArea>
-#include <QFrame>
 
-// ─────────────────────────────────────────
-// BateauPieChartWidget
-// ─────────────────────────────────────────
-BateauPieChartWidget::BateauPieChartWidget(const QString& title, const QMap<QString, double>& data, QWidget* parent)
-    : QWidget(parent), m_title(title), m_data(data)
-{
-    setMinimumSize(400, 350);
-    m_colors = {
-        QColor("#34C988"),   // Green (Disponible)
-        QColor("#F47B7B"),   // Red (Occupé)
-        QColor("#5D9CEC"),   // Blue
-        QColor("#F6C244"),   // Yellow
-        QColor("#9966FF"),   // Purple
-    };
-}
-
-void BateauPieChartWidget::paintEvent(QPaintEvent* event)
-{
-    QWidget::paintEvent(event);
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    // Title
-    painter.setPen(QColor("#1f2937"));
-    QFont titleFont("Segoe UI", 12, QFont::Bold);
-    painter.setFont(titleFont);
-    painter.drawText(QRect(0, 15, width(), 30), Qt::AlignHCenter, m_title);
-
-    if (m_data.isEmpty()) {
-        painter.setPen(QColor("#6b7280"));
-        painter.setFont(QFont("Segoe UI", 10));
-        painter.drawText(rect(), Qt::AlignCenter, "Aucune donnée");
-        return;
-    }
-
-    double total = 0;
-    for (double v : m_data.values()) total += v;
-    if (total == 0) return;
-
-    // Dimensions
-    int pieSize = qMin(width() - 40, height() - 120);
-    int pieX = (width() - pieSize) / 2;
-    int pieY = 55;
-    QRect pieRect(pieX, pieY, pieSize, pieSize);
-
-    // Sectors
-    int startAngle = 0;
-    int i = 0;
-    QList<QString> keys = m_data.keys();
-
-    for (const QString& key : keys) {
-        double value = m_data[key];
-        int spanAngle = static_cast<int>((value / total) * 360 * 16.0);
-
-        QColor color = m_colors[i % m_colors.size()];
-        painter.setBrush(color);
-        painter.setPen(QPen(Qt::white, 2));
-
-        painter.drawPie(pieRect, startAngle, spanAngle);
-        startAngle += spanAngle;
-        i++;
-    }
-
-    // Legend
-    int legendY = pieRect.bottom() + 25;
-    int currentX = pieX;
-    int currentY = legendY;
-    i = 0;
-
-    for (const QString& key : keys) {
-        double value = m_data[key];
-        double percent = (value / total) * 100.0;
-        QString text = QString("%1 (%2%)").arg(key).arg(percent, 0, 'f', 1);
-
-        painter.setBrush(m_colors[i % m_colors.size()]);
-        painter.setPen(Qt::NoPen);
-        painter.drawRoundedRect(currentX, currentY, 14, 14, 3, 3);
-
-        painter.setPen(QColor("#475569"));
-        painter.setFont(QFont("Segoe UI", 9, QFont::Medium));
-        int textW = painter.fontMetrics().horizontalAdvance(text) + 20;
-        painter.drawText(currentX + 22, currentY + 12, text);
-
-        currentX += textW + 20;
-        if (currentX > width() - 80) {
-            currentX = pieX;
-            currentY += 22;
-        }
-        i++;
-    }
-}
-
-// ─────────────────────────────────────────
-// BateauStatisticsDialog
-// ─────────────────────────────────────────
 BateauStatisticsDialog::BateauStatisticsDialog(const QMap<QString, double>& availabilityData,
                                                int totalBateaux,
                                                double totalCapacite,
                                                double avgAge,
                                                QWidget* parent)
-    : QDialog(parent)
+    : QDialog(parent), m_availabilityData(availabilityData), m_totalBateaux(totalBateaux), 
+      m_totalCapacite(totalCapacite), m_avgAge(avgAge)
 {
-    setWindowTitle("Statistiques de la Flotte");
-    setMinimumSize(950, 600);
-    setStyleSheet("QDialog { background-color: #F0F4F8; }");
-    setupUi(availabilityData, totalBateaux, totalCapacite, avgAge);
+    setWindowTitle("Tableau de Bord - Statistiques de la Flotte");
+    resize(1000, 700);
+    setStyleSheet("QDialog { background-color: #f8fafc; }");
+    setupUi();
 }
 
-void BateauStatisticsDialog::setupUi(const QMap<QString, double>& availabilityData,
-                                    int totalBateaux,
-                                    double totalCapacite,
-                                    double avgAge)
+void BateauStatisticsDialog::setupUi()
 {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
+    mainLayout->setSpacing(25);
+    mainLayout->setContentsMargins(30, 30, 30, 30);
 
-    // Header
-    QFrame* header = new QFrame();
-    header->setFixedHeight(80);
-    header->setStyleSheet("background-color: #1e4fa3;");
-    QHBoxLayout* hl = new QHBoxLayout(header);
-    hl->setContentsMargins(30, 0, 30, 0);
+    // Header Title
+    QLabel* headTitle = new QLabel("⚓ Analyse de la Flotte");
+    headTitle->setStyleSheet("font-size: 26px; font-weight: bold; color: #1e293b;");
+    mainLayout->addWidget(headTitle);
 
-    QLabel* title = new QLabel("📊 Statistiques de la Flotte");
-    title->setStyleSheet("color: white; font-size: 24px; font-weight: bold; font-family: 'Segoe UI';");
-    hl->addWidget(title);
-    hl->addStretch();
+    // Top Row: Stat Cards
+    QHBoxLayout* cardsLayout = new QHBoxLayout();
+    cardsLayout->setSpacing(20);
 
-    QPushButton* closeBtn = new QPushButton("Fermer");
-    closeBtn->setCursor(Qt::PointingHandCursor);
-    closeBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid white;
-            border-radius: 10px;
-            padding: 8px 24px;
-            font-size: 14px;
-            font-weight: bold;
+    cardsLayout->addWidget(createStatCard("Total Bateaux", QString::number(m_totalBateaux), "#2563EB"));
+    cardsLayout->addWidget(createStatCard("Capacité Totale", QString::number(m_totalCapacite, 'f', 1) + " T", "#059669"));
+    cardsLayout->addWidget(createStatCard("Âge Moyen", QString::number(m_avgAge, 'f', 1) + " ans", "#D97706"));
+    mainLayout->addLayout(cardsLayout);
+
+    // Middle Row: Pie Chart
+    mainLayout->addWidget(createAvailabilityPieChart(), 1);
+}
+
+QFrame* BateauStatisticsDialog::createStatCard(const QString& title, const QString& value, const QString& color)
+{
+    QFrame* card = new QFrame();
+    card->setStyleSheet(QString(R"(
+        QFrame {
+            background-color: white;
+            border-radius: 16px;
+            border-bottom: 4px solid %1;
         }
-        QPushButton:hover { background-color: rgba(255, 255, 255, 0.3); }
-    )");
-    connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
-    hl->addWidget(closeBtn);
+    )").arg(color));
+    card->setFixedHeight(110);
 
-    mainLayout->addWidget(header);
+    QVBoxLayout* lay = new QVBoxLayout(card);
+    lay->setContentsMargins(20, 15, 20, 15);
 
-    // Scroll Area
-    QScrollArea* scroll = new QScrollArea();
-    scroll->setWidgetResizable(true);
-    scroll->setStyleSheet("border: none; background: transparent;");
-
-    QWidget* content = new QWidget();
-    QVBoxLayout* cl = new QVBoxLayout(content);
-    cl->setContentsMargins(35, 30, 35, 30);
-    cl->setSpacing(30);
-
-    // Metrics Row
-    QHBoxLayout* metricsRow = new QHBoxLayout();
-    metricsRow->setSpacing(20);
-
-    auto makeMetric = [&](const QString& icon, const QString& label, const QString& val, const QString& bgColor, const QString& txtColor) {
-        QFrame* card = new QFrame();
-        card->setStyleSheet(QString(R"(
-            QFrame { 
-                background: %1; 
-                border-radius: 16px; 
-            }
-        )").arg(bgColor));
-        card->setFixedHeight(110);
-        
-        QVBoxLayout* l = new QVBoxLayout(card);
-        l->setContentsMargins(20, 15, 20, 15);
-        
-        QLabel* labelW = new QLabel(QString("%1  %2").arg(icon, label));
-        labelW->setFont(QFont("Segoe UI", 10, QFont::Bold));
-        labelW->setStyleSheet(QString("color: %1; opacity: 0.9; text-transform: uppercase;").arg(txtColor));
-        
-        QLabel* valW = new QLabel(val);
-        valW->setFont(QFont("Segoe UI", 24, QFont::Bold));
-        valW->setStyleSheet(QString("color: %1;").arg(txtColor));
-
-        l->addWidget(labelW);
-        l->addWidget(valW);
-        metricsRow->addWidget(card, 1);
-    };
-
-    makeMetric("⛵", "Total Bateaux", QString::number(totalBateaux), "white", "#1e3a5f");
-    makeMetric("⚖️", "Capacité Totale", QString::number(totalCapacite, 'f', 1) + " T", "white", "#1e3a5f");
-    makeMetric("📅", "Âge Moyen", QString::number(avgAge, 'f', 1) + " ans", "#DBEAFE", "#1E40AF");
-
-    cl->addLayout(metricsRow);
-
-    // Charts Container
-    QFrame* chartFrame = new QFrame();
-    chartFrame->setStyleSheet("background: white; border-radius: 16px;");
-    QVBoxLayout* fl = new QVBoxLayout(chartFrame);
-    fl->setContentsMargins(20, 20, 20, 20);
+    QLabel* lblTitle = new QLabel(title);
+    lblTitle->setStyleSheet("color: #64748b; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border: none;");
     
-    BateauPieChartWidget* chartAvail = new BateauPieChartWidget("Disponibilité de la Flotte", availabilityData);
-    fl->addWidget(chartAvail);
+    QLabel* lblValue = new QLabel(value);
+    lblValue->setStyleSheet(QString("color: %1; font-size: 32px; font-weight: bold; border: none;").arg(color));
 
-    cl->addWidget(chartFrame);
-    cl->addStretch();
+    lay->addWidget(lblTitle);
+    lay->addStretch();
+    lay->addWidget(lblValue);
+    return card;
+}
 
-    scroll->setWidget(content);
-    mainLayout->addWidget(scroll);
+QChartView* BateauStatisticsDialog::createAvailabilityPieChart()
+{
+    QPieSeries *series = new QPieSeries();
+    for (auto it = m_availabilityData.begin(); it != m_availabilityData.end(); ++it) {
+        series->append(it.key(), it.value());
+    }
+
+    if (series->slices().size() > 0) {
+        QPieSlice *slice = series->slices().at(0);
+        slice->setExploded();
+        slice->setLabelVisible();
+    }
+
+    QChart *chart = new QChart();
+    chart->addSeries(series);
+    chart->setTitle("Disponibilité des Bateaux");
+    chart->setAnimationOptions(QChart::SeriesAnimations);
+    chart->legend()->setAlignment(Qt::AlignRight);
+    chart->legend()->setFont(QFont("Segoe UI", 10));
+
+    QChartView *chartView = new QChartView(chart);
+    chartView->setRenderHint(QPainter::Antialiasing);
+    chartView->setStyleSheet("background: white; border-radius: 16px; border: 1px solid #e2e8f0;");
+    return chartView;
 }

@@ -2,8 +2,12 @@
 #define LIVRAISONSTATISTICSDIALOG_H
 
 #include <QDialog>
-#include <QMap>
+#include <QtCharts>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QFrame>
+#include <QLabel>
+#include <QMap>
 
 class LivraisonStatisticsDialog : public QDialog
 {
@@ -15,25 +19,14 @@ public:
         QWidget *parent = nullptr);
 
 private:
-    void setupUi(const QMap<QString, int>& statusData, 
-                 const QMap<QString, int>& vehicleData, 
-                 const QMap<QString, double>& avgTimeData);
-};
+    void setupUi();
+    QFrame*      createStatCard(const QString& title, const QString& value, const QString& color);
+    QChartView*  createStatusPieChart();
+    QChartView*  createVehicleBarChart();
 
-class HorizontalBarChartWidget : public QFrame {
-    Q_OBJECT
-    Q_PROPERTY(qreal progress READ progress WRITE setProgress)
-public:
-    explicit HorizontalBarChartWidget(const QList<QPair<QString, double>>& data, QWidget* parent = nullptr);
-    void animateTo();
-
-    qreal progress() const { return m_progress; }
-    void setProgress(qreal p) { m_progress = p; update(); }
-protected:
-    void paintEvent(QPaintEvent* event) override;
-private:
-    QList<QPair<QString, double>> m_data;
-    qreal m_progress = 0.0;
+    QMap<QString, int> m_statusData;
+    QMap<QString, int> m_vehicleData;
+    QMap<QString, double> m_avgTimeData;
 };
 
 #endif // LIVRAISONSTATISTICSDIALOG_H

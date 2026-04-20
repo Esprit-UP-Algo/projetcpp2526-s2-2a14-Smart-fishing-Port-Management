@@ -1,4 +1,4 @@
-﻿#ifndef EMPLOYEEDIALOG_H
+#ifndef EMPLOYEEDIALOG_H
 #define EMPLOYEEDIALOG_H
 
 #include <QDialog>
@@ -22,6 +22,8 @@ private slots:
     void validateLastName(const QString &text);
     void validateCin(const QString &text);
     void validateSalary(const QString &text);
+    void validatePhone(const QString &text);
+    void validateEmail(const QString &text);
     void onSaveClicked();
 
 private:
@@ -38,6 +40,10 @@ private:
     QComboBox* positionCombo;
     QLineEdit* salaryInput;
     QLabel* salaryErrorLabel;
+    QLineEdit* phoneInput;
+    QLabel* phoneErrorLabel;
+    QLineEdit* emailInput;
+    QLabel* emailErrorLabel;
     QDateEdit* dateInput;
     QComboBox* statusCombo;
 

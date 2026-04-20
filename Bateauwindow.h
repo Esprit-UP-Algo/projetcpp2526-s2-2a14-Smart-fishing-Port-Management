@@ -7,9 +7,10 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QFrame>
-#include <QHBoxLayout>
 #include <QList>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QMap>
 #include "bateau.h"
 
 class BateauWindow : public QMainWindow
@@ -19,14 +20,13 @@ public:
     explicit BateauWindow(QWidget *parent = nullptr);
     ~BateauWindow();
     static void refreshAllTables();
-
 private slots:
     void onSearch(const QString& text);
     void onSort(int index);
     void onAddBateau();
     void onEditBateau(int row);
     void onDeleteBateau(int row);
-    void onPredictMaintenance(int row);
+    void onPredictMaintenanceGlobal();
     void onGeneratePDF();
     void onShowStatistics();
     void onLogout();
@@ -49,8 +49,7 @@ private:
     QTableWidget*   table      = nullptr;
     QLineEdit*      searchInput= nullptr;
     QComboBox*      sortCombo  = nullptr;
-
-    static QList<BateauWindow*> s_instances;
+     static QList<BateauWindow*> s_instances;
 };
 
 #endif // BATEAUWINDOW_H

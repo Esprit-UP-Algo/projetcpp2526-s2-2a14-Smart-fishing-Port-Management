@@ -11,7 +11,7 @@ class EmployeeModel
 {
 public:
     EmployeeModel();
-    EmployeeModel(QString id, QString cin, double salaire, QDate date, QString statut, QString position, QString prenom, QString nom);
+    EmployeeModel(QString id, QString cin, double salaire, QDate date, QString statut, QString position, QString prenom, QString nom, QString telephone="", QString email="");
 
     // Getters
     QString getId() const { return id_employe; }
@@ -22,6 +22,8 @@ public:
     QString getPosition() const { return position; }
     QString getPrenom() const { return prenom; }
     QString getNom() const { return nom; }
+    QString getTelephone() const { return telephone; }
+    QString getEmail() const { return email; }
 
     // CRUD
     bool ajouter();
@@ -41,6 +43,8 @@ private:
     QString position;
     QString prenom;
     QString nom;
+    QString telephone;
+    QString email;
     QString m_lastError;
 };
 
