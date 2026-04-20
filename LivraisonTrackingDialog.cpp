@@ -49,10 +49,9 @@ LivraisonTrackingDialog::LivraisonTrackingDialog(const QString& id, const QStrin
     connect(m_panDebounceTimer, &QTimer::timeout, this, &LivraisonTrackingDialog::downloadMap);
 
     // Initial load from DB for persistence
-    int idNum = m_id.startsWith("LIV") ? m_id.mid(3).toInt() : m_id.toInt();
     QSqlQuery query;
     query.prepare("SELECT DATE_DEPART, DUREE_ESTIMEE, STATUT FROM LIVRAISONS WHERE IDLIVRAISON = :id");
-    query.bindValue(":id", idNum);
+    query.bindValue(":id", m_id);
     if (query.exec() && query.next()) {
         QString currentStatus = query.value("STATUT").toString();
         m_startTime = query.value("DATE_DEPART").toDateTime();
@@ -66,8 +65,8 @@ LivraisonTrackingDialog::LivraisonTrackingDialog(const QString& id, const QStrin
                 m_statusLabel->setText("🚚 Reprise de la livraison...");
             } else {
                 QSqlQuery update;
-                update.prepare("UPDATE LIVRAISONS SET STATUT = 'Livré' WHERE IDLIVRAISON = :id");
-                update.bindValue(":id", idNum);
+                update.prepare("UPDATE LIVRAISONS SET STATUT = 'Arrivé' WHERE IDLIVRAISON = :id");
+                update.bindValue(":id", m_id);
                 update.exec();
             }
         }
@@ -342,9 +341,8 @@ void LivraisonTrackingDialog::renderMap(QWidget* viewport)
 void LivraisonTrackingDialog::startTracking()
 {
     m_simElapsed = 0; m_startTime = QDateTime::currentDateTime(); m_simTimer->start(1000); m_startBtn->setEnabled(false); m_statusLabel->setText("🚚 Livraison lancée...");
-    int idNum = m_id.startsWith("LIV") ? m_id.mid(3).toInt() : m_id.toInt();
     QSqlQuery q; q.prepare("UPDATE LIVRAISONS SET STATUT = 'En chemin', DATE_DEPART = :s, DUREE_ESTIMEE = :d WHERE IDLIVRAISON = :i");
-    q.bindValue(":s", m_startTime); q.bindValue(":d", m_totalDuration); q.bindValue(":i", idNum); q.exec();
+    q.bindValue(":s", m_startTime); q.bindValue(":d", m_totalDuration); q.bindValue(":i", m_id); q.exec();
 }
 
 void LivraisonTrackingDialog::updateSimulation()
@@ -357,8 +355,8 @@ void LivraisonTrackingDialog::updateSimulation()
     m_timeLabel->setText(QString("📏 ITINÉRAIRE: %1 km | ⏱️ ARRIVÉE DANS %2 MINS").arg(m_totalDistance/1000.0, 0, 'f', 1).arg(qMax(1, qRound(rem/60.0))));
     if (progress >= 1.0) {
         m_simTimer->stop(); m_statusLabel->setText("✅ Arrivé!");
-        QSqlQuery q; q.prepare("UPDATE LIVRAISONS SET STATUT = 'Livré' WHERE IDLIVRAISON = :i");
-        int idNum = m_id.startsWith("LIV") ? m_id.mid(3).toInt() : m_id.toInt(); q.bindValue(":i", idNum); q.exec();
+        QSqlQuery q; q.prepare("UPDATE LIVRAISONS SET STATUT = 'Arrivé' WHERE IDLIVRAISON = :i");
+        q.bindValue(":i", m_id); q.exec();
     }
     m_mapArea->update();
 }

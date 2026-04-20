@@ -1,4 +1,4 @@
-QT       += core gui widgets sql printsupport charts network
+QT       += core gui widgets sql printsupport charts network serialport
 QT += network
 
 CONFIG   += c++17
@@ -8,6 +8,7 @@ TARGET = PortFlow
 # Source files
 SOURCES += main.cpp \
            mainwindow.cpp \
+           arduino.cpp \
            AddLivraisonDialog.cpp \
            BateauStatisticsDialog.cpp \
            Bateaudialog.cpp \
@@ -43,6 +44,7 @@ SOURCES += main.cpp \
 
 # Header files
 HEADERS += mainwindow.h \
+           arduino.h \
            AddLivraisonDialog.h \
            BateauStatisticsDialog.h \
            Bateaudialog.h \

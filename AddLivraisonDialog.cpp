@@ -28,6 +28,7 @@ AddLivraisonDialog::AddLivraisonDialog(QWidget *parent, Livraison* livraisonData
     connect(addressDebounceTimer, &QTimer::timeout, this, &AddLivraisonDialog::onAddressDebounceTimeout);
 
     setupUi();
+    populateLivreurCombo();
     if (isEdit) {
         populateFields();
     }
@@ -152,29 +153,39 @@ void AddLivraisonDialog::setupUi()
 
     QFont labelFont("Segoe UI", 11, QFont::DemiBold);
 
-    // ID Field (New)
-    QLabel* idLabel = new QLabel("🆔  ID Livraison (Doit commencer par LIV-)");
-    idLabel->setFont(labelFont);
-    idLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
-    formLayout->addWidget(idLabel);
-
-    idEdit = new QLineEdit();
-    idEdit->setPlaceholderText("LIV-1234");
-    idEdit->setFixedHeight(45);
-    idEdit->setStyleSheet(getInputStyle());
+    // Reference Field
+    QLabel* refLabel = new QLabel("🆔  Référence Livraison (Commence par LIV-)");
+    refLabel->setFont(labelFont);
+    refLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
+    formLayout->addWidget(refLabel);
+ 
+    referenceEdit = new QLineEdit();
+    referenceEdit->setPlaceholderText("LIV-1234");
+    referenceEdit->setFixedHeight(45);
+    referenceEdit->setStyleSheet(getInputStyle());
     if (isEdit && livraisonData) {
-        idEdit->setText(livraisonData->getID());
-        idEdit->setEnabled(false); // Can't change ID on edit
+        referenceEdit->setText(livraisonData->getReference());
     } else {
-        idEdit->setText("LIV-");
+        referenceEdit->setText("LIV-");
     }
-    formLayout->addWidget(idEdit);
-
-    errorId = new QLabel("⚠ Cet ID existe déjà ou est invalide (Format: LIV-...)");
-    errorId->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-    errorId->setVisible(false);
-    formLayout->addWidget(errorId);
-    connect(idEdit, &QLineEdit::textChanged, this, &AddLivraisonDialog::onIdChanged);
+    formLayout->addWidget(referenceEdit);
+ 
+    errorReference = new QLabel("⚠ La référence doit commencer par LIV-");
+    errorReference->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
+    errorReference->setVisible(false);
+    formLayout->addWidget(errorReference);
+    connect(referenceEdit, &QLineEdit::textChanged, this, &AddLivraisonDialog::onReferenceChanged);
+ 
+    // Livreur Field
+    QLabel* livreurLabel = new QLabel("👤  Livreur Responsable");
+    livreurLabel->setFont(labelFont);
+    livreurLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
+    formLayout->addWidget(livreurLabel);
+ 
+    livreurCombo = new QComboBox();
+    livreurCombo->setFixedHeight(45);
+    livreurCombo->setStyleSheet(getInputStyle());
+    formLayout->addWidget(livreurCombo);
 
     // Adresse
     QLabel* adresseLabel = new QLabel("📍  Adresse de livraison");
@@ -315,6 +326,8 @@ void AddLivraisonDialog::populateFields()
     else dateEdit->setDate(QDate::currentDate());
 
     adresseEdit->setPlainText(livraisonData->getAdresse());
+    referenceEdit->setText(livraisonData->getReference());
+    livreurCombo->setCurrentText(livraisonData->getIdEmploye());
     vehiculeEdit->setCurrentText(livraisonData->getVehicule());
     transportEdit->setCurrentText(livraisonData->getTransport());
     QString p = livraisonData->getPrix();
@@ -323,27 +336,22 @@ void AddLivraisonDialog::populateFields()
     }
     prixEdit->setText(p);
 }
+ 
+void AddLivraisonDialog::onReferenceChanged() {
+    QString ref = referenceEdit->text().trimmed();
+    bool ok = ref.startsWith("LIV-") && ref.length() > 4;
+    updateFieldStyle(referenceEdit, ok);
+    errorReference->setVisible(!ok);
+}
 
-void AddLivraisonDialog::onIdChanged() {
-    QString id = idEdit->text().trimmed();
-    bool validFormat = id.startsWith("LIV-") && id.length() > 4;
-    bool exists = false;
-    
-    if (validFormat && !isEdit) {
-        exists = Livraison::idExists(id);
-    }
-    
-    bool ok = validFormat && !exists;
-    updateFieldStyle(idEdit, ok);
-    
-    if (exists) {
-        errorId->setText("⚠ Cet ID existe déjà dans la base de données");
-        errorId->setVisible(true);
-    } else if (!validFormat) {
-        errorId->setText("⚠ L'ID doit commencer par 'LIV-' suivi de caractères");
-        errorId->setVisible(true);
-    } else {
-        errorId->setVisible(false);
+void AddLivraisonDialog::populateLivreurCombo() {
+    livreurCombo->clear();
+    QSqlQuery query("SELECT ID_EMPLOYE, PRENOM, NOM FROM EMPLOYEES");
+    while (query.next()) {
+        QString id = query.value(0).toString();
+        QString prenom = query.value(1).toString();
+        QString nom = query.value(2).toString();
+        livreurCombo->addItem(QString("%1 %2 (%3)").arg(prenom, nom, id), id);
     }
 }
 
@@ -354,10 +362,14 @@ Livraison AddLivraisonDialog::getData() const
     data.setAdresse(adresseEdit->toPlainText());
     data.setVehicule(vehiculeEdit->currentText());
     data.setTransport(transportEdit->currentText());
+    data.setReference(referenceEdit->text().trimmed());
+    data.setIdEmploye(livreurCombo->currentData().toString());
     
     QString prix = prixEdit->text().trimmed();
     data.setPrix(prix);
-    data.setID(idEdit->text().trimmed());
+    if (isEdit && livraisonData) {
+        data.setID(livraisonData->getID());
+    }
     
     // Status is automated: "En attente" by default for new, preserved for edit
     if (isEdit && livraisonData) {
@@ -431,15 +443,12 @@ void AddLivraisonDialog::updateFieldStyle(QWidget* field, bool isValid) {
 bool AddLivraisonDialog::validateInputs() {
     bool ok = true;
     
-    // Validate ID
-    QString id = idEdit->text().trimmed();
-    bool idOk = id.startsWith("LIV-") && id.length() > 4;
-    if (idOk && !isEdit) {
-        idOk = !Livraison::idExists(id);
-    }
-    if (!idOk) {
-        updateFieldStyle(idEdit, false);
-        errorId->setVisible(true);
+    // Validate Reference
+    QString ref = referenceEdit->text().trimmed();
+    bool refOk = ref.startsWith("LIV-") && ref.length() > 4;
+    if (!refOk) {
+        updateFieldStyle(referenceEdit, false);
+        errorReference->setVisible(true);
         ok = false;
     }
 

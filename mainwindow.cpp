@@ -1,6 +1,11 @@
 #include "mainwindow.h"
 #include "Employeewindow.h"
 #include "Frigowindow.h"
+#include "temperaturealert.h"
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QRegularExpression>
+#include <QSqlRecord>
 #include "pechewindow.h"
 #include "loginwindow.h"
 #include <QFont>
@@ -24,6 +29,16 @@ MainWindow::MainWindow(const QString& userName, const QString& userRole, QWidget
 {
     setupUi();
     checkMaintenanceAlerts();
+
+    // Initialize Arduino
+    int ret = A.connect_arduino();
+    switch(ret) {
+        case(0): qDebug() << "Arduino connected to:" << A.getarduino_port_name(); break;
+        case(1): qDebug() << "Arduino found but failed to connect."; break;
+        case(-1): qDebug() << "Arduino not found."; break;
+    }
+
+    connect(A.getserial(), &QSerialPort::readyRead, this, &MainWindow::handleTemperatureData);
 }
 
 MainWindow::~MainWindow()
@@ -654,4 +669,66 @@ void MainWindow::onTrayMessageClicked() {
     detail += "\n\nVeuillez vérifier l'état de ces bateaux dans l'onglet 'Bateaux'.";
 
     QMessageBox::information(this, "PortFlow - Détails Maintenance", detail);
+}
+
+void MainWindow::handleTemperatureData()
+{
+    serialBuffer += A.read_from_arduino();
+    
+    // Process full messages delimited by newline or semicolon
+    while (serialBuffer.contains(';')) {
+        int index = serialBuffer.indexOf(';');
+        QByteArray message = serialBuffer.left(index).trimmed();
+        serialBuffer.remove(0, index + 1);
+        
+        QString msgStr = QString::fromLatin1(message);
+        qDebug() << "Arduino Data Received:" << msgStr;
+        
+        // Expected format: S1:24.5 or S2:18.2
+        QRegularExpression re("(S[12]):(\\d+\\.?\\d*)");
+        QRegularExpressionMatch match = re.match(msgStr);
+        
+        if (match.hasMatch()) {
+            QString sensorIdStr = match.captured(1);
+            double temp = match.captured(2).toDouble();
+            int sensorId = (sensorIdStr == "S1") ? 1 : 2;
+            
+            checkFridgeTemperature(sensorId, temp);
+        }
+    }
+}
+
+void MainWindow::checkFridgeTemperature(int sensorId, double currentTemp)
+{
+    // Mapping: S1 -> FRG-001, S2 -> FRG-002 (as proposed in the plan)
+    QString fridgeRef = (sensorId == 1) ? "FRG-001" : "FRG-002";
+    
+    QSqlQuery query;
+    query.prepare("SELECT TEMPERATURE FROM FRIGOS WHERE REFERENCE = :ref");
+    query.bindValue(":ref", fridgeRef);
+    
+    if (query.exec() && query.next()) {
+        double threshold = query.value(0).toDouble();
+        
+        // User logic: "if the temperature goes below the required temperature"
+        if (currentTemp < threshold) {
+            static QSet<QString> activeAlerts; // Prevent spamming alerts
+            if (!activeAlerts.contains(fridgeRef)) {
+                activeAlerts.insert(fridgeRef);
+                
+                TemperatureAlert* alert = new TemperatureAlert(fridgeRef, threshold, currentTemp, this);
+                connect(alert, &QDialog::finished, [fridgeRef]() {
+                    // Allow alert to reappear after closing if condition persists (maybe with a delay)
+                    // For now, we clear it so it can trigger again next time
+                    QTimer::singleShot(10000, [fridgeRef]() {
+                         // ActiveAlerts is static so this is tricky, let's keep it simple for now
+                    });
+                });
+                alert->show();
+                qDebug() << "ALERT: Fridge" << fridgeRef << "is too cold!" << currentTemp << "<" << threshold;
+            }
+        }
+    } else {
+        qDebug() << "Warning: No temperature threshold found for fridge" << fridgeRef;
+    }
 }

@@ -16,6 +16,7 @@
 #include <QStackedWidget>
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
+#include "arduino.h"
 
 class MainWindow : public QMainWindow
 {
@@ -38,6 +39,7 @@ private slots:
     void onLogout();
     void onSettingsClicked();
     void onTrayMessageClicked();
+    void handleTemperatureData(); // Slot for Arduino data
 
 private:
     void setupUi();
@@ -74,6 +76,10 @@ private:
     QWidget* livraisonPage;
     QWidget* quaisPage;
     QSystemTrayIcon* trayIcon = nullptr;
+
+    Arduino A;
+    QByteArray serialBuffer;
+    void checkFridgeTemperature(int sensorId, double currentTemp);
     QString loggedUserName;
     QString loggedUserRole;
     QLabel* welcomeLabel;

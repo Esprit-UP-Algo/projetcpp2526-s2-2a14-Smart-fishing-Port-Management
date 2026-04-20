@@ -15,7 +15,66 @@
 #include <QFile>
 #include <QSqlRecord>
 #include <QSqlError>
+#include <QPainter>
 #include "LivraisonStatisticsDialog.h"
+
+// --- LiveProgressIndicator Implementation ---
+LiveProgressIndicator::LiveProgressIndicator(QWidget* parent) : QWidget(parent) {
+    setMinimumHeight(30);
+    m_animationTimer = new QTimer(this);
+    connect(m_animationTimer, &QTimer::timeout, this, [this](){
+        m_animationOffset += 0.05;
+        if (m_animationOffset > 10.0) m_animationOffset = 0;
+        update();
+    });
+    m_animationTimer->start(50);
+}
+
+void LiveProgressIndicator::setProgress(double progress) {
+    m_progress = qBound(0.0, progress, 1.0);
+    update();
+}
+
+void LiveProgressIndicator::paintEvent(QPaintEvent*) {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    int size = 24;
+    int margin = 4;
+    QRectF rect(width()/2.0 - size/2.0, height()/2.0 - size/2.0, size, size);
+
+    // Dynamic color logic
+    QColor color;
+    if (m_progress < 0.33) color = QColor("#EF4444");      // Red
+    else if (m_progress < 0.66) color = QColor("#F59E0B"); // Yellow
+    else color = QColor("#10B981");                         // Green
+
+    // 1. Draw Background Track (Gray Ring)
+    painter.setPen(QPen(QColor("#E2E8F0"), 4, Qt::SolidLine, Qt::RoundCap));
+    painter.drawEllipse(rect);
+
+    // 2. Draw Progress Arc (Filling relative to m_progress)
+    int spanAngle = (int)(-m_progress * 360 * 16);
+    int startAngle = 90 * 16; // Start at 12 o'clock
+    
+    QPen progressPen(color, 4, Qt::SolidLine, Qt::RoundCap);
+    painter.setPen(progressPen);
+    painter.drawArc(rect, startAngle, spanAngle);
+
+    // 3. Central Pulse / Symbol
+    if (m_progress > 0 && m_progress < 1.0) {
+        double pulse = std::abs(std::sin(m_animationOffset));
+        painter.setBrush(color);
+        painter.setPen(Qt::NoPen);
+        double dotSize = 4 + (pulse * 4);
+        painter.drawEllipse(QRectF(width()/2.0 - dotSize/2.0, height()/2.0 - dotSize/2.0, dotSize, dotSize));
+    } else if (m_progress >= 1.0) {
+        painter.setPen(QPen(color, 3));
+        painter.setFont(QFont("Segoe UI", 10, QFont::Bold));
+        painter.drawText(rect, Qt::AlignCenter, "OK");
+    }
+}
+// --------------------------------------------
 
 
 LivraisonWindow::LivraisonWindow(QWidget *parent)
@@ -29,6 +88,10 @@ LivraisonWindow::LivraisonWindow(QWidget *parent)
     updateStats();
     // populateTable(); // REMOVED redundant call
     loadStyleSheet();
+
+    liveUpdateTimer = new QTimer(this);
+    connect(liveUpdateTimer, &QTimer::timeout, this, &LivraisonWindow::onLiveUpdate);
+    liveUpdateTimer->start(5000); // Update every 5 seconds
 }
 
 void LivraisonWindow::loadStyleSheet()
@@ -297,7 +360,7 @@ void LivraisonWindow::updateStats()
         QSqlQuery query("SELECT STATUT FROM LIVRAISONS");
         while (query.next()) {
             total++;
-            if (query.value(0).toString() == "Livré") {
+            if (query.value(0).toString() == "Livré" || query.value(0).toString() == "Arrivé") {
                 delivered++;
             }
         }
@@ -312,8 +375,8 @@ void LivraisonWindow::updateStats()
 void LivraisonWindow::setupTable()
 {
     table = new QTableWidget();
-    table->setColumnCount(6);
-    table->setHorizontalHeaderLabels({"Date", "Adresse", "Statut", "Transport", "Prix (DT/$/€)", "Actions"});
+    table->setColumnCount(9);
+    table->setHorizontalHeaderLabels({"Référence", "Date", "Destination", "Livreur", "Statut", "Prix", "ETA", "Avancement", "Actions"});
 
     /* Responsive columns (matching Bateau styling) */
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
@@ -369,11 +432,17 @@ void LivraisonWindow::setupTable()
 
     table->setObjectName("livraisonTable");
 
-    table->setColumnWidth(0, 130);   // Date
-    table->setColumnWidth(2, 140);   // Statut
-    table->setColumnWidth(3, 160);   // Transport
-    table->setColumnWidth(4, 120);   // Prix
-    table->setColumnWidth(5, 160);   // Actions (Widened for buttons)
+    table->setColumnWidth(0, 110);   // Référence
+    table->setColumnWidth(1, 110);   // Date
+    table->setColumnWidth(2, 250);   // Destination (Stretch)
+    table->setColumnWidth(3, 130);   // Livreur
+    table->setColumnWidth(4, 120);   // Statut
+    table->setColumnWidth(5, 100);   // Prix
+    table->setColumnWidth(6, 100);   // ETA
+    table->setColumnWidth(7, 100);   // Avancement
+    table->setColumnWidth(8, 160);   // Actions
+
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 }
 
 void LivraisonWindow::populateTable(const QString& filterText, const QString& sortCritere, const QString& sortOrdre)
@@ -394,22 +463,50 @@ void LivraisonWindow::populateTable(const QString& filterText, const QString& so
         table->insertRow(row);
         table->setRowHeight(row, 60);
 
-        QString id = model->record(i).value("ID").toString();
-        QString date = model->record(i).value("Date").toDate().toString("dd/MM/yyyy");
-        QString adresse = model->record(i).value("Adresse").toString();
+        int id = model->record(i).value("ID").toInt();
+        QString reference = model->record(i).value("REFERENCE").toString();
+        QString date = model->record(i).value("DATELIV").toDate().toString("dd/MM/yyyy");
+        QString adresse = model->record(i).value("ADRESSE").toString();
+        QString chauffeur = model->record(i).value("ID_EMPLOYE").toString();
         QString statut = model->record(i).value("STATUT").toString();
-        QString transport = model->record(i).value("Transport").toString();
-        QString prix = model->record(i).value("Prix").toString();
+        QString prix = model->record(i).value("PRIX").toString();
         if (!prix.endsWith(" DT")) prix += " DT";
 
-        table->setItem(row, 0, new QTableWidgetItem(date));
-        table->setItem(row, 1, new QTableWidgetItem(adresse));
-        table->setCellWidget(row, 2, createStatusBadge(statut));
-        table->setItem(row, 3, new QTableWidgetItem(transport));
-        table->setItem(row, 4, new QTableWidgetItem(prix));
-        // We store the ID in the first column's toolTip or data for easy access
+        table->setItem(row, 0, new QTableWidgetItem(reference));
+        table->setItem(row, 1, new QTableWidgetItem(date));
+        table->setItem(row, 2, new QTableWidgetItem(adresse));
+        table->setItem(row, 3, new QTableWidgetItem(chauffeur));
+        table->setCellWidget(row, 4, createStatusBadge(statut));
+        table->setItem(row, 5, new QTableWidgetItem(prix));
+
+        // ETA Column (6) - Using the helper from the model
+        Livraison tempLiv;
+        tempLiv.setID(id);
+        table->setItem(row, 6, new QTableWidgetItem(tempLiv.getETA()));
+        table->item(row, 6)->setTextAlignment(Qt::AlignCenter);
+
+        // Live Progress Indicator (Column 7)
+        if (statut == "En chemin") {
+            QDateTime start = model->record(i).value("DATE_DEPART").toDateTime();
+            double duration = model->record(i).value("DUREE_ESTIMEE").toDouble();
+            
+            LiveProgressIndicator* indicator = new LiveProgressIndicator();
+            if (start.isValid() && duration > 0) {
+                double elapsed = start.secsTo(QDateTime::currentDateTime());
+                indicator->setProgress(elapsed / duration);
+            }
+            // Store data in the widget for timer updates
+            indicator->setProperty("startTime", start);
+            indicator->setProperty("duration", duration);
+            table->setCellWidget(row, 7, indicator);
+        } else {
+            table->setItem(row, 7, new QTableWidgetItem("---"));
+            table->item(row, 7)->setTextAlignment(Qt::AlignCenter);
+        }
+
+        // Action Buttons (Column 8)
+        table->setCellWidget(row, 8, createActionButtons(row)); 
         table->item(row, 0)->setData(Qt::UserRole, id); 
-        table->setCellWidget(row, 5, createActionButtons(row)); 
     }
     delete model;
     updateStats();
@@ -427,7 +524,7 @@ QWidget* LivraisonWindow::createStatusBadge(const QString& status)
     badge->setAlignment(Qt::AlignCenter);
 
     badge->setProperty("class", "status-badge");
-    if (status == "Livré") {
+    if (status == "Livré" || status == "Arrivé") {
         badge->setProperty("class", "status-badge status-livre");
     } else if (status == "En cours") {
         badge->setProperty("class", "status-badge status-en-cours");
@@ -499,10 +596,10 @@ QWidget* LivraisonWindow::createActionButtons(int row)
 void LivraisonWindow::onTrackDelivery(int row)
 {
     if (row < 0 || row >= table->rowCount()) return;
-    QString id = table->item(row, 0)->data(Qt::UserRole).toString();
-    QString address = table->item(row, 1)->text(); // Adresse est en colonne 1
+    int id = table->item(row, 0)->data(Qt::UserRole).toInt();
+    QString address = table->item(row, 2)->text(); // Destination est en colonne 2
 
-    LivraisonTrackingDialog* dlg = new LivraisonTrackingDialog(id, address, this);
+    LivraisonTrackingDialog* dlg = new LivraisonTrackingDialog(QString::number(id), address, this);
     // Refresh table when done to see updated status
     connect(dlg, &QDialog::finished, this, [this]() { populateTable(searchInput->text()); });
     dlg->show();
@@ -532,7 +629,7 @@ void LivraisonWindow::onAddLivraison()
 void LivraisonWindow::onEditLivraison(int row)
 {
     if (row < 0 || row >= table->rowCount()) return;
-    QString id = table->item(row, 0)->data(Qt::UserRole).toString();
+    int id = table->item(row, 0)->data(Qt::UserRole).toInt();
 
     // We need to fetch current data to pass to dialog
     QSqlQuery query;
@@ -568,7 +665,7 @@ void LivraisonWindow::onEditLivraison(int row)
 void LivraisonWindow::onDeleteLivraison(int row)
 {
     if (row < 0 || row >= table->rowCount()) return;
-    QString id = table->item(row, 0)->data(Qt::UserRole).toString();
+    int id = table->item(row, 0)->data(Qt::UserRole).toInt();
 
     if (QMessageBox::question(this, "Confirmation", "Supprimer cette livraison ?") == QMessageBox::Yes) {
         if (livraisons.supprimer(id)) {
@@ -601,17 +698,17 @@ void LivraisonWindow::onSort(int index)
 void LivraisonWindow::onExportPDF(int row)
 {
     if (row < 0 || row >= table->rowCount()) return;
-    QString id = table->item(row, 0)->data(Qt::UserRole).toString();
+    int id = table->item(row, 0)->data(Qt::UserRole).toInt();
 
     QSqlQuery query;
     query.prepare("SELECT * FROM LIVRAISONS WHERE IDLIVRAISON = :id");
-    int idNum = id.startsWith("LIV") ? id.mid(3).toInt() : id.toInt();
-    query.bindValue(":id", idNum);
+    query.bindValue(":id", id);
     
     if (!query.exec() || !query.next()) return;
 
     Livraison liv;
     liv.setID(id);
+    liv.setReference(query.value("REFERENCE").toString());
     liv.setDate(query.value("DATELIVRAISON").toDate().toString("dd/MM/yyyy"));
     liv.setAdresse(query.value("ADRESSELIVRAISON").toString());
     liv.setStatut(query.value("STATUT").toString());
@@ -642,9 +739,9 @@ void LivraisonWindow::onExportPDF(int row)
     // Content
     painter.setFont(QFont("Segoe UI", 12));
     int y = 400;
-    painter.drawText(500, y, "ID Livraison :");
+    painter.drawText(500, y, "Référence Livraison :");
     painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
-    painter.drawText(2000, y, liv.getID());
+    painter.drawText(2000, y, liv.getReference());
     
     y += 200;
     painter.setFont(QFont("Segoe UI", 12));
@@ -764,4 +861,35 @@ void LivraisonWindow::onExportAllPDF()
     painter.end();
 
     QMessageBox::information(this, "Export PDF", "Le rapport global a été exporté avec succès !");
+}
+
+void LivraisonWindow::onLiveUpdate()
+{
+    // Iterate through visible rows to update progress indicators
+    for (int i = 0; i < table->rowCount(); ++i) {
+        QWidget* widget = table->cellWidget(i, 5);
+        LiveProgressIndicator* indicator = qobject_cast<LiveProgressIndicator*>(widget);
+        if (indicator) {
+            QDateTime start = indicator->property("startTime").toDateTime();
+            double duration = indicator->property("duration").toDouble();
+            
+            if (start.isValid() && duration > 0) {
+                double elapsed = start.secsTo(QDateTime::currentDateTime());
+                double progress = elapsed / duration;
+                indicator->setProgress(progress);
+                
+                // If it just finished, forcefully update the database to ensure the UI refreshes to 'Arrivé'
+                if (progress >= 1.0) {
+                    QString rowId = table->item(i, 0)->data(Qt::UserRole).toString();
+                    QSqlQuery update;
+                    update.prepare("UPDATE LIVRAISONS SET STATUT = 'Arrivé' WHERE IDLIVRAISON = :id");
+                    update.bindValue(":id", rowId);
+                    if (update.exec()) {
+                        populateTable(searchInput->text());
+                        return; // populateTable will refresh headers and widgets
+                    }
+                }
+            }
+        }
+    }
 }
