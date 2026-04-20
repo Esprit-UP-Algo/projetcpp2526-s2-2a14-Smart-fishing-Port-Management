@@ -178,6 +178,10 @@ private:
     void ensureAvailabilityTimerForQuai(const Quai& quai);
     int estimateCountdownSeconds(const Quai& quai) const;
     int remainingAvailabilitySeconds(int numero) const;
+    bool assignBoatToQuai(const QVariantMap& bateauInfo, const Quai& quai, int dockingMinutes,
+                          bool moveBoatToPort, QString& errorMessage);
+    void clearBoatAssociationForQuai(int numero);
+    void processPendingDockAssignment(int numero);
     void markQuaiAsAvailable(int numero, bool showNotification = true);
     void showAvailabilityCountdownPopup(int numero);
 
