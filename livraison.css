@@ -1,0 +1,113 @@
+#centralWidget {
+    background-color: #F0F4F8;
+}
+
+#livraisonContentArea {
+    background-color: #F0F4F8;
+}
+
+#livraisonTableCard {
+    background-color: #5D9CEC;
+    border-radius: 20px;
+    padding: 3px;
+    border: none;
+}
+
+#livraisonWhiteContainer {
+    background: white;
+    border-radius: 17px;
+}
+
+/* Status Badges */
+.status-badge {
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-weight: 600;
+    font-size: 10pt;
+}
+
+.status-livre {
+    background-color: #D1FAE5;
+    color: #065F46;
+}
+
+.status-en-cours, .status-en-chemin {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+}
+
+.status-en-attente {
+    background-color: #FEF3C7;
+    color: #92400E;
+}
+
+.status-annule {
+    background-color: #FEE2E2;
+    color: #991B1B;
+}
+
+/* Action Buttons */
+.action-btn {
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+.edit-btn {
+    background-color: #FEF3C7;
+    color: #92400E;
+}
+
+.edit-btn:hover {
+    background-color: #FDE68A;
+}
+
+.delete-btn {
+    background-color: #FEE2E2;
+    color: #991B1B;
+}
+
+.delete-btn:hover {
+    background-color: #FECACA;
+}
+
+.pdf-btn {
+    background-color: #D1FAE5;
+    color: #065F46;
+}
+
+.pdf-btn:hover {
+    background-color: #A7F3D0;
+}
+
+.track-btn {
+    background-color: #E0F2FE;
+    color: #0369A1;
+}
+
+.track-btn:hover {
+    background-color: #BAE6FD;
+}
+
+/* Stats Cards */
+.stats-card {
+    background: white;
+    border-radius: 16px;
+    border: 1.5px solid #e2e8f0;
+}
+
+.stats-label {
+    color: #64748b;
+    font-weight: 600;
+    font-size: 10pt;
+}
+
+.stats-value {
+    color: #0f172a;
+    font-weight: 800;
+    font-size: 22pt;
+}
+
+.stats-icon {
+    font-size: 24pt;
+}
