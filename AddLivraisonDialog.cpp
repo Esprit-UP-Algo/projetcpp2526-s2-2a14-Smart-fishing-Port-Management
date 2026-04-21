@@ -346,7 +346,8 @@ void AddLivraisonDialog::onReferenceChanged() {
 
 void AddLivraisonDialog::populateLivreurCombo() {
     livreurCombo->clear();
-    QSqlQuery query("SELECT ID_EMPLOYE, PRENOM, NOM FROM EMPLOYEES");
+    // Only select employees who are active and hold the position of 'Livreur'
+    QSqlQuery query("SELECT ID_EMPLOYE, PRENOM, NOM FROM EMPLOYEES WHERE \"POSITION\" = 'Livreur' AND STATUT = 'Actif'");
     while (query.next()) {
         QString id = query.value(0).toString();
         QString prenom = query.value(1).toString();

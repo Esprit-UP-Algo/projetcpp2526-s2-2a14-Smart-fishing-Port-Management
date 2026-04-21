@@ -163,10 +163,26 @@ QString Livraison::getETA() const {
     
     if (query.exec() && query.next()) {
         QDateTime depart = query.value(0).toDateTime();
-        double dureeSecs = query.value(1).toDouble();
+        double totalDureeSecs = query.value(1).toDouble();
         
-        if (depart.isValid() && dureeSecs > 0) {
-            return depart.addSecs((int)dureeSecs).toString("HH:mm");
+        if (depart.isValid() && totalDureeSecs > 0) {
+            QDateTime arrivalTime = depart.addSecs((int)totalDureeSecs);
+            qint64 diff = QDateTime::currentDateTime().secsTo(arrivalTime);
+            
+            if (diff <= 0) return "Arrivé";
+            
+            // Format logic based on user rules
+            if (diff < 60) {
+                return QString::number(diff) + "s";
+            } else if (diff < 3600) {
+                return QString::number(diff / 60) + "m";
+            } else if (diff < 86400) {
+                return QString::number(diff / 3600) + "h";
+            } else if (diff < 604800) {
+                return QString::number(diff / 86400) + "j";
+            } else {
+                return QString::number(diff / 604800) + " sem";
+            }
         }
     }
     return "N/A";

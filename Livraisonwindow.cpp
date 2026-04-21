@@ -865,10 +865,12 @@ void LivraisonWindow::onExportAllPDF()
 
 void LivraisonWindow::onLiveUpdate()
 {
-    // Iterate through visible rows to update progress indicators
+    // Iterate through rows to update progress indicators and ETAs
     for (int i = 0; i < table->rowCount(); ++i) {
-        QWidget* widget = table->cellWidget(i, 5);
+        // Avancement indicator is in column 7
+        QWidget* widget = table->cellWidget(i, 7);
         LiveProgressIndicator* indicator = qobject_cast<LiveProgressIndicator*>(widget);
+        
         if (indicator) {
             QDateTime start = indicator->property("startTime").toDateTime();
             double duration = indicator->property("duration").toDouble();
@@ -878,12 +880,19 @@ void LivraisonWindow::onLiveUpdate()
                 double progress = elapsed / duration;
                 indicator->setProgress(progress);
                 
+                // Real-time ETA update (Column 6)
+                int id = table->item(i, 0)->data(Qt::UserRole).toInt();
+                Livraison temp;
+                temp.setID(id);
+                if (table->item(i, 6)) {
+                    table->item(i, 6)->setText(temp.getETA());
+                }
+                
                 // If it just finished, forcefully update the database to ensure the UI refreshes to 'Arrivé'
                 if (progress >= 1.0) {
-                    QString rowId = table->item(i, 0)->data(Qt::UserRole).toString();
                     QSqlQuery update;
                     update.prepare("UPDATE LIVRAISONS SET STATUT = 'Arrivé' WHERE IDLIVRAISON = :id");
-                    update.bindValue(":id", rowId);
+                    update.bindValue(":id", id);
                     if (update.exec()) {
                         populateTable(searchInput->text());
                         return; // populateTable will refresh headers and widgets
