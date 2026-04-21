@@ -20,6 +20,7 @@
 #include <QtSql/QSqlRecord>
 
 #include "quai.h"
+#include "ortools_optimizer.h"
 
 // ==================== CIRCULAR PROGRESS WIDGET ====================
 class CircularProgress : public QWidget {
@@ -174,6 +175,7 @@ private slots:
 
 private:
     bool assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
+    bool assignerQuaiAvecORTools(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
     int findQuaiIndexByNumero(int numero) const;
     void ensureAvailabilityTimerForQuai(const Quai& quai);
     int estimateCountdownSeconds(const Quai& quai) const;

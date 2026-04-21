@@ -7,6 +7,7 @@ TARGET = Project1
 
 # Source files
 SOURCES += main.cpp \
+           aiintegration.cpp \
            mainwindow.cpp \
            AddLivraisonDialog.cpp \
            BateauStatisticsDialog.cpp \
@@ -38,10 +39,12 @@ SOURCES += main.cpp \
            peche.cpp \
            quai.cpp \
            quaiswindow.cpp \
-           temperaturealert.cpp
+           temperaturealert.cpp \
+           ortools_optimizer.cpp
 
 # Header files
 HEADERS += mainwindow.h \
+           aiintegration.h \
            AddLivraisonDialog.h \
            BateauStatisticsDialog.h \
            Bateaudialog.h \
@@ -72,7 +75,8 @@ HEADERS += mainwindow.h \
            peche.h \
            quai.h \
            quaiswindow.h \
-           temperaturealert.h
+           temperaturealert.h \
+           ortools_optimizer.h
 
 # UI Form files
 FORMS += mainwindow.ui \
