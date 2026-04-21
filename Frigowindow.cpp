@@ -484,22 +484,22 @@ void FrigoWindow::populateTable(const QString& filterText)
             table->setItem(r, col, item);
         };
 
-        addItem(0, model->record(i).value(1).toString(), true); // Reference
-        addItem(1, model->record(i).value(2).toString() + " Kg"); // Capacité
-        addItem(2, model->record(i).value(3).toString()); // Type Poisson
+        addItem(0, model->record(i).value("REFERENCE").toString(), true); // Reference
+        addItem(1, model->record(i).value("CAPACITE").toString() + " Kg"); // Capacité
+        addItem(2, model->record(i).value("TYPE_POISSON").toString()); // Type Poisson
         
         // Statut Badge
-        QString statusText = model->record(i).value(4).toString();
+        QString statusText = model->record(i).value("STATUT").toString();
         table->setItem(r, 3, new QTableWidgetItem(statusText)); // Set item for programmatic access
         table->setCellWidget(r, 3, createStatusBadge(statusText));
         
-        QVariant dat = model->record(i).value(5);
+        QVariant dat = model->record(i).value("DATE_RESERVATION");
         QString dateStr = dat.typeId() == QMetaType::QDate || dat.typeId() == QMetaType::QDateTime ? dat.toDate().toString("dd/MM/yyyy") : dat.toString().left(10);
         addItem(4, dateStr); // Date Réservation
         
         // Classification sans nouvelle colonne — Coloration de la cellule Température (QLabel Badge pour fiabilité)
-        QString fishType = model->record(i).value(3).toString();
-        double currentTemp = model->record(i).value(6).toDouble();
+        QString fishType = model->record(i).value("TYPE_POISSON").toString();
+        double currentTemp = model->record(i).value("TEMPERATURE").toDouble();
         
         auto getQualityInfo = [](const QString& type, double temp) -> QPair<QString, QString> {
             if (type == "Sans") return {"transparent", "#1f2937"};
@@ -542,8 +542,9 @@ void FrigoWindow::populateTable(const QString& filterText)
         table->setItem(r, 5, new QTableWidgetItem(model->record(i).value(6).toString() + " °C")); // Set item for programmatic access
         table->setCellWidget(r, 5, tempContainer);
 
-        double cap_kg = model->record(i).value(2).toDouble();
-        double occ_kg = model->record(i).value(7).toDouble();
+        double cap_kg = model->record(i).value("CAPACITE").toDouble();
+        double occ_kg = model->record(i).value("OCCUPATION").toDouble();
+        
         double percent = (cap_kg > 0) ? (occ_kg / cap_kg) * 100.0 : 0.0;
         
         // Cap between 0 and 100 for display
@@ -733,19 +734,22 @@ void FrigoWindow::onLogout()
 void FrigoWindow::onShowStatistics()
 {
     QMap<QString, double> typeCount, typeCapacity, statusCount;
+    double totalOccupation = 0;
     
-    QSqlQuery query("SELECT TYPE_POISSON, CAPACITE, STATUT FROM FRIGOS");
+    QSqlQuery query("SELECT TYPE_POISSON, CAPACITE, STATUT, OCCUPATION FROM FRIGOS");
     while (query.next()) {
         QString type = query.value(0).toString();
         double cap = query.value(1).toDouble();
         QString stat = query.value(2).toString();
+        double occ = query.value(3).toDouble();
         
         typeCount[type]++;
         typeCapacity[type] += cap;
         statusCount[stat]++;
+        totalOccupation += occ;
     }
 
-    FrigoStatisticsDialog dlg(typeCount, typeCapacity, statusCount, this);
+    FrigoStatisticsDialog dlg(typeCount, typeCapacity, statusCount, totalOccupation, this);
     dlg.exec();
 }
 

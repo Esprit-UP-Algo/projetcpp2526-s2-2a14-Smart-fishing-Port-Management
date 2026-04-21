@@ -67,20 +67,36 @@ QFrame* LivraisonStatisticsDialog::createStatCard(const QString& title, const QS
     QLabel* lblTitle = new QLabel(title);
     lblTitle->setStyleSheet("color: #64748b; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border: none;");
     
+    QHBoxLayout* valLay = new QHBoxLayout();
     QLabel* lblValue = new QLabel(value);
     lblValue->setStyleSheet(QString("color: %1; font-size: 32px; font-weight: bold; border: none;").arg(color));
 
+    valLay->addWidget(lblValue);
+    
+    if (value.contains("%")) {
+        QLabel* arrow = new QLabel("⬆");
+        arrow->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: bold; border: none;").arg(color));
+        valLay->addWidget(arrow);
+    }
+    valLay->addStretch();
+
     lay->addWidget(lblTitle);
     lay->addStretch();
-    lay->addWidget(lblValue);
+    lay->addLayout(valLay);
     return card;
 }
 
 QChartView* LivraisonStatisticsDialog::createStatusPieChart()
 {
     QPieSeries *series = new QPieSeries();
+    double total = 0;
+    for(int v : m_statusData.values()) total += v;
+
     for (auto it = m_statusData.begin(); it != m_statusData.end(); ++it) {
-        series->append(it.key(), it.value());
+        QPieSlice *slice = series->append(it.key(), it.value());
+        if (total > 0)
+            slice->setLabel(QString("%1 (%2%)").arg(it.key()).arg(100.0 * it.value() / total, 0, 'f', 1));
+        slice->setLabelVisible(true);
     }
 
     QChart *chart = new QChart();

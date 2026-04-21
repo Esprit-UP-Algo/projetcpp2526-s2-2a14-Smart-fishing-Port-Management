@@ -211,7 +211,7 @@ bool Peche::ajouter() {
     // Mettre à jour l'occupation du frigo
     if (!idFrigo.isEmpty()) {
         QSqlQuery updateFrigo;
-        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION + :qte) WHERE IDFRIGO = :idf");
+        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, NVL(OCCUPATION, 0) + :qte) WHERE IDFRIGO = :idf");
         updateFrigo.bindValue(":qte", quantiteKg.toDouble());
         updateFrigo.bindValue(":idf", idFrigo);
         updateFrigo.exec();
@@ -275,7 +275,7 @@ bool Peche::supprimer(QString id) {
     // Mettre à jour l'occupation du frigo
     if (!oldIdFrigo.isEmpty()) {
         QSqlQuery updateFrigo;
-        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION - :qte) WHERE IDFRIGO = :idf");
+        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, NVL(OCCUPATION, 0) - :qte) WHERE IDFRIGO = :idf");
         updateFrigo.bindValue(":qte", oldQte);
         updateFrigo.bindValue(":idf", oldIdFrigo);
         updateFrigo.exec();
@@ -353,7 +353,7 @@ bool Peche::modifier(QString id) {
     if (oldIdFrigo == idFrigo) {
         // Même frigo, on ajuste la différence
         QSqlQuery updateFrigo;
-        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION - :oldqte + :newqte) WHERE IDFRIGO = :idf");
+        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, NVL(OCCUPATION, 0) - :oldqte + :newqte) WHERE IDFRIGO = :idf");
         updateFrigo.bindValue(":oldqte", oldQte);
         updateFrigo.bindValue(":newqte", quantiteKg.toDouble());
         updateFrigo.bindValue(":idf", idFrigo);
@@ -362,7 +362,7 @@ bool Peche::modifier(QString id) {
         // Enlever de l'ancien frigo
         if (!oldIdFrigo.isEmpty()) {
             QSqlQuery updateOld;
-            updateOld.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION - :qte) WHERE IDFRIGO = :idf");
+            updateOld.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, NVL(OCCUPATION, 0) - :qte) WHERE IDFRIGO = :idf");
             updateOld.bindValue(":qte", oldQte);
             updateOld.bindValue(":idf", oldIdFrigo);
             updateOld.exec();
@@ -370,7 +370,7 @@ bool Peche::modifier(QString id) {
         // Ajouter au nouveau frigo
         if (!idFrigo.isEmpty()) {
             QSqlQuery updateNew;
-            updateNew.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION + :qte) WHERE IDFRIGO = :idf");
+            updateNew.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, NVL(OCCUPATION, 0) + :qte) WHERE IDFRIGO = :idf");
             updateNew.bindValue(":qte", quantiteKg.toDouble());
             updateNew.bindValue(":idf", idFrigo);
             updateNew.exec();

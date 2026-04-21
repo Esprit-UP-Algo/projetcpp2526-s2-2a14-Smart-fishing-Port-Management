@@ -24,6 +24,7 @@ private:
     QFrame*      createStatCard(const QString& title, const QString& value, const QString& color);
     QChartView*  createSpeciesPieChart();
     QChartView*  createWeightBarChart();
+    QChartView*  createWeightPieChart();
 
     QMap<QString, double> m_speciesCount;
     QMap<QString, double> m_weightBySpecies;
