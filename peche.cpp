@@ -211,7 +211,7 @@ bool Peche::ajouter() {
     // Mettre à jour l'occupation du frigo
     if (!idFrigo.isEmpty()) {
         QSqlQuery updateFrigo;
-        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = OCCUPATION + :qte WHERE IDFRIGO = :idf");
+        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION + :qte) WHERE IDFRIGO = :idf");
         updateFrigo.bindValue(":qte", quantiteKg.toDouble());
         updateFrigo.bindValue(":idf", idFrigo);
         updateFrigo.exec();
@@ -223,7 +223,7 @@ bool Peche::ajouter() {
 
 QSqlQueryModel* Peche::afficher() {
     QSqlQueryModel* model = new QSqlQueryModel();
-    model->setQuery("SELECT 'LOT' || LPAD(p.IDLOT, 3, '0') as ID, p.REFERENCE as \"Référence\", "
+    model->setQuery("SELECT 'LOT' || p.IDLOT as ID, p.REFERENCE as \"Référence\", "
                     "p.ESPECE as \"Espèce\", p.QUANTITE as \"Quantité\", p.DATECAPTURE as \"Date\", "
                     "b.NOMBATEAU as \"Bateau\", f.REFERENCE as \"Frigo\", "
                     "e.PRENOM || ' ' || e.NOM as \"Pêcheur\", "
@@ -267,10 +267,15 @@ bool Peche::supprimer(QString id) {
         return false;
     }
     
+    if (query.numRowsAffected() == 0) {
+        lastError = "Aucun lot trouvé avec l'ID: " + QString::number(idNum);
+        return false;
+    }
+    
     // Mettre à jour l'occupation du frigo
     if (!oldIdFrigo.isEmpty()) {
         QSqlQuery updateFrigo;
-        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = OCCUPATION - :qte WHERE IDFRIGO = :idf");
+        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION - :qte) WHERE IDFRIGO = :idf");
         updateFrigo.bindValue(":qte", oldQte);
         updateFrigo.bindValue(":idf", oldIdFrigo);
         updateFrigo.exec();
@@ -348,7 +353,7 @@ bool Peche::modifier(QString id) {
     if (oldIdFrigo == idFrigo) {
         // Même frigo, on ajuste la différence
         QSqlQuery updateFrigo;
-        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = OCCUPATION - :oldqte + :newqte WHERE IDFRIGO = :idf");
+        updateFrigo.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION - :oldqte + :newqte) WHERE IDFRIGO = :idf");
         updateFrigo.bindValue(":oldqte", oldQte);
         updateFrigo.bindValue(":newqte", quantiteKg.toDouble());
         updateFrigo.bindValue(":idf", idFrigo);
@@ -357,7 +362,7 @@ bool Peche::modifier(QString id) {
         // Enlever de l'ancien frigo
         if (!oldIdFrigo.isEmpty()) {
             QSqlQuery updateOld;
-            updateOld.prepare("UPDATE FRIGOS SET OCCUPATION = OCCUPATION - :qte WHERE IDFRIGO = :idf");
+            updateOld.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION - :qte) WHERE IDFRIGO = :idf");
             updateOld.bindValue(":qte", oldQte);
             updateOld.bindValue(":idf", oldIdFrigo);
             updateOld.exec();
@@ -365,7 +370,7 @@ bool Peche::modifier(QString id) {
         // Ajouter au nouveau frigo
         if (!idFrigo.isEmpty()) {
             QSqlQuery updateNew;
-            updateNew.prepare("UPDATE FRIGOS SET OCCUPATION = OCCUPATION + :qte WHERE IDFRIGO = :idf");
+            updateNew.prepare("UPDATE FRIGOS SET OCCUPATION = GREATEST(0, OCCUPATION + :qte) WHERE IDFRIGO = :idf");
             updateNew.bindValue(":qte", quantiteKg.toDouble());
             updateNew.bindValue(":idf", idFrigo);
             updateNew.exec();
@@ -387,7 +392,7 @@ QSqlQueryModel* Peche::trier(QString critere, QString ordre) {
     else if (critere == "Date")      dbCritere = "p.DATECAPTURE";
 
     QString queryString = QString(
-        "SELECT 'LOT' || LPAD(p.IDLOT, 3, '0') as ID, p.REFERENCE as \"Référence\", "
+        "SELECT 'LOT' || p.IDLOT as ID, p.REFERENCE as \"Référence\", "
         "p.ESPECE as \"Espèce\", p.QUANTITE as \"Quantité\", p.DATECAPTURE as \"Date\", "
         "b.NOMBATEAU as \"Bateau\", f.REFERENCE as \"Frigo\", "
         "e.PRENOM || ' ' || e.NOM as \"Pêcheur\", "
@@ -407,13 +412,15 @@ QSqlQueryModel* Peche::rechercher(QString val) {
     QSqlQuery query;
     
     // Recherche étendue : référence, espèce, quantité, bateau ou frigo
-    query.prepare("SELECT 'LOT' || LPAD(p.IDLOT, 3, '0') as ID, p.REFERENCE as \"Référence\", "
+    query.prepare("SELECT 'LOT' || p.IDLOT as ID, p.REFERENCE as \"Référence\", "
                   "p.ESPECE as \"Espèce\", p.QUANTITE as \"Quantité\", p.DATECAPTURE as \"Date\", "
                   "b.NOMBATEAU as \"Bateau\", f.REFERENCE as \"Frigo\", "
-                  "p.IDBATEAU, p.IDFRIGO "
+                  "e.PRENOM || ' ' || e.NOM as \"Pêcheur\", "
+                  "p.IDBATEAU, p.IDFRIGO, p.ID_PECHEUR "
                   "FROM PECHES p "
                   "LEFT JOIN BATEAUX b ON p.IDBATEAU = b.IDBATEAU "
                   "LEFT JOIN FRIGOS f ON p.IDFRIGO = f.IDFRIGO "
+                  "LEFT JOIN EMPLOYEES e ON p.ID_PECHEUR = e.ID_EMPLOYE "
                   "WHERE LOWER(p.REFERENCE) LIKE LOWER(:val) "
                   "OR LOWER(p.ESPECE) LIKE LOWER(:val) "
                   "OR LOWER(b.NOMBATEAU) LIKE LOWER(:val) "

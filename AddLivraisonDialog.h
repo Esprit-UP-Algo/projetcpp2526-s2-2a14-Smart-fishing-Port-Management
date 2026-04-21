@@ -27,7 +27,7 @@ public:
 private slots:
     void handleSave();
     void onAddressValidationFinished(QNetworkReply* reply);
-    void onIdChanged();
+    void onReferenceChanged();
     void onAdresseChanged();
     void onPrixChanged();
     void onAddressDebounceTimeout();
@@ -38,15 +38,17 @@ private:
     bool validateInputs();
     void updateFieldStyle(QWidget* field, bool isValid);
     void validateAddressViaAPI(const QString& address);
+    void populateLivreurCombo();
 
-    QLineEdit* idEdit;
+    QLineEdit* referenceEdit;
+    QComboBox* livreurCombo;
     QTextEdit* adresseEdit;
     QDateEdit* dateEdit;
     QComboBox* vehiculeEdit;
     QComboBox* transportEdit;
     QLineEdit* prixEdit;
 
-    QLabel* errorId;
+    QLabel* errorReference;
     QLabel* errorAdresse;
     QLabel* errorVehicule;
     QLabel* errorPrix;

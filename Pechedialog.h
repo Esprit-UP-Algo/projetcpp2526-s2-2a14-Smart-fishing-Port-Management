@@ -29,6 +29,7 @@ private slots:
     void onSave();
     void refreshFridgeCombo(const QString &espece);
     void autoSelectFridge();
+    void updateAvailableSpaceDisplay();
 
 private:
     QLineEdit* referenceInput;
@@ -42,6 +43,7 @@ private:
     QComboBox* fishermanCombo;
     QPushButton* autoSelectBtn;
     QLabel* autoMsgLabel;
+    QLabel* availableSpaceLabel;
 
     Peche* pecheData;
     bool isEdit;

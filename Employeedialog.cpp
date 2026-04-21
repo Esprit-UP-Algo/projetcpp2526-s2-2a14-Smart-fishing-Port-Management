@@ -173,7 +173,7 @@ void EmployeeDialog::setupUi()
     positionLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
     formLayout->addWidget(positionLabel);
     positionCombo = new QComboBox();
-    positionCombo->addItems({"Marin", "Pêcheur", "RH", "Technicien", "Sécurité"});
+    positionCombo->addItems({"Marin", "Pêcheur", "RH", "Technicien", "Sécurité", "Livreur"});
     positionCombo->setFont(inputFont);
     positionCombo->setFixedHeight(50);
     positionCombo->setStyleSheet(getInputStyle());

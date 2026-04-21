@@ -38,6 +38,9 @@ private slots:
     void onSendSMS();
     void onShowClassification();
 
+protected:
+    void showEvent(QShowEvent *event) override;
+
 private:
     void setupUi();
     QFrame* createSidebar();

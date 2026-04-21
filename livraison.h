@@ -8,26 +8,29 @@
 class Livraison
 {
 private:
-    QString id, date, adresse, statut, transport, vehicule, prix;
-    int dureeMinutes;
+    QString date, adresse, statut, transport, vehicule, prix, reference, idEmploye;
+    int id, dureeMinutes;
     static QString lastError;
 
 public:
     Livraison();
-    Livraison(QString id, QString date, QString adresse, QString statut, QString transport, QString vehicule, QString prix, int duree = 0);
+    Livraison(int id, QString date, QString adresse, QString statut, QString transport, QString vehicule, QString prix, int duree, QString ref, QString idEmp);
 
     // Getters
-    QString getID() const { return id; }
+    int getID() const { return id; }
     QString getDate() const { return date; }
     QString getAdresse() const { return adresse; }
     QString getStatut() const { return statut; }
     QString getTransport() const { return transport; }
     QString getVehicule() const { return vehicule; }
     QString getPrix() const { return prix; }
+    QString getReference() const { return reference; }
+    QString getIdEmploye() const { return idEmploye; }
     int getDuree() const { return dureeMinutes; }
+    QString getETA() const; // New method for ETA
 
     // Setters
-    void setID(QString v) { id = v; }
+    void setID(int v) { id = v; }
     void setDate(QString v) { date = v; }
     void setAdresse(QString v) { adresse = v; }
     void setStatut(QString v) { statut = v; }
@@ -35,16 +38,18 @@ public:
     void setVehicule(QString v) { vehicule = v; }
     void setPrix(QString v) { prix = v; }
     void setDuree(int v) { dureeMinutes = v; }
+    void setReference(QString v) { reference = v; }
+    void setIdEmploye(QString v) { idEmploye = v; }
 
     // CRUD
     bool ajouter();
     QSqlQueryModel* afficher();
-    bool supprimer(QString id);
-    bool modifier(QString id);
+    bool supprimer(int id);
+    bool modifier(int id);
     QSqlQueryModel* trier(QString critere, QString ordre);
     QSqlQueryModel* rechercher(QString val);
     
-    static bool idExists(QString id);
+    static bool idExists(int id);
     static QString getLastError() { return lastError; }
 };
 

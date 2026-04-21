@@ -38,6 +38,7 @@
 #include <QDateTime>
 #include <QStandardPaths>
 #include <QVariantMap>
+#include <QScrollArea>
 #include <QDateEdit>
 #include <QPageSize>
 #include <QSettings>
@@ -50,6 +51,8 @@
 #include <QDoubleValidator>
 #include <QMouseEvent>
 #include <QEvent>
+#include <QSpinBox>
+#include <QCheckBox>
 
 #include "addquaidialog.h"
 #include "Bateauwindow.h"
@@ -94,6 +97,11 @@ static QString quaiSessionStartSettingsKey(int quaiNumber)
 static QString quaiSessionHistorySettingsKey(int quaiNumber)
 {
     return QString("quais/energy/session_history/%1").arg(quaiNumber);
+}
+
+static QString pendingDockAssignmentSettingsKey(int quaiNumber)
+{
+    return QString("quais/pending_dock_assignment/%1").arg(quaiNumber);
 }
 
 static QDateTime loadPersistedAvailabilityDeadline(int quaiNumber)
@@ -153,6 +161,161 @@ static void appendPersistedSessionHistory(int quaiNumber, const QDateTime& start
     settings.setValue(key, history);
 }
 
+static QVariantMap loadPersistedPendingDockAssignment(int quaiNumber)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    return settings.value(pendingDockAssignmentSettingsKey(quaiNumber)).toMap();
+}
+
+static void persistPendingDockAssignment(int quaiNumber, const QVariantMap& assignment)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    const QString key = pendingDockAssignmentSettingsKey(quaiNumber);
+
+    if (assignment.isEmpty())
+        settings.remove(key);
+    else
+        settings.setValue(key, assignment);
+}
+
+static QVariantMap loadBoatInfoById(const QString& boatId)
+{
+    QVariantMap bateau;
+
+    QSqlQuery query;
+    query.prepare(
+        "SELECT IDBATEAU, NOMBATEAU, IMMATRICULATION, NVL(LONGEUR, 0) AS LONGEUR, "
+        "       NVL(CAPACITE, 0) AS CAPACITE, ETAT, IDQUAI "
+        "FROM BATEAUX "
+        "WHERE IDBATEAU = :id"
+        );
+    query.bindValue(":id", boatId);
+
+    if (!query.exec() || !query.next())
+        return bateau;
+
+    bateau.insert("id",              query.value("IDBATEAU").toString());
+    bateau.insert("nom",             query.value("NOMBATEAU").toString());
+    bateau.insert("immatriculation", query.value("IMMATRICULATION").toString());
+    bateau.insert("longueur",        query.value("LONGEUR").toInt());
+    bateau.insert("capacite",        query.value("CAPACITE").toInt());
+    bateau.insert("etat",            query.value("ETAT").toString());
+    bateau.insert("idquai",          query.value("IDQUAI"));
+    return bateau;
+}
+
+static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle);
+
+static bool showStyledActionDialog(QWidget* parent, const QString& title, const QString& message,
+                                   const QString& gradientStart, const QString& gradientEnd,
+                                   const QString& icon, bool hasCancel = false,
+                                   const QString& confirmText = QString(),
+                                   const QString& cancelText = "Annuler")
+{
+    QDialog* popup = new QDialog(parent);
+    popup->setFixedSize(540, 320);
+    popup->setModal(true);
+    popup->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    popup->setAttribute(Qt::WA_TranslucentBackground);
+
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(popup);
+    shadow->setBlurRadius(40);
+    shadow->setOffset(0, 8);
+    shadow->setColor(QColor(0, 0, 0, 80));
+
+    QWidget* container = new QWidget(popup);
+    container->setGeometry(10, 10, 520, 300);
+    container->setGraphicsEffect(shadow);
+    container->setStyleSheet("QWidget { background: white; border-radius: 20px; }");
+
+    QVBoxLayout* lay = new QVBoxLayout(container);
+    lay->setContentsMargins(0, 0, 0, 0);
+    lay->setSpacing(0);
+
+    QFrame* hdr = new QFrame();
+    hdr->setFixedHeight(64);
+    hdr->setStyleSheet(QString(R"(
+        QFrame {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 %1, stop:1 %2);
+            border-radius: 20px 20px 0 0;
+        }
+    )").arg(gradientStart, gradientEnd));
+    QHBoxLayout* hdrLay = new QHBoxLayout(hdr);
+    hdrLay->setContentsMargins(22, 0, 16, 0);
+
+    QLabel* hdrIcon = new QLabel(icon);
+    hdrIcon->setFont(QFont("Segoe UI", 18));
+    hdrIcon->setStyleSheet("background: transparent;");
+    hdrLay->addWidget(hdrIcon);
+
+    QLabel* hdrTitle = new QLabel(title);
+    hdrTitle->setFont(QFont("Segoe UI", 13, QFont::Bold));
+    hdrTitle->setStyleSheet("color: white; background: transparent;");
+    hdrLay->addWidget(hdrTitle, 1);
+
+    QPushButton* xBtn = new QPushButton("X");
+    xBtn->setFixedSize(30, 30);
+    xBtn->setCursor(Qt::PointingHandCursor);
+    xBtn->setStyleSheet(R"(
+        QPushButton { background: rgba(255,255,255,0.2); color: white; border: none;
+                      border-radius: 15px; font-size: 12px; font-weight: bold; }
+        QPushButton:hover { background: rgba(255,255,255,0.35); }
+    )");
+    QObject::connect(xBtn, &QPushButton::clicked, popup, &QDialog::reject);
+    hdrLay->addWidget(xBtn);
+    lay->addWidget(hdr);
+    makeDialogMovable(popup, hdr);
+
+    QLabel* msgLbl = new QLabel(message);
+    msgLbl->setWordWrap(true);
+    msgLbl->setFont(QFont("Segoe UI", 10));
+    msgLbl->setStyleSheet("color: #374151; background: transparent; line-height: 1.4;");
+    msgLbl->setAlignment(Qt::AlignCenter);
+    msgLbl->setContentsMargins(24, 22, 24, 6);
+    lay->addWidget(msgLbl, 1);
+
+    QHBoxLayout* btnLay = new QHBoxLayout();
+    btnLay->setContentsMargins(20, 8, 20, 20);
+    btnLay->setSpacing(10);
+    btnLay->addStretch();
+
+    if (hasCancel) {
+        QPushButton* noBtn = new QPushButton(cancelText);
+        noBtn->setFixedHeight(38);
+        noBtn->setMinimumWidth(90);
+        noBtn->setFont(QFont("Segoe UI", 10, QFont::Medium));
+        noBtn->setCursor(Qt::PointingHandCursor);
+        noBtn->setStyleSheet(R"(
+            QPushButton { background: #F3F4F6; color: #374151; border: none;
+                          border-radius: 10px; padding: 0 16px; }
+            QPushButton:hover { background: #E5E7EB; }
+        )");
+        QObject::connect(noBtn, &QPushButton::clicked, popup, &QDialog::reject);
+        btnLay->addWidget(noBtn);
+    }
+
+    QPushButton* okBtn = new QPushButton(confirmText.isEmpty() ? (hasCancel ? "Confirmer" : "Compris") : confirmText);
+    okBtn->setFixedHeight(38);
+    okBtn->setMinimumWidth(hasCancel ? 130 : 100);
+    okBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    okBtn->setCursor(Qt::PointingHandCursor);
+    okBtn->setStyleSheet(QString(R"(
+        QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                          stop:0 %1, stop:1 %2);
+                      color: white; border: none; border-radius: 10px; padding: 0 16px; }
+        QPushButton:hover { background: %1; }
+    )").arg(gradientStart, gradientEnd));
+    QObject::connect(okBtn, &QPushButton::clicked, popup, &QDialog::accept);
+    btnLay->addWidget(okBtn);
+
+    lay->addLayout(btnLay);
+
+    const bool accepted = (popup->exec() == QDialog::Accepted);
+    popup->deleteLater();
+    return accepted;
+}
+
 struct DockUsageMonitoringAnalysis {
     int quaiNumber = 0;
     int sessionCount = 0;
@@ -161,6 +324,8 @@ struct DockUsageMonitoringAnalysis {
     qint64 longestOccupiedSeconds = 0;
     double utilizationScore = 0.0;
     double anomalyScore = 0.0;
+    bool hasEnergyWasteRisk = false;
+    bool hasLongOccupationRisk = false;
     QString statusLabel;
     QString recommendation;
     QString anomalySummary;
@@ -210,44 +375,47 @@ static DockUsageMonitoringAnalysis buildDockUsageMonitoringAnalysis(const Quai& 
 
     const double averageHours = analysis.averageOccupiedSeconds / 3600.0;
     const double longestHours = analysis.longestOccupiedSeconds / 3600.0;
-    const bool underUtilized = (analysis.sessionCount <= 1 && averageHours < 1.5)
-                               || (analysis.sessionCount <= 2 && averageHours < 1.0);
-    const bool overloadPattern = (analysis.sessionCount >= 4 && averageHours > 3.5)
-                                 || longestHours > 8.0;
-    const bool unjustifiedOccupation = isOccupiedState(quai.getEtat()) && longestHours > 6.0;
+    const bool underUtilized = (analysis.sessionCount <= 1 && averageHours < 1.0)
+                               || (analysis.sessionCount <= 2 && averageHours < 0.75);
+    const bool overloadPattern = (analysis.sessionCount >= 6 && averageHours > 5.0)
+                                 || longestHours > 12.0;
+    const bool unjustifiedOccupation = isOccupiedState(quai.getEtat()) && longestHours > 10.0;
 
-    analysis.utilizationScore = std::clamp((analysis.sessionCount * 18.0) + (averageHours * 12.0), 0.0, 100.0);
+    analysis.hasEnergyWasteRisk = overloadPattern;
+    analysis.hasLongOccupationRisk = unjustifiedOccupation;
+
+    analysis.utilizationScore = std::clamp((analysis.sessionCount * 14.0) + (averageHours * 9.0), 0.0, 100.0);
     if (underUtilized)
-        analysis.anomalyScore += 38.0;
+        analysis.anomalyScore += 16.0;
     if (overloadPattern)
-        analysis.anomalyScore += 34.0;
+        analysis.anomalyScore += 32.0;
     if (unjustifiedOccupation)
-        analysis.anomalyScore += 42.0;
+        analysis.anomalyScore += 36.0;
     analysis.anomalyScore = std::clamp(analysis.anomalyScore, 0.0, 100.0);
 
     QStringList anomalies;
     if (underUtilized)
-        anomalies << "Sous-utilisation prolongee";
+        anomalies << "Sous-utilisation";
     if (overloadPattern)
-        anomalies << "Surcharge frequente";
+        anomalies << "Surcharge";
     if (unjustifiedOccupation)
-        anomalies << "Occupation incoherente";
+        anomalies << "Occupation injustifiee";
     if (anomalies.isEmpty())
         anomalies << "Aucune anomalie majeure";
     analysis.anomalySummary = anomalies.join(" | ");
 
-    if (analysis.anomalyScore >= 65.0) {
+    if (analysis.anomalyScore >= 75.0) {
         analysis.statusLabel = "Alerte critique";
-        analysis.recommendation = "Reaffecter l'activite et verifier la logique d'occupation.";
-        analysis.accentColor = QColor("#DC2626");
-    } else if (analysis.anomalyScore >= 30.0) {
+        analysis.recommendation = "Reaffecter les navires, accelerer la rotation et verifier les blocages.";
+        analysis.accentColor = QColor(0xDC, 0x26, 0x26);
+    } else if (analysis.anomalyScore >= 45.0) {
         analysis.statusLabel = "A surveiller";
-        analysis.recommendation = "Surveiller la repartition et reduire les anomalies d'usage.";
-        analysis.accentColor = QColor("#D97706");
+        analysis.recommendation = "Ajuster la repartition des quais et reduire les temps morts.";
+        analysis.accentColor = QColor(0xD9, 0x77, 0x06);
     } else {
         analysis.statusLabel = "Utilisation stable";
-        analysis.recommendation = "Performance operationnelle coherente.";
-        analysis.accentColor = QColor("#059669");
+        analysis.recommendation = "Maintenir la planification actuelle et suivre l'equilibre d'utilisation.";
+        analysis.accentColor = QColor(0x05, 0x96, 0x69);
     }
 
     return analysis;
@@ -316,6 +484,8 @@ private:
     QPoint m_dragOffset;
 };
 
+static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle);
+
 static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle)
 {
     if (!dialog || !dragHandle)
@@ -368,7 +538,7 @@ public:
             return false;
 
         const QString contractNumber = QString("CT-%1-%2")
-                                           .arg(quai.getNumero())
+                                           .arg(quai.getNumero(), 0, 10)
                                            .arg(QDate::currentDate().toString("yyyyMM"));
 
         const QString html = QString(R"(
@@ -839,7 +1009,7 @@ QFrame* QuaisWindow::createSidebar()
     navLayout->setSpacing(8);
     navLayout->setContentsMargins(20, 20, 20, 20);
 
-    navLayout->addWidget(createNavButton("🏠", "Dashboard"));
+    navLayout->addWidget(createNavButton("🏠", "Tableau de bord"));
     navLayout->addWidget(createNavButton("⛵", "Bateaux"));
     navLayout->addWidget(createNavButton("🐟", "Pêche"));
     navLayout->addWidget(createNavButton("👥", "Employés"));
@@ -1024,7 +1194,7 @@ QFrame* QuaisWindow::createHeader()
             item->setData(Qt::UserRole, i);
             if (q.getEtat() == "Maintenance") {
                 item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
-                item->setForeground(QColor("#9ca3af"));
+                item->setForeground(QColor(0x9C, 0xA3, 0xAF));
             }
             quaiList->addItem(item);
         }
@@ -1155,20 +1325,46 @@ QFrame* QuaisWindow::createTableCard()
 
     QWidget* warningsPanel = new QWidget();
     warningsPanel->setStyleSheet(R"(
-        QWidget { background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 16px; }
-        QLabel { color: #1F2937; font-family: 'Segoe UI'; }
+        QWidget {
+            background-color: #F8FAFC;
+            border: 1px solid #D6E4F5;
+            border-radius: 18px;
+        }
+        QLabel {
+            color: #1F2937;
+            font-family: 'Segoe UI';
+            background: transparent;
+            border: none;
+        }
     )");
     QVBoxLayout* warningsLayout = new QVBoxLayout(warningsPanel);
-    warningsLayout->setContentsMargins(16, 16, 16, 16);
-    warningsLayout->setSpacing(6);
+    warningsLayout->setContentsMargins(18, 18, 18, 18);
+    warningsLayout->setSpacing(10);
 
-    QLabel* warningsHeader = new QLabel("Warnings");
-    warningsHeader->setFont(QFont("Segoe UI", 11, QFont::DemiBold));
+    QLabel* warningsHeader = new QLabel("Avertissements de surveillance");
+    warningsHeader->setFont(QFont("Segoe UI", 12, QFont::Bold));
+    warningsHeader->setStyleSheet("color: #1E3A5F;");
     warningsLayout->addWidget(warningsHeader);
 
-    warningsContentLabel = new QLabel("No warnings for the moment");
+    QLabel* warningsSubheader = new QLabel("Alertes operationnelles generees a partir de l'analyse d'occupation des quais.");
+    warningsSubheader->setWordWrap(true);
+    warningsSubheader->setFont(QFont("Segoe UI", 9));
+    warningsSubheader->setStyleSheet("color: #64748B;");
+    warningsLayout->addWidget(warningsSubheader);
+
+    warningsContentLabel = new QLabel("Aucun avertissement pour le moment");
     warningsContentLabel->setWordWrap(true);
     warningsContentLabel->setFont(QFont("Segoe UI", 10));
+    warningsContentLabel->setTextFormat(Qt::RichText);
+    warningsContentLabel->setStyleSheet(R"(
+        QLabel {
+            background: white;
+            border: 1px solid #E2E8F0;
+            border-radius: 14px;
+            color: #334155;
+            padding: 14px 16px;
+        }
+    )");
     warningsLayout->addWidget(warningsContentLabel);
 
     containerLayout->addWidget(warningsPanel);
@@ -1297,16 +1493,16 @@ void QuaisWindow::populateTable(const QString& filterText)
         quaiTable->setRowHeight(row, 65);
 
         QTableWidgetItem* numeroItem = new QTableWidgetItem(q.getReference());
-        numeroItem->setForeground(QBrush(QColor("#5D9CEC")));
+        numeroItem->setForeground(QBrush(QColor(0x5D, 0x9C, 0xEC)));
         numeroItem->setFont(QFont("Segoe UI", 11, QFont::Bold));
         numeroItem->setData(Qt::UserRole, q.getNumero());
         const DockUsageMonitoringAnalysis monitoringAnalysis = buildDockUsageMonitoringAnalysis(q, quaiAvailabilityDeadlines);
-        if (monitoringAnalysis.anomalyScore >= 65.0) {
-            numeroItem->setBackground(QColor("#FEF2F2"));
+        if (monitoringAnalysis.anomalyScore >= 75.0) {
+            numeroItem->setBackground(QColor(0xFE, 0xF2, 0xF2));
             numeroItem->setToolTip(QString("Monitoring intelligent: %1")
                                        .arg(monitoringAnalysis.anomalySummary));
-        } else if (monitoringAnalysis.anomalyScore >= 30.0) {
-            numeroItem->setBackground(QColor("#FFF7ED"));
+        } else if (monitoringAnalysis.anomalyScore >= 45.0) {
+            numeroItem->setBackground(QColor(0xFF, 0xF7, 0xED));
             numeroItem->setToolTip(QString("Monitoring intelligent: %1")
                                        .arg(monitoringAnalysis.anomalySummary));
         }
@@ -1321,14 +1517,28 @@ void QuaisWindow::populateTable(const QString& filterText)
                                        ));
         quaiTable->setCellWidget(row, 6, createActionButtons(i));
 
-        if (monitoringAnalysis.anomalyScore >= 30.0)
+        if (monitoringAnalysis.hasEnergyWasteRisk || monitoringAnalysis.hasLongOccupationRisk)
             warningEntries << QString("Quai %1 : %2").arg(q.getNumero()).arg(monitoringAnalysis.anomalySummary);
     }
 
-    if (warningEntries.isEmpty())
-        warningsContentLabel->setText("No warnings for the moment");
-    else
-        warningsContentLabel->setText(warningEntries.join("\n"));
+    if (warningEntries.isEmpty()) {
+        warningsContentLabel->setText(
+            "<div style='color:#64748B;'>"
+            "<b style='color:#0F172A;'>R.A.S.</b><br/>"
+            "Aucun avertissement pour le moment."
+            "</div>");
+    } else {
+        QStringList warningLines;
+        for (int warningIndex = 0; warningIndex < warningEntries.size(); ++warningIndex) {
+            const QString& entry = warningEntries.at(warningIndex);
+            warningLines << QString(
+                                "<div style='margin-bottom:8px;'>"
+                                "<span style='color:#C2410C;font-weight:700;'>Alerte</span>"
+                                "<span style='color:#334155;'> - %1</span>"
+                                "</div>").arg(entry.toHtmlEscaped());
+        }
+        warningsContentLabel->setText(warningLines.join(""));
+    }
 }
 
 QWidget* QuaisWindow::createStatusBadge(const QString& status)
@@ -1439,8 +1649,168 @@ int QuaisWindow::remainingAvailabilitySeconds(int numero) const
     return static_cast<int>(std::max<qint64>(0, remaining));
 }
 
+bool QuaisWindow::assignBoatToQuai(const QVariantMap& bateauInfo, const Quai& quai, int dockingMinutes,
+                                   bool moveBoatToPort, QString& errorMessage)
+{
+    QSqlDatabase db = QSqlDatabase::database();
+    const bool startedTransaction = db.transaction();
+
+    QSqlQuery oldQuaiQuery;
+    oldQuaiQuery.prepare("SELECT IDQUAI FROM BATEAUX WHERE IDBATEAU = :id");
+    oldQuaiQuery.bindValue(":id", bateauInfo.value("id").toString());
+
+    if (!oldQuaiQuery.exec() || !oldQuaiQuery.next()) {
+        if (startedTransaction)
+            db.rollback();
+        errorMessage = "Impossible de lire le quai actuel du bateau.";
+        return false;
+    }
+    const QVariant ancienIdQuai = oldQuaiQuery.value(0);
+
+    QSqlQuery updateBoatQuery;
+    updateBoatQuery.prepare(
+        "UPDATE BATEAUX "
+        "SET IDQUAI = (SELECT IDQUAI FROM QUAIS WHERE NUMERO = :numero), "
+        "    ETAT = :etat "
+        "WHERE IDBATEAU = :id"
+        );
+    updateBoatQuery.bindValue(":numero", quai.getNumero());
+    updateBoatQuery.bindValue(":etat", moveBoatToPort ? "Au port" : bateauInfo.value("etat").toString());
+    updateBoatQuery.bindValue(":id", bateauInfo.value("id").toString());
+
+    QSqlQuery updateQuaiQuery;
+    updateQuaiQuery.prepare("UPDATE QUAIS SET ETAT = 'Occupé' WHERE NUMERO = :numero");
+    updateQuaiQuery.bindValue(":numero", quai.getNumero());
+
+    if (!updateBoatQuery.exec() || !updateQuaiQuery.exec()) {
+        if (startedTransaction)
+            db.rollback();
+        errorMessage = updateBoatQuery.lastError().isValid()
+                           ? updateBoatQuery.lastError().text()
+                           : updateQuaiQuery.lastError().text();
+        return false;
+    }
+
+    if (ancienIdQuai.isValid() && !ancienIdQuai.isNull()) {
+        QSqlQuery countQuery;
+        countQuery.prepare(
+            "SELECT COUNT(*) FROM BATEAUX "
+            "WHERE IDQUAI = :idquai AND IDBATEAU <> :idbateau"
+            );
+        countQuery.bindValue(":idquai", ancienIdQuai);
+        countQuery.bindValue(":idbateau", bateauInfo.value("id").toString());
+
+        if (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() == 0) {
+            QSqlQuery freeOldQuaiQuery;
+            freeOldQuaiQuery.prepare(
+                "UPDATE QUAIS SET ETAT = 'Disponible' "
+                "WHERE IDQUAI = :idquai AND ETAT = 'Occupé'"
+                );
+            freeOldQuaiQuery.bindValue(":idquai", ancienIdQuai);
+            freeOldQuaiQuery.exec();
+        }
+    }
+
+    if (startedTransaction && !db.commit()) {
+        db.rollback();
+        errorMessage = "La transaction d'affectation n'a pas pu être validée.";
+        return false;
+    }
+
+    const QDateTime sessionStart = QDateTime::currentDateTime();
+    const QDateTime deadline = sessionStart.addSecs(std::max(1, dockingMinutes) * 60);
+    quaiAvailabilityDeadlines.insert(quai.getNumero(), deadline);
+    persistAvailabilityDeadline(quai.getNumero(), deadline);
+    persistSessionStart(quai.getNumero(), sessionStart);
+    persistPendingDockAssignment(quai.getNumero(), QVariantMap());
+
+    loadQuaisFromDatabase();
+    populateTable(searchInput->text());
+    BateauWindow::refreshAllTables();
+    return true;
+}
+
+void QuaisWindow::clearBoatAssociationForQuai(int numero)
+{
+    QSqlQuery query;
+    query.prepare(
+        "UPDATE BATEAUX "
+        "SET IDQUAI = NULL "
+        "WHERE IDQUAI = (SELECT IDQUAI FROM QUAIS WHERE NUMERO = :numero)"
+        );
+    query.bindValue(":numero", numero);
+
+    if (!query.exec())
+        qDebug() << "Failed to clear boat association for quai" << numero << ":" << query.lastError().text();
+}
+
+void QuaisWindow::processPendingDockAssignment(int numero)
+{
+    const QVariantMap pendingAssignment = loadPersistedPendingDockAssignment(numero);
+    if (pendingAssignment.isEmpty())
+        return;
+
+    const QString boatId = pendingAssignment.value("boatId").toString();
+    QVariantMap bateauInfo = loadBoatInfoById(boatId);
+    if (bateauInfo.isEmpty()) {
+        persistPendingDockAssignment(numero, QVariantMap());
+        return;
+    }
+
+    if (bateauInfo.value("etat").toString() != "En mer"
+        || (bateauInfo.value("idquai").isValid() && !bateauInfo.value("idquai").isNull())) {
+        persistPendingDockAssignment(numero, QVariantMap());
+        return;
+    }
+
+    const int quaiIndex = findQuaiIndexByNumero(numero);
+    if (quaiIndex < 0) {
+        persistPendingDockAssignment(numero, QVariantMap());
+        return;
+    }
+
+    const Quai& quai = quais[quaiIndex];
+    const int dockingMinutes = std::max(1, pendingAssignment.value("dockingMinutes").toInt());
+    const bool confirmed = showStyledActionDialog(
+        this,
+        "Quai maintenant disponible",
+        QString("Le quai %1 est maintenant disponible pour %2.\n"
+                "Voulez-vous confirmer cette affectation maintenant ?\n"
+                "Temps de dockage prevu : %3 min.")
+            .arg(numero)
+            .arg(boatDisplayLabel(bateauInfo))
+            .arg(dockingMinutes),
+        "#1D4ED8", "#60A5FA", "i", true, "Oui, affecter", "Non"
+        );
+
+    if (!confirmed) {
+        persistPendingDockAssignment(numero, QVariantMap());
+        return;
+    }
+
+    QString errorMessage;
+    if (!assignBoatToQuai(bateauInfo, quai, dockingMinutes, true, errorMessage)) {
+        persistPendingDockAssignment(numero, QVariantMap());
+        showStyledActionDialog(this,
+                               "Affectation impossible",
+                               "Le quai est libre mais l'affectation differee n'a pas pu etre finalisee.\n"
+                                   + errorMessage,
+                               "#991B1B", "#EF4444", "!", false, "Compris");
+        return;
+    }
+
+    showStyledActionDialog(this,
+                           "Affectation confirmee",
+                           QString("%1 est maintenant au port et associe au quai %2.")
+                               .arg(boatDisplayLabel(bateauInfo))
+                               .arg(numero),
+                           "#065F46", "#34D399", "+", false, "Compris");
+}
+
 void QuaisWindow::markQuaiAsAvailable(int numero, bool showNotification)
 {
+    clearBoatAssociationForQuai(numero);
+
     QSqlQuery query;
     query.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE NUMERO = :numero");
     query.bindValue(":numero", numero);
@@ -1459,11 +1829,20 @@ void QuaisWindow::markQuaiAsAvailable(int numero, bool showNotification)
 
     loadQuaisFromDatabase();
     populateTable(searchInput->text());
+    BateauWindow::refreshAllTables();
+
+    if (!loadPersistedPendingDockAssignment(numero).isEmpty()) {
+        processPendingDockAssignment(numero);
+        return;
+    }
 
     if (showNotification) {
-        QMessageBox::information(this,
-                                 "Quai disponible",
-                                 QString("Le quai %1 est de nouveau disponible.").arg(numero));
+        showStyledActionDialog(this,
+                               "Quai disponible",
+                               QString("Le quai %1 est de nouveau disponible.\n"
+                                       "Le bateau precedemment associe est maintenant sur 'Aucun quai'.")
+                                   .arg(numero),
+                               "#1D4ED8", "#60A5FA", "i", false, "Compris");
     }
 }
 
@@ -1725,137 +2104,18 @@ void QuaisWindow::onAddQuai()
 }
 void QuaisWindow::onAutoAssignBoat()
 {
-    // ── Reusable styled popup helpers ────────────────────────────────────────
-    auto showStyledDialog = [&](const QString& title, const QString& message,
-                                const QString& gradientStart, const QString& gradientEnd,
-                                const QString& icon, bool hasCancel = false) -> bool
-    {
-        QDialog* popup = new QDialog(this);
-        popup->setFixedSize(460, 240);
-        popup->setModal(true);
-        popup->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
-        popup->setAttribute(Qt::WA_TranslucentBackground);
-
-        QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(popup);
-        shadow->setBlurRadius(40);
-        shadow->setOffset(0, 8);
-        shadow->setColor(QColor(0, 0, 0, 80));
-
-        QWidget* container = new QWidget(popup);
-        container->setGeometry(10, 10, 440, 220);
-        container->setGraphicsEffect(shadow);
-        container->setStyleSheet("QWidget { background: white; border-radius: 20px; }");
-
-        QVBoxLayout* lay = new QVBoxLayout(container);
-        lay->setContentsMargins(0, 0, 0, 0);
-        lay->setSpacing(0);
-
-        // Header
-        QFrame* hdr = new QFrame();
-        hdr->setFixedHeight(64);
-        hdr->setStyleSheet(QString(R"(
-            QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 %1, stop:1 %2);
-                border-radius: 20px 20px 0 0;
-            }
-        )").arg(gradientStart, gradientEnd));
-        QHBoxLayout* hdrLay = new QHBoxLayout(hdr);
-        hdrLay->setContentsMargins(22, 0, 16, 0);
-
-        QLabel* hdrIcon = new QLabel(icon);
-        hdrIcon->setFont(QFont("Segoe UI", 18));
-        hdrIcon->setStyleSheet("background: transparent;");
-        hdrLay->addWidget(hdrIcon);
-
-        QLabel* hdrTitle = new QLabel(title);
-        hdrTitle->setFont(QFont("Segoe UI", 13, QFont::Bold));
-        hdrTitle->setStyleSheet("color: white; background: transparent;");
-        hdrLay->addWidget(hdrTitle, 1);
-
-        QPushButton* xBtn = new QPushButton("✕");
-        xBtn->setFixedSize(30, 30);
-        xBtn->setCursor(Qt::PointingHandCursor);
-        xBtn->setStyleSheet(R"(
-            QPushButton { background: rgba(255,255,255,0.2); color: white; border: none;
-                          border-radius: 15px; font-size: 12px; font-weight: bold; }
-            QPushButton:hover { background: rgba(255,255,255,0.4); }
-        )");
-        connect(xBtn, &QPushButton::clicked, popup, &QDialog::reject);
-        hdrLay->addWidget(xBtn);
-        lay->addWidget(hdr);
-        makeDialogMovable(popup, hdr);
-
-        // Message
-        QLabel* msgLbl = new QLabel(message);
-        msgLbl->setFont(QFont("Segoe UI", 10));
-        msgLbl->setStyleSheet("color: #374151; background: transparent;");
-        msgLbl->setWordWrap(true);
-        msgLbl->setAlignment(Qt::AlignCenter);
-        msgLbl->setContentsMargins(24, 16, 24, 0);
-        lay->addWidget(msgLbl, 1);
-
-        // Buttons
-        QHBoxLayout* btnLay = new QHBoxLayout();
-        btnLay->setContentsMargins(20, 8, 20, 18);
-        btnLay->setSpacing(10);
-        btnLay->addStretch();
-
-        bool result = false;
-
-        if (hasCancel) {
-            QPushButton* noBtn = new QPushButton("Non");
-            noBtn->setFixedHeight(38);
-            noBtn->setMinimumWidth(90);
-            noBtn->setFont(QFont("Segoe UI", 10, QFont::Medium));
-            noBtn->setCursor(Qt::PointingHandCursor);
-            noBtn->setStyleSheet(R"(
-                QPushButton { background: #F3F4F6; color: #374151; border: none;
-                              border-radius: 10px; padding: 0 16px; }
-                QPushButton:hover { background: #E5E7EB; }
-            )");
-            connect(noBtn, &QPushButton::clicked, popup, &QDialog::reject);
-            btnLay->addWidget(noBtn);
-        }
-
-        QPushButton* okBtn = new QPushButton(hasCancel ? "Oui, continuer" : "Compris");
-        okBtn->setFixedHeight(38);
-        okBtn->setMinimumWidth(hasCancel ? 130 : 100);
-        okBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
-        okBtn->setCursor(Qt::PointingHandCursor);
-        okBtn->setStyleSheet(QString(R"(
-            QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                              stop:0 %1, stop:1 %2);
-                          color: white; border: none; border-radius: 10px; padding: 0 16px; }
-            QPushButton:hover { background: %1; }
-        )").arg(gradientStart, gradientEnd));
-        connect(okBtn, &QPushButton::clicked, popup, &QDialog::accept);
-        btnLay->addWidget(okBtn);
-
-        lay->addLayout(btnLay);
-
-        result = (popup->exec() == QDialog::Accepted);
-        popup->deleteLater();
-        return result;
-    };
-
     auto showError = [&](const QString& title, const QString& msg) {
-        showStyledDialog(title, msg, "#991B1B", "#EF4444", "❌");
+        showStyledActionDialog(this, title, msg, "#991B1B", "#EF4444", "!", false, "Compris");
     };
     auto showWarning = [&](const QString& title, const QString& msg) {
-        showStyledDialog(title, msg, "#92400E", "#F59E0B", "⚠️");
+        showStyledActionDialog(this, title, msg, "#92400E", "#F59E0B", "!", false, "Compris");
     };
     auto showInfo = [&](const QString& title, const QString& msg) {
-        showStyledDialog(title, msg, "#1D4ED8", "#60A5FA", "ℹ️");
+        showStyledActionDialog(this, title, msg, "#1D4ED8", "#60A5FA", "i", false, "Compris");
     };
     auto showSuccess = [&](const QString& title, const QString& msg) {
-        showStyledDialog(title, msg, "#065F46", "#34D399", "✅");
+        showStyledActionDialog(this, title, msg, "#065F46", "#34D399", "+", false, "Compris");
     };
-
-    // ── Load boats ───────────────────────────────────────────────────────────
-    const bool hasAvailableQuai = std::any_of(quais.begin(), quais.end(), [](const Quai& q) {
-        return q.getEtat() == "Disponible";
-    });
 
     QSqlQuery boatQuery;
     if (!boatQuery.exec(
@@ -1863,12 +2123,13 @@ void QuaisWindow::onAutoAssignBoat()
             "       NVL(CAPACITE, 0) AS CAPACITE, ETAT "
             "FROM BATEAUX "
             "WHERE ETAT IN ('Au port', 'En maintenance', 'En mer') "
+            "  AND (IDQUAI IS NULL OR IDQUAI = 0) "
             "ORDER BY CASE "
             "    WHEN ETAT = 'Au port'        THEN 1 "
             "    WHEN ETAT = 'En maintenance' THEN 2 "
             "    WHEN ETAT = 'En mer'         THEN 3 "
             "    ELSE 4 END, NOMBATEAU")) {
-        showError("Erreur base de données",
+        showError("Erreur base de donnees",
                   "Impossible de charger les bateaux :\n" + boatQuery.lastError().text());
         return;
     }
@@ -1891,9 +2152,8 @@ void QuaisWindow::onAutoAssignBoat()
         return;
     }
 
-    // ── Main dialog ──────────────────────────────────────────────────────────
     QDialog* dlg = new QDialog(this);
-    dlg->setFixedSize(580, 480);
+    dlg->setFixedSize(680, 640);
     dlg->setModal(true);
     dlg->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     dlg->setAttribute(Qt::WA_TranslucentBackground);
@@ -1904,7 +2164,7 @@ void QuaisWindow::onAutoAssignBoat()
     shadow->setColor(QColor(0, 0, 0, 80));
 
     QWidget* container = new QWidget(dlg);
-    container->setGeometry(10, 10, 560, 460);
+    container->setGeometry(10, 10, 660, 620);
     container->setGraphicsEffect(shadow);
     container->setStyleSheet("QWidget { background: white; border-radius: 24px; }");
 
@@ -1912,7 +2172,6 @@ void QuaisWindow::onAutoAssignBoat()
     mainLay->setContentsMargins(0, 0, 0, 0);
     mainLay->setSpacing(0);
 
-    // Header band
     QFrame* headerBand = new QFrame();
     headerBand->setFixedHeight(80);
     headerBand->setStyleSheet(R"(
@@ -1925,12 +2184,12 @@ void QuaisWindow::onAutoAssignBoat()
     QHBoxLayout* headerLay = new QHBoxLayout(headerBand);
     headerLay->setContentsMargins(28, 0, 20, 0);
 
-    QLabel* titleLbl = new QLabel("⚡  Affectation intelligente");
+    QLabel* titleLbl = new QLabel(QString::fromUtf8("⚡  Affectation intelligente"));
     titleLbl->setFont(QFont("Segoe UI", 16, QFont::Bold));
     titleLbl->setStyleSheet("color: white; background: transparent;");
     headerLay->addWidget(titleLbl, 1);
 
-    QPushButton* closeBtn = new QPushButton("✕");
+    QPushButton* closeBtn = new QPushButton("X");
     closeBtn->setFixedSize(34, 34);
     closeBtn->setCursor(Qt::PointingHandCursor);
     closeBtn->setStyleSheet(R"(
@@ -1943,22 +2202,44 @@ void QuaisWindow::onAutoAssignBoat()
     mainLay->addWidget(headerBand);
     makeDialogMovable(dlg, headerBand);
 
-    // Body
+    QScrollArea* scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setStyleSheet(R"(
+        QScrollArea { background: transparent; border: none; }
+        QScrollBar:vertical {
+            background: #F3F4F6;
+            width: 10px;
+            border-radius: 5px;
+            margin: 8px 6px 8px 0;
+        }
+        QScrollBar::handle:vertical {
+            background: #CBD5E1;
+            border-radius: 5px;
+            min-height: 28px;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+    )");
+
     QWidget* body = new QWidget();
     body->setStyleSheet("background: transparent;");
     QVBoxLayout* bodyLay = new QVBoxLayout(body);
-    bodyLay->setContentsMargins(28, 20, 28, 0);
-    bodyLay->setSpacing(16);
+    bodyLay->setContentsMargins(32, 24, 32, 0);
+    bodyLay->setSpacing(18);
 
     QLabel* subtitle = new QLabel(
-        "Sélectionnez un bateau — le système choisira automatiquement le quai\n"
-        "le plus adapté en fonction de la longueur et de la disponibilité.");
-    subtitle->setFont(QFont("Segoe UI", 10));
-    subtitle->setStyleSheet("color: #6b7280; background: transparent;");
+        "Selectionnez un bateau et le systeme choisira automatiquement le quai\n"
+        "le plus adapte en fonction de la longueur et de la disponibilite.");
+    subtitle->setFont(QFont("Segoe UI", 11));
+    subtitle->setStyleSheet("color: #6b7280; background: transparent; line-height: 1.4;");
     subtitle->setWordWrap(true);
     bodyLay->addWidget(subtitle);
 
-    QLabel* selectLbl = new QLabel("Bateau à affecter");
+    QLabel* selectLbl = new QLabel(QString::fromUtf8("🚢  Bateau a affecter"));
     selectLbl->setFont(QFont("Segoe UI", 9, QFont::Medium));
     selectLbl->setStyleSheet("color: #374151; background: transparent;");
     bodyLay->addWidget(selectLbl);
@@ -1984,53 +2265,95 @@ void QuaisWindow::onAutoAssignBoat()
         boatCombo->addItem(boatDisplayLabel(bateau), bateau);
     bodyLay->addWidget(boatCombo);
 
-    // Info card
     QFrame* infoCard = new QFrame();
     infoCard->setStyleSheet(R"(
         QFrame {
             background: #FFF7ED;
-            border: 1.5px solid #FED7AA;
+            border: none;
             border-radius: 14px;
         }
     )");
     QGridLayout* infoGrid = new QGridLayout(infoCard);
-    infoGrid->setContentsMargins(18, 14, 18, 14);
-    infoGrid->setHorizontalSpacing(24);
-    infoGrid->setVerticalSpacing(10);
+    infoGrid->setContentsMargins(22, 18, 22, 18);
+    infoGrid->setHorizontalSpacing(20);
+    infoGrid->setVerticalSpacing(14);
 
-    auto makeInfoRow = [&](int row, const QString& iconText, const QString& labelText) -> QLabel* {
-        QLabel* icon = new QLabel(iconText);
-        icon->setFont(QFont("Segoe UI", 14));
-        icon->setStyleSheet("background: transparent;");
-        icon->setFixedSize(30, 30);
-        icon->setAlignment(Qt::AlignCenter);
-
+    auto makeInfoRow = [&](int row, const QString& labelText) -> QLabel* {
         QLabel* lbl = new QLabel(labelText);
-        lbl->setFont(QFont("Segoe UI", 9));
+        lbl->setFont(QFont("Segoe UI", 10, QFont::Medium));
         lbl->setStyleSheet("color: #92400E; background: transparent;");
 
-        QLabel* val = new QLabel("—");
+        QLabel* val = new QLabel("-");
         val->setFont(QFont("Segoe UI", 10, QFont::Bold));
         val->setStyleSheet("color: #7C2D12; background: transparent;");
+        val->setWordWrap(true);
 
-        infoGrid->addWidget(icon, row, 0, Qt::AlignVCenter);
-        infoGrid->addWidget(lbl,  row, 1, Qt::AlignVCenter);
-        infoGrid->addWidget(val,  row, 2, Qt::AlignVCenter | Qt::AlignRight);
+        infoGrid->addWidget(lbl,  row, 0, Qt::AlignVCenter);
+        infoGrid->addWidget(val,  row, 1, Qt::AlignVCenter | Qt::AlignRight);
 
         return val;
     };
 
-    QLabel* valLongueur   = makeInfoRow(0, "📏", "Longueur du bateau");
-    QLabel* valCapacite   = makeInfoRow(1, "⚓", "Longueur minimale requise du quai");
-    QLabel* valEtat       = makeInfoRow(2, "🚢", "État actuel");
-    QLabel* valEstimation = makeInfoRow(3, "⏱", "Temps estimé de dockage");
+    QLabel* valLongueur   = makeInfoRow(0, QString::fromUtf8("📏  Longueur du bateau"));
+    QLabel* valCapacite   = makeInfoRow(1, QString::fromUtf8("⚓  Longueur minimale requise du quai"));
+    QLabel* valEtat       = makeInfoRow(2, QString::fromUtf8("🧭  Etat actuel"));
+    QLabel* valEstimation = makeInfoRow(3, QString::fromUtf8("⏱  Temps estime de dockage"));
 
     bodyLay->addWidget(infoCard);
-    mainLay->addWidget(body, 1);
 
-    // Buttons
+    QFrame* dockingCard = new QFrame();
+    dockingCard->setStyleSheet(R"(
+        QFrame {
+            background: #F8FAFC;
+            border: none;
+            border-radius: 14px;
+        }
+    )");
+    QVBoxLayout* dockingLay = new QVBoxLayout(dockingCard);
+    dockingLay->setContentsMargins(22, 18, 22, 18);
+    dockingLay->setSpacing(12);
+
+    QLabel* dockingTitle = new QLabel(QString::fromUtf8("⏱  Temps de dockage"));
+    dockingTitle->setFont(QFont("Segoe UI", 10, QFont::Medium));
+    dockingTitle->setStyleSheet("color: #374151; background: transparent;");
+    dockingLay->addWidget(dockingTitle);
+
+    QCheckBox* customDockingCheck = new QCheckBox("Choisir manuellement la duree de dockage");
+    customDockingCheck->setFont(QFont("Segoe UI", 10));
+    customDockingCheck->setStyleSheet("color: #1f2937; background: transparent;");
+    customDockingCheck->setChecked(true);
+    customDockingCheck->hide();
+    dockingLay->addWidget(customDockingCheck);
+
+    QSpinBox* dockingSpin = new QSpinBox();
+    dockingSpin->setRange(15, 1440);
+    dockingSpin->setSingleStep(15);
+    dockingSpin->setSuffix(" min");
+    dockingSpin->setEnabled(true);
+    dockingSpin->setFixedHeight(40);
+    dockingSpin->setFont(QFont("Segoe UI", 10));
+    dockingSpin->setStyleSheet(R"(
+        QSpinBox {
+            background: white; border: 2px solid #E5E7EB;
+            border-radius: 12px; padding: 4px 12px; color: #1f2937;
+        }
+        QSpinBox:focus { border: 2px solid #EA580C; }
+    )");
+    dockingLay->addWidget(dockingSpin);
+
+    QLabel* dockingHint = new QLabel("Le champ est pre-rempli avec le temps estime. Vous pouvez le modifier directement si besoin.");
+    dockingHint->setWordWrap(true);
+    dockingHint->setFont(QFont("Segoe UI", 10));
+    dockingHint->setStyleSheet("color: #64748b; background: transparent;");
+    dockingLay->addWidget(dockingHint);
+
+    bodyLay->addWidget(dockingCard);
+    bodyLay->addStretch();
+    scrollArea->setWidget(body);
+    mainLay->addWidget(scrollArea, 1);
+
     QHBoxLayout* btnLay = new QHBoxLayout();
-    btnLay->setContentsMargins(28, 12, 28, 24);
+    btnLay->setContentsMargins(32, 16, 32, 28);
     btnLay->setSpacing(12);
 
     QPushButton* cancelBtn = new QPushButton("Annuler");
@@ -2045,7 +2368,7 @@ void QuaisWindow::onAutoAssignBoat()
     )");
     connect(cancelBtn, &QPushButton::clicked, dlg, &QDialog::reject);
 
-    QPushButton* assignBtn = new QPushButton("⚡  Affecter automatiquement");
+    QPushButton* assignBtn = new QPushButton("Affecter automatiquement");
     assignBtn->setFixedHeight(44);
     assignBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
     assignBtn->setCursor(Qt::PointingHandCursor);
@@ -2062,127 +2385,84 @@ void QuaisWindow::onAutoAssignBoat()
     btnLay->addWidget(assignBtn);
     mainLay->addLayout(btnLay);
 
-    // Live preview
-    auto refreshPreview = [boatCombo, valLongueur, valCapacite, valEtat, valEstimation]() {
-        const QVariantMap bateau    = boatCombo->currentData().toMap();
-        const int         longueur  = bateau.value("longueur").toInt();
-        const int         estimation = Quai::calculerTempsEstime(longueur);
-        const QString     etat      = bateau.value("etat").toString();
+    auto refreshPreview = [boatCombo, valLongueur, valCapacite, valEtat, valEstimation,
+                           dockingSpin]() {
+        const QVariantMap bateau = boatCombo->currentData().toMap();
+        const int longueur = bateau.value("longueur").toInt();
+        const int estimation = Quai::calculerTempsEstime(longueur);
         valLongueur->setText(QString("%1 m").arg(longueur));
         valCapacite->setText(QString("%1 m minimum").arg(longueur));
-        valEtat->setText(etat);
+        valEtat->setText(bateau.value("etat").toString());
         valEstimation->setText(QString("%1 min").arg(estimation));
+        if (!dockingSpin->hasFocus())
+            dockingSpin->setValue(estimation);
     };
     refreshPreview();
-    connect(boatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            dlg, [refreshPreview](int) { refreshPreview(); });
+    connect(boatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), dlg, [refreshPreview](int) {
+        refreshPreview();
+    });
 
     if (dlg->exec() != QDialog::Accepted)
         return;
 
     const QVariantMap bateau = boatCombo->currentData().toMap();
-
     if (bateau.value("longueur").toInt() <= 0) {
         showWarning("Longueur invalide",
-                    "Le bateau sélectionné n'a pas de longueur valide.\n"
-                    "Veuillez en choisir un autre pour continuer.");
+                    "Le bateau selectionne n'a pas de longueur valide.\nVeuillez en choisir un autre.");
         return;
     }
 
-    if (hasAvailableQuai && bateau.value("etat").toString() == "En mer") {
-        showInfo("Bateau en mer — second choix",
-                 "Les bateaux en mer sont traités en second choix.\n"
-                 "Un quai libre est disponible : l'affectation priorise\n"
-                 "les bateaux au port ou en maintenance.");
-        return;
-    }
-
-    Quai    quaiChoisi;
-    int     tempsEstime = 0;
+    Quai quaiChoisi;
+    int tempsEstime = 0;
     QString explication;
     if (!assignerQuaiAutomatiquement(bateau, quaiChoisi, tempsEstime, explication)) {
         showWarning("Aucun quai compatible", explication);
         return;
     }
 
-    // ── Database transaction ─────────────────────────────────────────────────
-    QSqlDatabase db = QSqlDatabase::database();
-    const bool startedTransaction = db.transaction();
+    const int dockingMinutes = customDockingCheck->isChecked() ? dockingSpin->value() : tempsEstime;
+    const bool delayedAssignment = (quaiChoisi.getEtat() != "Disponible");
 
-    QSqlQuery oldQuaiQuery;
-    oldQuaiQuery.prepare("SELECT IDQUAI FROM BATEAUX WHERE IDBATEAU = :id");
-    oldQuaiQuery.bindValue(":id", bateau.value("id").toString());
-
-    if (!oldQuaiQuery.exec() || !oldQuaiQuery.next()) {
-        if (startedTransaction) db.rollback();
-        showError("Erreur de lecture",
-                  "Impossible de lire le quai actuel du bateau.\n"
-                  "Vérifiez la connexion à la base de données.");
-        return;
-    }
-    const QVariant ancienIdQuai = oldQuaiQuery.value(0);
-
-    QSqlQuery updateBoatQuery;
-    updateBoatQuery.prepare(
-        "UPDATE BATEAUX "
-        "SET IDQUAI = (SELECT IDQUAI FROM QUAIS WHERE NUMERO = :numero) "
-        "WHERE IDBATEAU = :id"
-        );
-    updateBoatQuery.bindValue(":numero", quaiChoisi.getNumero());
-    updateBoatQuery.bindValue(":id",     bateau.value("id").toString());
-
-    QSqlQuery updateQuaiQuery;
-    updateQuaiQuery.prepare("UPDATE QUAIS SET ETAT = 'Occupé' WHERE NUMERO = :numero");
-    updateQuaiQuery.bindValue(":numero", quaiChoisi.getNumero());
-
-    const bool assignationImmediate = (quaiChoisi.getEtat() == "Disponible");
-    if (!updateBoatQuery.exec() || (assignationImmediate && !updateQuaiQuery.exec())) {
-        if (startedTransaction) db.rollback();
-        showError("Erreur SQL",
-                  updateBoatQuery.lastError().isValid()
-                      ? updateBoatQuery.lastError().text()
-                      : updateQuaiQuery.lastError().text());
-        return;
-    }
-
-    if (ancienIdQuai.isValid() && !ancienIdQuai.isNull()) {
-        QSqlQuery countQuery;
-        countQuery.prepare(
-            "SELECT COUNT(*) FROM BATEAUX "
-            "WHERE IDQUAI = :idquai AND IDBATEAU <> :idbateau"
-            );
-        countQuery.bindValue(":idquai",   ancienIdQuai);
-        countQuery.bindValue(":idbateau", bateau.value("id").toString());
-
-        if (countQuery.exec() && countQuery.next() && countQuery.value(0).toInt() == 0) {
-            QSqlQuery freeOldQuaiQuery;
-            freeOldQuaiQuery.prepare(
-                "UPDATE QUAIS SET ETAT = 'Disponible' "
-                "WHERE IDQUAI = :idquai AND ETAT = 'Occupé'"
-                );
-            freeOldQuaiQuery.bindValue(":idquai", ancienIdQuai);
-            freeOldQuaiQuery.exec();
+    if (delayedAssignment && bateau.value("etat").toString() == "En mer") {
+        const QVariantMap existingPending = loadPersistedPendingDockAssignment(quaiChoisi.getNumero());
+        if (!existingPending.isEmpty() && existingPending.value("boatId").toString() != bateau.value("id").toString()) {
+            showWarning("Reservation deja en attente",
+                        QString("Le quai %1 possede deja une affectation differee en attente.")
+                            .arg(quaiChoisi.getNumero()));
+            return;
         }
-    }
 
-    if (startedTransaction && !db.commit()) {
-        db.rollback();
-        showError("Erreur de transaction",
-                  "La transaction d'affectation n'a pas pu être validée.\n"
-                  "Aucune modification n'a été enregistrée.");
+        QVariantMap pendingAssignment;
+        pendingAssignment.insert("boatId", bateau.value("id").toString());
+        pendingAssignment.insert("boatLabel", boatDisplayLabel(bateau));
+        pendingAssignment.insert("dockingMinutes", dockingMinutes);
+        persistPendingDockAssignment(quaiChoisi.getNumero(), pendingAssignment);
+        ensureAvailabilityTimerForQuai(quaiChoisi);
+
+        showInfo("Affectation differee enregistree",
+                 QString("%1 sera repropose pour le quai %2 lorsqu'il redeviendra disponible.\n"
+                         "Temps de dockage prevu : %3 min.\n%4")
+                     .arg(boatDisplayLabel(bateau))
+                     .arg(quaiChoisi.getNumero())
+                     .arg(dockingMinutes)
+                     .arg(explication));
         return;
     }
 
-    loadQuaisFromDatabase();
-    populateTable(searchInput->text());
-    BateauWindow::refreshAllTables();
+    QString errorMessage;
+    if (!assignBoatToQuai(bateau, quaiChoisi, dockingMinutes, bateau.value("etat").toString() == "En mer", errorMessage)) {
+        showError("Erreur d'affectation", errorMessage);
+        return;
+    }
 
-    showSuccess("Affectation réussie",
-                QString("%1\na été affecté au quai %2.\n%3")
+    showSuccess("Affectation reussie",
+                QString("%1\na ete affecte au quai %2.\nTemps de dockage : %3 min.\n%4")
                     .arg(boatDisplayLabel(bateau))
                     .arg(quaiChoisi.getNumero())
+                    .arg(dockingMinutes)
                     .arg(explication));
 }
+
 void QuaisWindow::onEditQuai(int row)
 {
     if (row < 0 || row >= quais.size()) return;
@@ -2595,7 +2875,8 @@ void QuaisWindow::afficherStatistiques()
     int    maintenanceBerths = 0;
     double totalRevenue      = 0.0;
 
-    for (const Quai& q : quais) {
+    for (int quaiIndex = 0; quaiIndex < quais.size(); ++quaiIndex) {
+        const Quai& q = quais.at(quaiIndex);
         const int cap = q.getCapacite();
         totalBerths += cap;
         if (q.getEtat() == "Occupé") {
@@ -2613,9 +2894,10 @@ void QuaisWindow::afficherStatistiques()
     const double maxQuais       = std::max(totalQuais, 1);
     QList<DockUsageMonitoringAnalysis> monitoringAnalyses;
     int alertDockCount = 0;
-    for (const Quai& q : quais) {
+    for (int quaiIndex = 0; quaiIndex < quais.size(); ++quaiIndex) {
+        const Quai& q = quais.at(quaiIndex);
         const DockUsageMonitoringAnalysis analysis = buildDockUsageMonitoringAnalysis(q, quaiAvailabilityDeadlines);
-        if (analysis.anomalyScore >= 30.0)
+        if (analysis.anomalyScore >= 45.0)
             ++alertDockCount;
         monitoringAnalyses.append(analysis);
     }
@@ -2674,60 +2956,113 @@ void QuaisWindow::afficherStatistiques()
     mainLay->addWidget(headerBand);
     makeDialogMovable(dlg, headerBand);
 
-    QLabel* subLbl = new QLabel("Vue d'ensemble de l'occupation et des revenus du port");
-    subLbl->setFont(QFont("Segoe UI", 10));
-    subLbl->setStyleSheet("color: #6b7280; padding: 16px 30px 0px 30px; background: transparent;");
-    mainLay->addWidget(subLbl);
+    // ─── Scroll Area ─────────────────────────────────────────────────────────────
+    QScrollArea* scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setStyleSheet(R"(
+        QScrollArea { background: transparent; border: none; }
+        QScrollBar:vertical {
+            width: 6px; background: transparent; margin: 0;
+        }
+        QScrollBar::handle:vertical {
+            background: #CBD5E1; border-radius: 3px; min-height: 40px;
+        }
+        QScrollBar::handle:vertical:hover { background: #94A3B8; }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+    )");
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
+    QWidget* scrollContent = new QWidget();
+    scrollContent->setStyleSheet("background: transparent;");
+    QVBoxLayout* scrollLay = new QVBoxLayout(scrollContent);
+    scrollLay->setContentsMargins(0, 0, 0, 0);
+    scrollLay->setSpacing(0);
+
+    // ─── Subtitle ─────────────────────────────────────────────────────────────
+    QLabel* subLbl = new QLabel("Vue d'ensemble de l'utilisation des quais, des scores d'analyse et de l'aide à la décision portuaire");
+    subLbl->setFont(QFont("Segoe UI", 10));
+    subLbl->setStyleSheet("color: #64748B; padding: 14px 32px 0px 32px; background: transparent; letter-spacing: 0.1px;");
+    scrollLay->addWidget(subLbl);
+
+    // ─── Circular Progress Charts ──────────────────────────────────────────────
     QFrame* chartsFrame = new QFrame();
     chartsFrame->setStyleSheet("background: transparent;");
     QHBoxLayout* chartsLay = new QHBoxLayout(chartsFrame);
-    chartsLay->setContentsMargins(20, 20, 20, 10);
-    chartsLay->setSpacing(10);
+    chartsLay->setContentsMargins(28, 22, 28, 10);
+    chartsLay->setSpacing(16);
 
-    struct ChartData { double val; double max; QString label; QString unit; QColor color; };
+    struct ChartData {
+        double val;
+        double max;
+        QString label;
+        QString unit;
+        QColor color;
+    };
     const QList<ChartData> charts = {
-                                     { (double)totalQuais,     maxQuais,             "Total\nQuais",           "",   QColor("#2B5EA6") },
-                                     { occupancyRate,          100.0,                "Taux\nd'Occupation",     "%",  QColor("#7C3AED") },
-                                     { (double)occupiedBerths, (double)totalBerths,  "Emplacements\nOccupés",  "",   QColor("#EF8C2A") },
-                                     { (double)availableBerths,(double)totalBerths,  "Emplacements\nLibres",   "",   QColor("#059669") },
+                                     { (double)totalQuais,      maxQuais,            "Total\nQuais",          "",  QColor(0x25, 0x63, 0xEB) },
+                                     { occupancyRate,           100.0,               "Taux\nd'Occupation",    "%", QColor(0x7C, 0x3A, 0xED) },
+                                     { (double)occupiedBerths,  (double)totalBerths, "Emplacements\nOccupés", "",  QColor(0xF5, 0x9E, 0x0B) },
+                                     { (double)availableBerths, (double)totalBerths, "Emplacements\nLibres",  "",  QColor(0x10, 0xB9, 0x81) },
                                      };
 
     QList<CircularProgress*> progressWidgets;
-    for (const ChartData& cd : charts) {
+    for (int chartIndex = 0; chartIndex < charts.size(); ++chartIndex) {
+        const ChartData& cd = charts.at(chartIndex);
         CircularProgress* cp = new CircularProgress(cd.val, cd.max, cd.label, cd.unit, cd.color);
         chartsLay->addWidget(cp, 0, Qt::AlignCenter);
         progressWidgets.append(cp);
     }
-    mainLay->addWidget(chartsFrame);
+    scrollLay->addWidget(chartsFrame);
 
+    // ─── KPI Cards ────────────────────────────────────────────────────────────
     QFrame* cardsFrame = new QFrame();
     cardsFrame->setStyleSheet("background: transparent;");
     QHBoxLayout* cardsLay = new QHBoxLayout(cardsFrame);
-    cardsLay->setContentsMargins(24, 4, 24, 4);
+    cardsLay->setContentsMargins(28, 6, 28, 6);
     cardsLay->setSpacing(14);
 
     auto makeCard = [&](const QString& icon, const QString& val, const QString& label,
-                        const QString& bg, const QString& textColor)
+                        const QString& accentHex, const QString& bgHex) -> QFrame*
     {
         QFrame* card = new QFrame();
-        card->setFixedHeight(90);
-        card->setStyleSheet(QString("QFrame { background: %1; border-radius: 16px; }").arg(bg));
-        QHBoxLayout* cl = new QHBoxLayout(card);
-        cl->setContentsMargins(16, 8, 16, 8);
+        card->setFixedHeight(96);
+        card->setStyleSheet(QString(R"(
+            QFrame {
+                background: %1;
+                border-radius: 18px;
+                border: none;
+            }
+        )").arg(bgHex));
 
-        QLabel* iconLbl = new QLabel(icon);
-        iconLbl->setFont(QFont("Segoe UI", 22));
-        iconLbl->setStyleSheet("background: transparent;");
-        cl->addWidget(iconLbl);
+        // Subtle left accent bar
+        QHBoxLayout* cl = new QHBoxLayout(card);
+        cl->setContentsMargins(18, 12, 18, 12);
+        cl->setSpacing(14);
+
+        // Icon bubble
+        QLabel* iconBubble = new QLabel(icon);
+        iconBubble->setFont(QFont("Segoe UI Emoji", 20));
+        iconBubble->setFixedSize(48, 48);
+        iconBubble->setAlignment(Qt::AlignCenter);
+        iconBubble->setStyleSheet(QString(R"(
+            background: white;
+            border-radius: 14px;
+            border: none;
+        )"));
+        cl->addWidget(iconBubble);
 
         QVBoxLayout* vl = new QVBoxLayout();
+        vl->setSpacing(2);
+
         QLabel* valLbl = new QLabel(val);
-        valLbl->setFont(QFont("Segoe UI", 16, QFont::Bold));
-        valLbl->setStyleSheet(QString("color: %1; background: transparent;").arg(textColor));
+        valLbl->setFont(QFont("Segoe UI", 17, QFont::Bold));
+        valLbl->setStyleSheet(QString("color: %1; background: transparent;").arg(accentHex));
+
         QLabel* labLbl = new QLabel(label);
         labLbl->setFont(QFont("Segoe UI", 9));
-        labLbl->setStyleSheet("color: #6b7280; background: transparent;");
+        labLbl->setStyleSheet("color: #6B7280; background: transparent; letter-spacing: 0.2px;");
+
         vl->addWidget(valLbl);
         vl->addWidget(labLbl);
         cl->addLayout(vl, 1);
@@ -2736,79 +3071,168 @@ void QuaisWindow::afficherStatistiques()
 
     cardsLay->addWidget(makeCard("💰",
                                  QString("%1 DT").arg(totalRevenue, 0, 'f', 0),
-                                 "Chiffre d'Affaires", "#EFF6FF", "#1D4ED8"));
+                                 "Chiffre d'Affaires", "#1D4ED8", "#EFF6FF"));
     cardsLay->addWidget(makeCard("📈",
                                  QString("%1 DT").arg(averageRevenue, 0, 'f', 0),
-                                 "Revenu Moyen / Quai", "#F5F3FF", "#6D28D9"));
+                                 "Revenu Moyen / Quai", "#6D28D9", "#F5F3FF"));
     cardsLay->addWidget(makeCard("🔧",
                                  QString::number(maintenanceBerths),
-                                 "En Maintenance", "#FEF2F2", "#991B1B"));
-
+                                 "En Maintenance", "#B91C1C", "#FEF2F2"));
     cardsLay->addWidget(makeCard("⚡",
                                  QString::number(alertDockCount),
-                                 "Quais a surveiller", "#FFF7ED", "#C2410C"));
+                                 "Quais à surveiller", "#C2410C", "#FFF7ED"));
 
-    mainLay->addWidget(cardsFrame);
+    scrollLay->addWidget(cardsFrame);
 
+    // ─── Analyzer Module ──────────────────────────────────────────────────────
     QFrame* analyzerFrame = new QFrame();
-    analyzerFrame->setStyleSheet("background: transparent;");
+    analyzerFrame->setStyleSheet(R"(
+        QFrame {
+            background: #FFFFFF;
+            border: none;
+            border-radius: 22px;
+        }
+    )");
+
+    // Drop shadow
+    QGraphicsDropShadowEffect* analyzerShadow = new QGraphicsDropShadowEffect(analyzerFrame);
+    analyzerShadow->setBlurRadius(24);
+    analyzerShadow->setOffset(0, 4);
+    analyzerShadow->setColor(QColor(15, 23, 42, 28));
+    analyzerFrame->setGraphicsEffect(analyzerShadow);
+
     QVBoxLayout* analyzerLay = new QVBoxLayout(analyzerFrame);
-    analyzerLay->setContentsMargins(24, 8, 24, 0);
+    analyzerLay->setContentsMargins(28, 26, 28, 26);
     analyzerLay->setSpacing(10);
 
-    QLabel* analyzerTitle = new QLabel("Module de Monitoring Intelligent des Quais");
+    // Header row
+    QHBoxLayout* analyzerHeaderRow = new QHBoxLayout();
+    analyzerHeaderRow->setSpacing(12);
+
+    QFrame* analyzerIconBadge = new QFrame();
+    analyzerIconBadge->setFixedSize(44, 44);
+    analyzerIconBadge->setStyleSheet(R"(
+        QFrame {
+            background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #1E3A5F, stop:1 #2563EB);
+            border-radius: 13px;
+        }
+    )");
+    QLabel* analyzerIconLbl = new QLabel("⚙", analyzerIconBadge);
+    analyzerIconLbl->setFont(QFont("Segoe UI Emoji", 18));
+    analyzerIconLbl->setAlignment(Qt::AlignCenter);
+    analyzerIconLbl->setGeometry(0, 0, 44, 44);
+    analyzerIconLbl->setStyleSheet("background: transparent; color: white;");
+
+    QVBoxLayout* analyzerTitleCol = new QVBoxLayout();
+    analyzerTitleCol->setSpacing(2);
+
+    QLabel* analyzerTitle = new QLabel("Module d'Analyse Continue de l'Utilisation des Quais");
     analyzerTitle->setFont(QFont("Segoe UI", 13, QFont::Bold));
-    analyzerTitle->setStyleSheet("color: #1f2937; background: transparent;");
-    analyzerLay->addWidget(analyzerTitle);
+    analyzerTitle->setStyleSheet("color: #0F172A; background: transparent;");
 
     QLabel* analyzerSubtitle = new QLabel(
-        QString("Analyse continue de l'occupation pour detecter la sous-utilisation, la surcharge frequente "
-                "et les occupations incoherentes. %1 quai(x) exigent une vigilance particuliere.")
+        QString("Analyse en continu chaque quai : sessions, occupation, anomalies et recommandations. "
+                "<b style='color:#DC2626;'>%1 quai(s)</b> requièrent une vigilance particulière.")
             .arg(alertDockCount));
     analyzerSubtitle->setFont(QFont("Segoe UI", 9));
-    analyzerSubtitle->setStyleSheet("color: #6b7280; background: transparent;");
+    analyzerSubtitle->setStyleSheet("color: #64748B; background: transparent;");
     analyzerSubtitle->setWordWrap(true);
-    analyzerLay->addWidget(analyzerSubtitle);
 
-    QTableWidget* analyzerTable = new QTableWidget(monitoringAnalyses.size(), 6, analyzerFrame);
+    analyzerTitleCol->addWidget(analyzerTitle);
+    analyzerTitleCol->addWidget(analyzerSubtitle);
+    analyzerHeaderRow->addWidget(analyzerIconBadge, 0, Qt::AlignTop);
+    analyzerHeaderRow->addLayout(analyzerTitleCol, 1);
+    analyzerLay->addLayout(analyzerHeaderRow);
+
+    // Hint pill
+    QFrame* hintPill = new QFrame();
+    hintPill->setStyleSheet(R"(
+        QFrame {
+            background: #EFF6FF;
+            border-radius: 10px;
+            border: none;
+        }
+    )");
+    QHBoxLayout* hintPillLay = new QHBoxLayout(hintPill);
+    hintPillLay->setContentsMargins(14, 8, 14, 8);
+    hintPillLay->setSpacing(8);
+
+    QLabel* hintIcon = new QLabel("💡");
+    hintIcon->setFont(QFont("Segoe UI Emoji", 11));
+    hintIcon->setStyleSheet("background: transparent;");
+
+    QLabel* analyzerHint = new QLabel("Cliquez sur une cellule du diagnostic pour afficher l'analyse complète dans une fiche détaillée.");
+    analyzerHint->setFont(QFont("Segoe UI", 9, QFont::Medium));
+    analyzerHint->setStyleSheet("color: #1D4ED8; background: transparent;");
+    analyzerHint->setWordWrap(true);
+
+    hintPillLay->addWidget(hintIcon);
+    hintPillLay->addWidget(analyzerHint, 1);
+    analyzerLay->addWidget(hintPill);
+
+    // ─── Analyzer Table ───────────────────────────────────────────────────────
+    QTableWidget* analyzerTable = new QTableWidget(monitoringAnalyses.size(), 8, analyzerFrame);
     analyzerTable->setHorizontalHeaderLabels({
-        "Quai", "Sessions", "Occupation moy.", "Occupation max.", "Score anomalie", "Diagnostic"
+        "Quai", "Sessions", "Temps total", "Durée moy.", "Durée max.", "Score utilisation", "Score anomalie", "Diagnostic"
     });
     analyzerTable->horizontalHeader()->setStretchLastSection(true);
     analyzerTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    analyzerTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
+    analyzerTable->horizontalHeader()->setSectionResizeMode(7, QHeaderView::Stretch);
     analyzerTable->verticalHeader()->setVisible(false);
     analyzerTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     analyzerTable->setSelectionMode(QAbstractItemView::NoSelection);
     analyzerTable->setFocusPolicy(Qt::NoFocus);
     analyzerTable->setAlternatingRowColors(true);
-    analyzerTable->setMinimumHeight(250);
+    analyzerTable->setWordWrap(true);
+    analyzerTable->setMinimumHeight(290);
+    analyzerTable->setShowGrid(false);
     analyzerTable->setStyleSheet(R"(
         QTableWidget {
-            background: #F9FAFB;
-            border: 1px solid #E5E7EB;
+            background: #FAFCFF;
+            border: 1px solid #E8EDF5;
             border-radius: 16px;
-            alternate-background-color: #F3F4F6;
-            gridline-color: #E5E7EB;
-            color: #1F2937;
+            alternate-background-color: #F8FAFC;
+            color: #1E293B;
+            outline: none;
+        }
+        QTableWidget::item {
+            padding: 11px 14px;
+            border-bottom: 1px solid #F1F5F9;
+        }
+        QTableWidget::item:hover {
+            background: #EFF6FF;
         }
         QHeaderView::section {
-            background: #EFF6FF;
-            color: #1D4ED8;
-            font-weight: bold;
+            background: #F1F5F9;
+            color: #475569;
+            font-weight: 700;
+            font-size: 9pt;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
             border: none;
-            border-bottom: 1px solid #DBEAFE;
-            padding: 8px;
+            border-bottom: 2px solid #E2E8F0;
+            padding: 10px 14px;
         }
+        QHeaderView::section:first { border-top-left-radius: 16px; }
+        QHeaderView::section:last  { border-top-right-radius: 16px; }
+        QScrollBar:vertical {
+            width: 6px; background: transparent;
+        }
+        QScrollBar::handle:vertical {
+            background: #CBD5E1; border-radius: 3px; min-height: 30px;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
     )");
 
     for (int row = 0; row < monitoringAnalyses.size(); ++row) {
         const DockUsageMonitoringAnalysis& analysis = monitoringAnalyses[row];
-        const QColor tint = analysis.accentColor.lighter(185);
+        const QColor tint = analysis.accentColor.lighter(192);
 
         auto makeAnalyzerItem = [&](const QString& text, const QString& tooltip = QString()) {
             QTableWidgetItem* item = new QTableWidgetItem(text);
             item->setBackground(tint);
+            item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            item->setForeground(QColor(0x1E, 0x29, 0x3B));
             if (!tooltip.isEmpty())
                 item->setToolTip(tooltip);
             return item;
@@ -2816,47 +3240,310 @@ void QuaisWindow::afficherStatistiques()
 
         analyzerTable->setItem(row, 0, makeAnalyzerItem(QString("Quai %1").arg(analysis.quaiNumber)));
         analyzerTable->setItem(row, 1, makeAnalyzerItem(QString::number(analysis.sessionCount)));
-        analyzerTable->setItem(row, 2, makeAnalyzerItem(formatDurationLabel(analysis.averageOccupiedSeconds)));
-        analyzerTable->setItem(row, 3, makeAnalyzerItem(formatDurationLabel(analysis.longestOccupiedSeconds)));
-        analyzerTable->setItem(row, 4, makeAnalyzerItem(QString("%1%").arg(analysis.anomalyScore, 0, 'f', 1)));
-        analyzerTable->setItem(row, 5, makeAnalyzerItem(
-            QString("%1  |  %2  |  %3").arg(analysis.statusLabel, analysis.anomalySummary, analysis.recommendation),
-            "Evaluation basee sur les donnees d'usage du quai."
-        ));
-        analyzerTable->setRowHeight(row, 40);
+        analyzerTable->setItem(row, 2, makeAnalyzerItem(formatDurationLabel(analysis.totalOccupiedSeconds)));
+        analyzerTable->setItem(row, 3, makeAnalyzerItem(formatDurationLabel(analysis.averageOccupiedSeconds)));
+        analyzerTable->setItem(row, 4, makeAnalyzerItem(formatDurationLabel(analysis.longestOccupiedSeconds)));
+        analyzerTable->setItem(row, 5, makeAnalyzerItem(QString("%1%").arg(analysis.utilizationScore, 0, 'f', 1)));
+        analyzerTable->setItem(row, 6, makeAnalyzerItem(QString("%1%").arg(analysis.anomalyScore, 0, 'f', 1)));
+
+        const QString fullDiagnostic = QString("%1  |  %2  |  %3")
+                                           .arg(analysis.statusLabel, analysis.anomalySummary, analysis.recommendation);
+        QString previewDiagnostic = fullDiagnostic;
+        if (previewDiagnostic.size() > 82)
+            previewDiagnostic = previewDiagnostic.left(82).trimmed() + "…";
+
+        QTableWidgetItem* diagnosticItem = makeAnalyzerItem(
+            previewDiagnostic,
+            "Cliquez pour afficher l'analyse complète de ce quai."
+            );
+        diagnosticItem->setTextAlignment(Qt::AlignLeft | Qt::AlignTop);
+        diagnosticItem->setData(Qt::UserRole,     fullDiagnostic);
+        diagnosticItem->setData(Qt::UserRole + 1, analysis.statusLabel);
+        diagnosticItem->setData(Qt::UserRole + 2, analysis.anomalySummary);
+        diagnosticItem->setData(Qt::UserRole + 3, analysis.recommendation);
+        diagnosticItem->setData(Qt::UserRole + 4, analysis.accentColor);
+        diagnosticItem->setSizeHint(QSize(0, 64));
+        analyzerTable->setItem(row, 7, diagnosticItem);
+        analyzerTable->setRowHeight(row, 64);
     }
 
-    analyzerLay->addWidget(analyzerTable);
-    mainLay->addWidget(analyzerFrame);
-    mainLay->addStretch();
+    analyzerTable->resizeRowsToContents();
 
+    // ─── Diagnostic Detail Dialog (on cell click) ─────────────────────────────
+    connect(analyzerTable, &QTableWidget::cellClicked, dlg, [analyzerTable, dlg](int row, int column) {
+        if (column != 7) return;
+
+        QTableWidgetItem* item = analyzerTable->item(row, column);
+        if (!item) return;
+
+        const QString statusLabel    = item->data(Qt::UserRole + 1).toString();
+        const QString anomalySummary = item->data(Qt::UserRole + 2).toString();
+        const QString recommendation = item->data(Qt::UserRole + 3).toString();
+        const QColor  accentColor    = item->data(Qt::UserRole + 4).value<QColor>();
+        const QString fullDiagnostic = item->data(Qt::UserRole).toString();
+        const QString quaiLabel      = analyzerTable->item(row, 0) ? analyzerTable->item(row, 0)->text() : "Quai";
+        const QString accentHex      = accentColor.isValid() ? accentColor.name() : "#8B5CF6";
+
+        QDialog detailsDialog(dlg);
+        detailsDialog.setModal(true);
+        detailsDialog.setFixedSize(720, 560);
+        detailsDialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        detailsDialog.setAttribute(Qt::WA_TranslucentBackground);
+
+        QGraphicsDropShadowEffect* detailShadow = new QGraphicsDropShadowEffect(&detailsDialog);
+        detailShadow->setBlurRadius(52);
+        detailShadow->setOffset(0, 12);
+        detailShadow->setColor(QColor(15, 23, 42, 80));
+
+        QWidget* detailContainer = new QWidget(&detailsDialog);
+        detailContainer->setGeometry(14, 14, 692, 532);
+        detailContainer->setGraphicsEffect(detailShadow);
+        detailContainer->setStyleSheet("QWidget { background: #FFFFFF; border-radius: 24px; }");
+
+        QVBoxLayout* detailLay = new QVBoxLayout(detailContainer);
+        detailLay->setContentsMargins(0, 0, 0, 0);
+        detailLay->setSpacing(0);
+
+        // Header
+        QFrame* detailHeader = new QFrame();
+        detailHeader->setFixedHeight(92);
+        detailHeader->setStyleSheet(R"(
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #7C3AED, stop:0.55 #A78BFA, stop:1 #38BDF8);
+                border-radius: 24px 24px 0 0;
+            }
+        )");
+
+        QHBoxLayout* detailHeaderLay = new QHBoxLayout(detailHeader);
+        detailHeaderLay->setContentsMargins(28, 0, 20, 0);
+        detailHeaderLay->setSpacing(14);
+
+        // Small quai icon badge in header
+        QFrame* headerBadge = new QFrame();
+        headerBadge->setFixedSize(42, 42);
+        headerBadge->setStyleSheet("QFrame { background: rgba(255,255,255,0.22); border-radius: 13px; }");
+        QLabel* headerBadgeLbl = new QLabel("🛳", headerBadge);
+        headerBadgeLbl->setFont(QFont("Segoe UI Emoji", 18));
+        headerBadgeLbl->setGeometry(0, 0, 42, 42);
+        headerBadgeLbl->setAlignment(Qt::AlignCenter);
+        headerBadgeLbl->setStyleSheet("background: transparent;");
+        detailHeaderLay->addWidget(headerBadge);
+
+        QVBoxLayout* detailTitleLay = new QVBoxLayout();
+        detailTitleLay->setSpacing(3);
+
+        QLabel* detailTitle = new QLabel(QString("Diagnostic — %1").arg(quaiLabel));
+        detailTitle->setFont(QFont("Segoe UI", 14, QFont::Bold));
+        detailTitle->setStyleSheet("color: white; background: transparent;");
+
+        QLabel* detailSubtitle = new QLabel("Statut, anomalies détectées et recommandation opérationnelle");
+        detailSubtitle->setFont(QFont("Segoe UI", 9));
+        detailSubtitle->setStyleSheet("color: rgba(255,255,255,0.70); background: transparent;");
+
+        detailTitleLay->addWidget(detailTitle);
+        detailTitleLay->addWidget(detailSubtitle);
+        detailHeaderLay->addLayout(detailTitleLay, 1);
+
+        QPushButton* detailCloseBtn = new QPushButton("✕");
+        detailCloseBtn->setFixedSize(36, 36);
+        detailCloseBtn->setCursor(Qt::PointingHandCursor);
+        detailCloseBtn->setStyleSheet(R"(
+            QPushButton {
+                background: rgba(255,255,255,0.14);
+                color: white; border: none;
+                border-radius: 18px;
+                font-size: 12px; font-weight: bold;
+            }
+            QPushButton:hover { background: rgba(255,255,255,0.28); }
+        )");
+        connect(detailCloseBtn, &QPushButton::clicked, &detailsDialog, &QDialog::accept);
+        detailHeaderLay->addWidget(detailCloseBtn);
+        detailLay->addWidget(detailHeader);
+        makeDialogMovable(&detailsDialog, detailHeader);
+
+        QScrollArea* detailScroll = new QScrollArea();
+        detailScroll->setWidgetResizable(true);
+        detailScroll->setFrameShape(QFrame::NoFrame);
+        detailScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        detailScroll->setStyleSheet(R"(
+            QScrollArea { background: transparent; border: none; }
+            QScrollBar:vertical {
+                background: #F1F5F9;
+                width: 8px;
+                border-radius: 4px;
+                margin: 10px 8px 10px 0;
+            }
+            QScrollBar::handle:vertical {
+                background: #CBD5E1;
+                border-radius: 4px;
+                min-height: 30px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+        )");
+
+        // Body
+        QWidget* detailBody = new QWidget();
+        detailBody->setStyleSheet("background: transparent;");
+        QVBoxLayout* detailBodyLay = new QVBoxLayout(detailBody);
+        detailBodyLay->setContentsMargins(26, 22, 26, 8);
+        detailBodyLay->setSpacing(14);
+
+        // Status card
+        QFrame* statusCard = new QFrame();
+        const QString lightAccent = accentColor.isValid() ? accentColor.lighter(190).name() : "#F5F3FF";
+        statusCard->setStyleSheet(QString(R"(
+            QFrame {
+                background: %1;
+                border: none;
+                border-radius: 16px;
+            }
+        )").arg(lightAccent, accentColor.isValid() ? accentColor.lighter(160).name() : "#DDD6FE"));
+
+        QHBoxLayout* statusLay = new QHBoxLayout(statusCard);
+        statusLay->setContentsMargins(18, 14, 18, 14);
+        statusLay->setSpacing(12);
+
+        QFrame* statusDot = new QFrame();
+        statusDot->setFixedSize(10, 10);
+        statusDot->setStyleSheet(QString("QFrame { background: %1; border-radius: 5px; }").arg(accentHex));
+
+        QVBoxLayout* statusTextLay = new QVBoxLayout();
+        statusTextLay->setSpacing(4);
+
+        QLabel* statusTitle = new QLabel(statusLabel);
+        statusTitle->setFont(QFont("Segoe UI", 11, QFont::Bold));
+        statusTitle->setStyleSheet(QString("color: %1; background: transparent;").arg(accentHex));
+
+        QLabel* summaryLabel = new QLabel(QString("Anomalies détectées : %1").arg(anomalySummary));
+        summaryLabel->setFont(QFont("Segoe UI", 9, QFont::Medium));
+        summaryLabel->setStyleSheet("color: #334155; background: transparent;");
+        summaryLabel->setWordWrap(true);
+
+        statusTextLay->addWidget(statusTitle);
+        statusTextLay->addWidget(summaryLabel);
+        statusLay->addWidget(statusDot, 0, Qt::AlignTop | Qt::AlignVCenter);
+        statusLay->addLayout(statusTextLay, 1);
+        detailBodyLay->addWidget(statusCard);
+
+        // Full analysis card
+        QFrame* textCard = new QFrame();
+        textCard->setStyleSheet(R"(
+            QFrame {
+                background: #FCFCFF;
+                border: none;
+                border-radius: 16px;
+            }
+        )");
+        QVBoxLayout* textLay = new QVBoxLayout(textCard);
+        textLay->setContentsMargins(20, 18, 20, 18);
+        textLay->setSpacing(10);
+
+        QLabel* fullTitle = new QLabel("Analyse complète");
+        fullTitle->setFont(QFont("Segoe UI", 10, QFont::Bold));
+        fullTitle->setStyleSheet("color: #0F172A; background: transparent;");
+
+        QLabel* fullText = new QLabel(fullDiagnostic);
+        fullText->setWordWrap(true);
+        fullText->setFont(QFont("Segoe UI", 9));
+        fullText->setStyleSheet("color: #475569; background: transparent;");
+        fullText->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+
+        QLabel* recommendationTitle = new QLabel("Recommandation");
+        recommendationTitle->setFont(QFont("Segoe UI", 10, QFont::Bold));
+        recommendationTitle->setStyleSheet("color: #0F172A; background: transparent;");
+
+        QLabel* recommendationLabel = new QLabel(recommendation);
+        recommendationLabel->setWordWrap(true);
+        recommendationLabel->setFont(QFont("Segoe UI", 9));
+        recommendationLabel->setStyleSheet("color: #334155; background: transparent;");
+
+        textLay->addWidget(fullTitle);
+        textLay->addWidget(fullText);
+        textLay->addWidget(recommendationTitle);
+        textLay->addWidget(recommendationLabel);
+
+        detailBodyLay->addWidget(textCard, 1);
+        detailBodyLay->addStretch();
+        detailScroll->setWidget(detailBody);
+        detailLay->addWidget(detailScroll, 1);
+
+        // Footer
+        QHBoxLayout* detailBottomLay = new QHBoxLayout();
+        detailBottomLay->setContentsMargins(26, 10, 26, 22);
+        detailBottomLay->addStretch();
+
+        QPushButton* detailOkBtn = new QPushButton("  Fermer");
+        detailOkBtn->setFixedHeight(42);
+        detailOkBtn->setMinimumWidth(130);
+        detailOkBtn->setCursor(Qt::PointingHandCursor);
+        detailOkBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
+        detailOkBtn->setStyleSheet(R"(
+            QPushButton {
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                    stop:0 #7C3AED, stop:1 #38BDF8);
+                color: white; border: none;
+                border-radius: 12px; padding: 0 20px;
+            }
+            QPushButton:hover { background: #8B5CF6; }
+        )");
+        connect(detailOkBtn, &QPushButton::clicked, &detailsDialog, &QDialog::accept);
+        detailBottomLay->addWidget(detailOkBtn);
+        detailLay->addLayout(detailBottomLay);
+
+        detailsDialog.exec();
+    });
+
+    analyzerLay->addWidget(analyzerTable);
+
+    // Wrap analyzerFrame with side margins
+    QHBoxLayout* analyzerWrapLay = new QHBoxLayout();
+    analyzerWrapLay->setContentsMargins(28, 6, 28, 16);
+    analyzerWrapLay->addWidget(analyzerFrame);
+    scrollLay->addLayout(analyzerWrapLay);
+    scrollLay->addStretch();
+
+    scrollArea->setWidget(scrollContent);
+    mainLay->addWidget(scrollArea, 1);
+
+    // ─── Footer Close Button ──────────────────────────────────────────────────
     QHBoxLayout* bottomLay = new QHBoxLayout();
-    bottomLay->setContentsMargins(24, 0, 24, 20);
+    bottomLay->setContentsMargins(28, 4, 28, 22);
 
     QPushButton* okBtn = new QPushButton("  Fermer");
-    okBtn->setFont(QFont("Segoe UI", 11, QFont::Bold));
+    okBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
     okBtn->setFixedHeight(44);
-    okBtn->setFixedWidth(160);
+    okBtn->setFixedWidth(150);
     okBtn->setCursor(Qt::PointingHandCursor);
     okBtn->setStyleSheet(R"(
-        QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                          stop:0 #2B5EA6, stop:1 #5D9CEC);
-                      color: white; border: none; border-radius: 12px; padding: 0 20px; }
-        QPushButton:hover { background: #1D4ED8; }
+        QPushButton {
+            background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                stop:0 #0F172A, stop:1 #2563EB);
+            color: white; border: none;
+            border-radius: 13px; padding: 0 20px;
+            letter-spacing: 0.3px;
+        }
+        QPushButton:hover {
+            background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                stop:0 #1E3A5F, stop:1 #3B82F6);
+        }
+        QPushButton:pressed { background: #0F172A; }
     )");
     connect(okBtn, &QPushButton::clicked, dlg, &QDialog::accept);
     bottomLay->addStretch();
     bottomLay->addWidget(okBtn);
     mainLay->addLayout(bottomLay);
 
+    // ─── Staggered animation on progress widgets ──────────────────────────────
     for (int i = 0; i < progressWidgets.size(); ++i) {
         CircularProgress* cp = progressWidgets[i];
-        QTimer::singleShot(i * 150, cp, [cp]() { cp->animateTo(); });
+        QTimer::singleShot(i * 140, cp, [cp]() { cp->animateTo(); });
     }
 
     dlg->exec();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 void QuaisWindow::onGenerateContract(int row)
 {
     if (row < 0 || row >= quais.size()) return;
@@ -2897,6 +3584,7 @@ void QuaisWindow::onGenerateContract(int row)
         const int answer = QMessageBox::question(this, "Mettre à jour le statut",
                                                  "Souhaitez-vous marquer ce quai comme 'Occupé' ?",
                                                  QMessageBox::Yes | QMessageBox::No);
+
         if (answer == QMessageBox::Yes) {
             QSqlQuery updateQuery;
             updateQuery.prepare("UPDATE QUAIS SET ETAT = 'Occupé', LOCATION = :loc WHERE NUMERO = :num");
@@ -2905,7 +3593,7 @@ void QuaisWindow::onGenerateContract(int row)
             if (updateQuery.exec()) {
                 QSqlDatabase::database().commit();
                 Quai occupiedQuai = quai;
-                occupiedQuai.setEtat(QString::fromUtf8("OccupÃ©"));
+                occupiedQuai.setEtat(QString::fromUtf8("Occupé"));
                 ensureAvailabilityTimerForQuai(occupiedQuai);
                 loadQuaisFromDatabase();
                 populateTable(searchInput->text());
@@ -2915,10 +3603,3 @@ void QuaisWindow::onGenerateContract(int row)
         }
     }
 }
-
-
-
-
-
-
-

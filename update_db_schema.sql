@@ -22,3 +22,10 @@ ALTER TABLE PECHES
 ADD (
     ID_PECHEUR NUMBER
 );
+
+-- Nouvelles colonnes pour le module Livraison
+ALTER TABLE LIVRAISONS
+ADD (
+    REFERENCE    VARCHAR2(50)
+);
+

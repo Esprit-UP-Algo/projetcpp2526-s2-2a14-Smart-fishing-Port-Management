@@ -9,6 +9,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QFrame>
+#include <QProcess>
 
 class LoginWindow : public QMainWindow
 {
@@ -22,6 +23,8 @@ private slots:
     void onLogin();
     void onFaceIDLogin();
     void onForgotPassword();
+    void handleFaceIDOutput();
+    void startFaceIDPrewarm();
 
 private:
     void setupUi();
@@ -31,6 +34,12 @@ private:
     QLineEdit* usernameInput;
     QLineEdit* passwordInput;
     QFrame* loginCard;
+
+    // Pre-warmed Face ID process
+    QProcess* faceIdProcess = nullptr;
+    bool faceIdReady = false;
+    QPushButton* faceIdBtn = nullptr;
+    QString faceIdOutputBuffer;
 };
 
 #endif // LOGINWINDOW_H

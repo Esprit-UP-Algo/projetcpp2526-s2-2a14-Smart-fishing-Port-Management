@@ -16,6 +16,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include "FrigoStatisticsDialog.h"
+#include "StorageAlert.h"
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -442,6 +443,7 @@ void FrigoWindow::setupTable()
 
 void FrigoWindow::populateTable(const QString& filterText)
 {
+    static bool sessionAlertShown = false; 
     table->setRowCount(0);
     QFont cellFont("Segoe UI", 11);
 
@@ -487,10 +489,12 @@ void FrigoWindow::populateTable(const QString& filterText)
         addItem(2, model->record(i).value(3).toString()); // Type Poisson
         
         // Statut Badge
-        table->setCellWidget(r, 3, createStatusBadge(model->record(i).value(4).toString()));
+        QString statusText = model->record(i).value(4).toString();
+        table->setItem(r, 3, new QTableWidgetItem(statusText)); // Set item for programmatic access
+        table->setCellWidget(r, 3, createStatusBadge(statusText));
         
         QVariant dat = model->record(i).value(5);
-        QString dateStr = dat.type() == QVariant::Date || dat.type() == QVariant::DateTime ? dat.toDate().toString("dd/MM/yyyy") : dat.toString().left(10);
+        QString dateStr = dat.typeId() == QMetaType::QDate || dat.typeId() == QMetaType::QDateTime ? dat.toDate().toString("dd/MM/yyyy") : dat.toString().left(10);
         addItem(4, dateStr); // Date Réservation
         
         // Classification sans nouvelle colonne — Coloration de la cellule Température (QLabel Badge pour fiabilité)
@@ -535,13 +539,64 @@ void FrigoWindow::populateTable(const QString& filterText)
         ).arg(colors.first, colors.second));
         
         tempLayout->addWidget(tempBadge);
+        table->setItem(r, 5, new QTableWidgetItem(model->record(i).value(6).toString() + " °C")); // Set item for programmatic access
         table->setCellWidget(r, 5, tempContainer);
 
-        addItem(6, model->record(i).value(7).toString() + " %"); // Occupation
+        double cap_kg = model->record(i).value(2).toDouble();
+        double occ_kg = model->record(i).value(7).toDouble();
+        double percent = (cap_kg > 0) ? (occ_kg / cap_kg) * 100.0 : 0.0;
+        
+        // Cap between 0 and 100 for display
+        if (percent < 0) percent = 0;
+        if (percent > 100) percent = 100;
+
+        QTableWidgetItem* occItem = new QTableWidgetItem(QString::number(percent, 'f', 1) + " %");
+        occItem->setTextAlignment(Qt::AlignCenter);
+        occItem->setFont(cellFont);
+        if (percent >= 90) {
+            occItem->setForeground(QBrush(QColor("#EF4444"))); // Rouge
+            occItem->setFont(QFont("Segoe UI", 11, QFont::Bold));
+        } else if (percent >= 70) {
+            occItem->setForeground(QBrush(QColor("#F59E0B"))); // Orange
+        } else {
+            occItem->setForeground(QBrush(QColor("#10B981"))); // Vert
+        }
+        occItem->setData(Qt::UserRole, dbId);
+        table->setItem(r, 6, occItem);
         addItem(7, model->record(i).value(8).toString()); // Téléphone
         
         // Actions — passer l'ID de la BD directement dans le widget
         table->setCellWidget(r, 8, createActionButtons(r, dbId));
+
+        // [ALERTE STOCKAGE] Check storage duration for specific fish types
+        QMap<QString, int> thresholds;
+        thresholds["Sardine"] = 2;
+        thresholds["Thon"] = 3;
+        thresholds["Merlan"] = 2;
+        thresholds["Crevette"] = 1;
+        thresholds["Saumon"] = 2;
+
+        if (thresholds.contains(fishType)) {
+            QDate resDate = dat.toDate();
+            int daysStored = resDate.daysTo(QDate::currentDate());
+            int limit = thresholds[fishType];
+
+            if (daysStored > limit) {
+                // Professional Highlight for overdue items
+                QTableWidgetItem* dateItem = table->item(r, 4);
+                dateItem->setForeground(QBrush(QColor("#B91C1C"))); // Darker red for text
+                dateItem->setBackground(QBrush(QColor("#FEE2E2"))); // Soft red background
+                dateItem->setFont(QFont("Segoe UI", 11, QFont::Bold));
+                dateItem->setToolTip(QString("DÉPASSEMENT : %1 jours (Limite : %2)").arg(daysStored).arg(limit));
+                
+                // Trigger a design alert (only for the first one found to avoid spamming)
+                if (!sessionAlertShown) {
+                    StorageAlert* alert = new StorageAlert(model->record(i).value(1).toString(), fishType, daysStored, this);
+                    alert->show();
+                    sessionAlertShown = true;
+                }
+            }
+        }
     }
     
     // Détruire proprement la requête pour libérer totalement ODBC
@@ -722,7 +777,7 @@ void FrigoWindow::onGeneratePDF()
     QString stat = query.value("STATUT").toString();
     
     QVariant dat = query.value("DATE_RESERVATION");
-    QString date = dat.type() == QVariant::Date || dat.type() == QVariant::DateTime ? dat.toDate().toString("dd/MM/yyyy") : dat.toString().left(10);
+    QString date = dat.typeId() == QMetaType::QDate || dat.typeId() == QMetaType::QDateTime ? dat.toDate().toString("dd/MM/yyyy") : dat.toString().left(10);
     
     QString fish = query.value("TYPE_POISSON").toString();
     QString occ = query.value("OCCUPATION").toString();
@@ -820,7 +875,7 @@ void FrigoWindow::onEditFrigo(int row)
     if (query.exec() && query.next()) {
         
         QVariant dat = query.value("DATE_RESERVATION");
-        QString dateResStr = dat.type() == QVariant::Date || dat.type() == QVariant::DateTime ? dat.toDate().toString("dd/MM/yyyy") : dat.toString().left(10);
+        QString dateResStr = dat.typeId() == QMetaType::QDate || dat.typeId() == QMetaType::QDateTime ? dat.toDate().toString("dd/MM/yyyy") : dat.toString().left(10);
 
         FrigoModel current(
             query.value("IDFRIGO").toString(),
@@ -893,9 +948,18 @@ void FrigoWindow::onSendSMS()
         return;
     }
 
-    QString ref = table->item(row, 0)->text();
-    QString temp = table->item(row, 5)->text();
-    QString storedPhone = table->item(row, 7)->text().trimmed();
+    QTableWidgetItem* refItem = table->item(row, 0);
+    QTableWidgetItem* tempItem = table->item(row, 5);
+    QTableWidgetItem* phoneItem = table->item(row, 7);
+
+    if (!refItem || !tempItem || !phoneItem) {
+        QMessageBox::critical(this, "Erreur", "Données du tableau inaccessibles.");
+        return;
+    }
+
+    QString ref = refItem->text();
+    QString temp = tempItem->text();
+    QString storedPhone = phoneItem->text().trimmed();
     QString defaultPhone = storedPhone;
     
     if (!storedPhone.isEmpty() && !storedPhone.startsWith("216")) {
@@ -1092,4 +1156,9 @@ void FrigoWindow::onShowClassification()
     mainLay->addWidget(close);
 
     dlg->exec();
+}
+
+void FrigoWindow::showEvent(QShowEvent *event) {
+    QMainWindow::showEvent(event);
+    populateTable(searchInput->text());
 }

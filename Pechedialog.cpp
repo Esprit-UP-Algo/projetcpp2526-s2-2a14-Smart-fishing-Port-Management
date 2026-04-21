@@ -257,7 +257,13 @@ void PecheDialog::setupUi()
     autoMsgLabel->hide();
     formLayout->addWidget(autoMsgLabel);
 
+    availableSpaceLabel = new QLabel("");
+    availableSpaceLabel->setStyleSheet("color: #34495E; font-size: 13px; font-weight: 600; margin-top: -2px;");
+    formLayout->addWidget(availableSpaceLabel);
+
     connect(autoSelectBtn, &QPushButton::clicked, this, &PecheDialog::autoSelectFridge);
+    connect(fridgeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PecheDialog::updateAvailableSpaceDisplay);
+    connect(quantiteInput, &QLineEdit::textChanged, this, &PecheDialog::updateAvailableSpaceDisplay);
 
     formLayout->addSpacing(10);
 
@@ -495,6 +501,31 @@ bool PecheDialog::validateInputs()
         showError(QString("Aucun frigo compatible pour l'espèce '%1'. Veuillez d'abord créer un frigo de type '%1'.")
                       .arg(especeCombo->currentText()));
         isValid = false;
+    } else {
+        // [NOUVEAU] Vérification de la capacité restante du frigo
+        QString fid = fridgeCombo->currentData().toString();
+        QSqlQuery capQ;
+        capQ.prepare("SELECT CAPACITE, OCCUPATION FROM FRIGOS WHERE IDFRIGO = :id");
+        capQ.bindValue(":id", fid);
+        if (capQ.exec() && capQ.next()) {
+            double cap = capQ.value(0).toDouble();
+            double occ = capQ.value(1).toDouble();
+            
+            // Si on est en mode édition, on doit soustraire l'ancienne quantité pour le calcul
+            double oldQte = 0;
+            if (isEdit && pecheData) {
+                // On ne soustrait que si le frigo n'a pas changé
+                if (pecheData->getIdFrigo() == fid) {
+                    oldQte = pecheData->getQuantiteKg().toDouble();
+                }
+            }
+            
+            double projectedOcc = occ - oldQte + val;
+            if (projectedOcc > cap) {
+                showError(QString("Capacité insuffisante ! Ce frigo ne peut plus accepter que %1 Kg.").arg(cap - occ + oldQte));
+                isValid = false;
+            }
+        }
     }
 
     if (fishermanCombo->currentIndex() == -1) {
@@ -537,12 +568,24 @@ void PecheDialog::refreshFridgeCombo(const QString &espece)
     fridgeCombo->clear();
 
     // Filtrer les frigos compatibles avec le type de poisson sélectionné
+    // On inclut aussi le frigo actuel si on est en mode édition (même s'il n'est plus 'Disponible')
     QSqlQuery fQuery;
-    fQuery.prepare("SELECT IDFRIGO, REFERENCE, CAPACITE, OCCUPATION "
-                   "FROM FRIGOS "
-                   "WHERE UPPER(TYPE_POISSON) = UPPER(:espece) "
-                   "AND STATUT = 'Disponible' "
-                   "ORDER BY REFERENCE");
+    QString currentFid = (isEdit && pecheData) ? pecheData->getIdFrigo() : "";
+    
+    if (!currentFid.isEmpty()) {
+        fQuery.prepare("SELECT IDFRIGO, REFERENCE, CAPACITE, OCCUPATION "
+                       "FROM FRIGOS "
+                       "WHERE UPPER(TYPE_POISSON) = UPPER(:espece) "
+                       "AND (STATUT = 'Disponible' OR IDFRIGO = :curid) "
+                       "ORDER BY REFERENCE");
+        fQuery.bindValue(":curid", currentFid);
+    } else {
+        fQuery.prepare("SELECT IDFRIGO, REFERENCE, CAPACITE, OCCUPATION "
+                       "FROM FRIGOS "
+                       "WHERE UPPER(TYPE_POISSON) = UPPER(:espece) "
+                       "AND STATUT = 'Disponible' "
+                       "ORDER BY REFERENCE");
+    }
     fQuery.bindValue(":espece", espece);
 
     if (fQuery.exec()) {
@@ -551,7 +594,14 @@ void PecheDialog::refreshFridgeCombo(const QString &espece)
             QString ref      = fQuery.value(1).toString();
             double  cap      = fQuery.value(2).toDouble();
             double  occ      = fQuery.value(3).toDouble();
-            double  libre    = cap - occ;
+            
+            // Correction pour le mode édition
+            double oldQte = 0;
+            if (isEdit && pecheData && pecheData->getIdFrigo() == frigoId) {
+                oldQte = pecheData->getQuantiteKg().toDouble();
+            }
+            
+            double  libre    = cap - occ + oldQte;
             QString label    = QString("%1  (libre : %2 kg)").arg(ref).arg(libre, 0, 'f', 0);
             fridgeCombo->addItem(label, frigoId);
         }
@@ -657,5 +707,53 @@ void PecheDialog::autoSelectFridge()
             fridgeCombo->setStyleSheet(getInputStyle()); 
             autoMsgLabel->hide();
         });
+    }
+}
+
+void PecheDialog::updateAvailableSpaceDisplay()
+{
+    QString fid = fridgeCombo->currentData().toString();
+    if (fid.isEmpty()) {
+        availableSpaceLabel->setText("");
+        return;
+    }
+
+    QSqlQuery q;
+    q.prepare("SELECT CAPACITE, OCCUPATION, REFERENCE FROM FRIGOS WHERE IDFRIGO = :id");
+    q.bindValue(":id", fid);
+    
+    if (q.exec() && q.next()) {
+        double cap = q.value(0).toDouble();
+        double occ = q.value(1).toDouble();
+        QString ref = q.value(2).toString();
+        
+        double oldQte = 0;
+        if (isEdit && pecheData && pecheData->getIdFrigo() == fid) {
+            oldQte = pecheData->getQuantiteKg().toDouble();
+        }
+        
+        double currentTotalOcc = occ - oldQte;
+        double available = cap - currentTotalOcc;
+        
+        bool ok;
+        double inputQte = quantiteInput->text().toDouble(&ok);
+        if (!ok) inputQte = 0;
+        
+        double remainingAfterInput = available - inputQte;
+        
+        QString text = QString("📦 Espace dans %1 : %2 Kg libres").arg(ref).arg(available, 0, 'f', 1);
+        if (inputQte > 0) {
+            if (remainingAfterInput >= 0) {
+                text += QString(" (Reste %1 Kg après ajout)").arg(remainingAfterInput, 0, 'f', 1);
+                availableSpaceLabel->setStyleSheet("color: #27AE60; font-size: 13px; font-weight: 600;");
+            } else {
+                text += QString(" (⚠️ Dépassement de %1 Kg)").arg(qAbs(remainingAfterInput), 0, 'f', 1);
+                availableSpaceLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: 700;");
+            }
+        } else {
+            availableSpaceLabel->setStyleSheet("color: #34495E; font-size: 13px; font-weight: 600;");
+        }
+        
+        availableSpaceLabel->setText(text);
     }
 }

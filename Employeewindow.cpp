@@ -18,6 +18,9 @@
 #include <QRegularExpression>
 #include <QFileInfo>
 #include <QDir>
+#include <QCoreApplication>
+#include <QProcess>
+#include <QProcessEnvironment>
 
 EmployeeWindow::EmployeeWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -1299,69 +1302,74 @@ void EmployeeWindow::onRegisterFaceID()
 
     QMessageBox::information(this, "Face Registration", 
         "Starting face registration for: " + emp.firstName + " " + emp.lastName + 
-        "\n\nA camera window will open. Please look at the camera and press 'Space' to capture.");
+        "\n\nPlease look directly at the camera. The system will automatically scan and register your face securely in the background.");
 
     QProcess *process = new QProcess(this);
     
-    // Force UTF-8 environment for Python to handle DeepFace emojis
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("PYTHONIOENCODING", "utf-8");
     process->setProcessEnvironment(env);
     
-    // Smart path searching
+    // Robust search for the python script
     QString scriptPath = "face_id/face_auth.py";
-    QFileInfo checkFile(scriptPath);
-    
-    if (!checkFile.exists()) {
-        // Try looking in the parent directory (useful when running from build/debug)
-        scriptPath = "../face_id/face_auth.py";
-        checkFile.setFile(scriptPath);
+    QDir dir(QCoreApplication::applicationDirPath());
+    bool found = false;
+    while (!dir.isRoot()) {
+        if (dir.exists(scriptPath)) {
+            scriptPath = dir.absoluteFilePath(scriptPath);
+            found = true;
+            break;
+        }
+        dir.cdUp();
     }
-    
-    if (!checkFile.exists()) {
-        // Try looking specifically in the source folder if we can guess it
-        scriptPath = "../../projet1/face_id/face_auth.py";
-        checkFile.setFile(scriptPath);
-    }
-    
-    if (!checkFile.exists()) {
-        // Final fallback: use the path shown in your error message
-        scriptPath = "C:/Users/manne/Downloads/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-new (1)/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-new/face_id/face_auth.py";
+    if (!found) {
+        scriptPath = "C:/Users/manne/Downloads/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-gestion-des-peches-v2/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-gestion-des-peches-v2/face_id/face_auth.py";
     }
 
     QStringList arguments;
     arguments << scriptPath << "register" << (emp.firstName + "_" + emp.lastName) << emp.position;
 
+    QString* outputBuffer = new QString();
+    QString* errorBuffer = new QString();
+
+    connect(process, &QProcess::readyReadStandardOutput, this, [process, outputBuffer]() {
+        *outputBuffer += process->readAllStandardOutput();
+    });
+
+    connect(process, &QProcess::readyReadStandardError, this, [process, errorBuffer]() {
+        *errorBuffer += process->readAllStandardError();
+    });
+
+    connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, [this, process, emp, outputBuffer, errorBuffer](int exitCode, QProcess::ExitStatus exitStatus) {
+        qDebug() << "Python STDOUT:" << *outputBuffer;
+        qDebug() << "Python STDERR:" << *errorBuffer;
+
+        if (outputBuffer->contains("SUCCESS")) {
+            QMessageBox::information(this, "Success", "Face registered successfully for " + emp.firstName);
+        } else {
+            QString fullError = *outputBuffer + "\n" + *errorBuffer;
+            QMessageBox::warning(this, "Failed", "Registration failed or cancelled.\n\nDetails:\n" + (fullError.trimmed().isEmpty() ? "No face found after 20 seconds." : fullError));
+        }
+        
+        delete outputBuffer;
+        delete errorBuffer;
+        process->deleteLater();
+    });
+
     process->start("python", arguments);
     
-    if (!process->waitForStarted()) {
+    if (!process->waitForStarted(500)) {
         process->start("py", arguments);
-    }
-    
-    if (!process->waitForStarted()) {
-        // Hardcoded fallback for default Python 3.12 installation path
-        QString userProfile = QDir::homePath();
-        QString fallbackPath = userProfile + "/AppData/Local/Programs/Python/Python312/python.exe";
-        process->start(fallbackPath, arguments);
-    }
-    
-    if (!process->waitForStarted()) {
-        QMessageBox::critical(this, "Error", "Could not start Python. Please ensure you checked 'Add to PATH' when installing Python 3.12.");
-        return;
-    }
-
-    process->waitForFinished(-1); 
-
-    QString output = process->readAllStandardOutput();
-    QString error = process->readAllStandardError();
-    
-    qDebug() << "Python STDOUT:" << output;
-    qDebug() << "Python STDERR:" << error;
-
-    if (output.contains("SUCCESS")) {
-        QMessageBox::information(this, "Success", "Face registered successfully for " + emp.firstName);
-    } else {
-        QString fullError = output + "\n" + error;
-        QMessageBox::warning(this, "Failed", "Registration failed or cancelled.\n\nDetails:\n" + (fullError.isEmpty() ? "No output from python." : fullError));
+        if (!process->waitForStarted(500)) {
+            QString userProfile = QDir::homePath();
+            QString fallbackPath = userProfile + "/AppData/Local/Programs/Python/Python312/python.exe";
+            process->start(fallbackPath, arguments);
+            if (!process->waitForStarted(500)) {
+                QMessageBox::critical(this, "Error", "Could not start Python. Please ensure you checked 'Add to PATH' when installing Python 3.12.");
+                delete outputBuffer;
+                delete errorBuffer;
+                process->deleteLater();
+            }
+        }
     }
 }

@@ -105,14 +105,14 @@ void AddFrigoDialog::setupUi()
     // Ligne 3: Statut et Type de Poisson
     statusBox = new QComboBox();
     statusBox->addItems({"Disponible", "Occupé", "Maintenance"});
-    statusBox->setStyleSheet(getInputStyle());
+    statusBox->setStyleSheet("background-color: white; color: black;");
     statusBox->setMinimumHeight(45);
     grid->addWidget(createLabel("Statut"), 6, 0);
     grid->addWidget(statusBox, 7, 0);
 
     fishBox = new QComboBox();
     fishBox->addItems({"Sardine", "Thon", "Merlan", "Crevette", "Saumon", "Sans"});
-    fishBox->setStyleSheet(getInputStyle());
+    fishBox->setStyleSheet("background-color: white; color: black;");
     fishBox->setMinimumHeight(45);
     grid->addWidget(createLabel("Type de Poisson"), 6, 1);
     grid->addWidget(fishBox, 7, 1);
@@ -135,7 +135,7 @@ void AddFrigoDialog::setupUi()
     }
     occError = createErrorLabel();
 
-    grid->addWidget(createLabel("Occupation (%)"), 10, 0);
+    grid->addWidget(createLabel("Occupation (Kg)"), 10, 0);
     grid->addWidget(occError, 11, 0);
     grid->addWidget(occEdit, 12, 0);
 
@@ -261,8 +261,8 @@ bool AddFrigoDialog::validateInputs()
 
     // Validation Occupation
     double occVal = occEdit->text().trimmed().isEmpty() ? 0.0 : occEdit->text().toDouble(&ok);
-    if (!ok || occVal < 0 || occVal > 100) {
-        occError->setText("0 à 100% requis.");
+    if (!ok || occVal < 0 || occVal > capVal) {
+        occError->setText(QString("0 à %1 Kg requis.").arg(capVal));
         occError->show();
         occEdit->setStyleSheet(errorStyle);
         isValid = false;
