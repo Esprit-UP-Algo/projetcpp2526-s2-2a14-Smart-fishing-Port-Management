@@ -2,20 +2,31 @@
 
 PecheStatisticsDialog::PecheStatisticsDialog(const QMap<QString, double>& speciesCount,
                                                const QMap<QString, double>& weightBySpecies,
-                                               const QMap<QString, double>& avgWeightByBoat,
                                                QWidget* parent)
-    : QDialog(parent), m_speciesCount(speciesCount), m_weightBySpecies(weightBySpecies), m_avgWeightByBoat(avgWeightByBoat)
+    : QDialog(parent), m_speciesCount(speciesCount), m_weightBySpecies(weightBySpecies)
 {
     setWindowTitle("Tableau de Bord - Statistiques des Pêches");
-    resize(1100, 750);
+    resize(1100, 1050);
     setStyleSheet("QDialog { background-color: #f8fafc; }");
     setupUi();
 }
 
 void PecheStatisticsDialog::setupUi()
 {
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    mainLayout->setSpacing(25);
+    QVBoxLayout* windowLayout = new QVBoxLayout(this);
+    windowLayout->setContentsMargins(0, 0, 0, 0);
+
+    QScrollArea* scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setStyleSheet("QScrollArea { border: none; background-color: #f8fafc; }");
+    windowLayout->addWidget(scrollArea);
+
+    QWidget* container = new QWidget();
+    container->setStyleSheet("background-color: #f8fafc;");
+    scrollArea->setWidget(container);
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(container);
+    mainLayout->setSpacing(30);
     mainLayout->setContentsMargins(30, 30, 30, 30);
 
     // Header Title
@@ -33,19 +44,16 @@ void PecheStatisticsDialog::setupUi()
     int totalLots = 0;
     for(double c : m_speciesCount.values()) totalLots += c;
 
-    cardsLayout->addWidget(createStatCard("Volume Total", QString::number(totalWeight, 'f', 1) + " Kg", "#2563EB"));
-    cardsLayout->addWidget(createStatCard("Nombre de Lots", QString::number(totalLots), "#059669"));
-    cardsLayout->addWidget(createStatCard("Espèces Actives", QString::number(m_speciesCount.size()), "#D97706"));
+    QLocale locale;
+    cardsLayout->addWidget(createStatCard("Volume Total", locale.toString(totalWeight, 'f', 1) + " Kg", "#2563EB"));
+    cardsLayout->addWidget(createStatCard("Nombre de Lots", locale.toString(totalLots), "#059669"));
+    cardsLayout->addWidget(createStatCard("Espèces", locale.toString(m_speciesCount.size()), "#D97706"));
     mainLayout->addLayout(cardsLayout);
 
-    // Middle Row: Charts
-    QHBoxLayout* chartsLayout = new QHBoxLayout();
-    chartsLayout->setSpacing(25);
-    chartsLayout->addWidget(createSpeciesPieChart(), 1);
-    chartsLayout->addWidget(createWeightPieChart(), 1);
-    mainLayout->addLayout(chartsLayout, 1);
-
-    // Bottom Row: Bar Chart
+    // Charts Layout (Vertical)
+    mainLayout->addWidget(createWeightPieChart(), 1);
+    
+    // Bottom: Large Bar Chart
     mainLayout->addWidget(createWeightBarChart(), 1);
 }
 
@@ -86,30 +94,6 @@ QFrame* PecheStatisticsDialog::createStatCard(const QString& title, const QStrin
     return card;
 }
 
-QChartView* PecheStatisticsDialog::createSpeciesPieChart()
-{
-    QPieSeries *series = new QPieSeries();
-    double total = 0;
-    for(double v : m_speciesCount.values()) total += v;
-
-    for (auto it = m_speciesCount.begin(); it != m_speciesCount.end(); ++it) {
-        QPieSlice *slice = series->append(it.key(), it.value());
-        if (total > 0)
-            slice->setLabel(QString("%1 ⬆ %2%").arg(it.key()).arg(100.0 * it.value() / total, 0, 'f', 1));
-    }
-
-    QChart *chart = new QChart();
-    chart->addSeries(series);
-    chart->setTitle("Répartition des Lots par Espèce");
-    chart->setAnimationOptions(QChart::SeriesAnimations);
-    chart->legend()->setAlignment(Qt::AlignBottom);
-    chart->legend()->setFont(QFont("Segoe UI", 9));
-
-    QChartView *chartView = new QChartView(chart);
-    chartView->setRenderHint(QPainter::Antialiasing);
-    chartView->setStyleSheet("background: white; border-radius: 16px; border: 1px solid #e2e8f0;");
-    return chartView;
-}
 
 QChartView* PecheStatisticsDialog::createWeightBarChart()
 {
@@ -123,6 +107,10 @@ QChartView* PecheStatisticsDialog::createWeightBarChart()
 
     QBarSeries *series = new QBarSeries();
     series->append(set);
+    series->setLabelsVisible(true);
+    series->setLabelsPosition(QAbstractBarSeries::LabelsCenter);
+    series->setLabelsFormat("@value Kg");
+    series->setLabelsPrecision(10);
 
     QChart *chart = new QChart();
     chart->addSeries(series);
@@ -136,11 +124,17 @@ QChartView* PecheStatisticsDialog::createWeightBarChart()
 
     QValueAxis *axisY = new QValueAxis();
     axisY->setLabelFormat("%.0f Kg");
+    
+    double maxV = 0;
+    for(double v : m_weightBySpecies.values()) if(v > maxV) maxV = v;
+    axisY->setRange(0, maxV * 1.2); // Add 20% headroom for labels
+    
     chart->addAxis(axisY, Qt::AlignLeft);
     series->attachAxis(axisY);
 
     QChartView *chartView = new QChartView(chart);
     chartView->setRenderHint(QPainter::Antialiasing);
+    chartView->setMinimumHeight(450);
     chartView->setStyleSheet("background: white; border-radius: 16px; border: 1px solid #e2e8f0;");
     return chartView;
 }
@@ -153,8 +147,15 @@ QChartView* PecheStatisticsDialog::createWeightPieChart()
 
     for (auto it = m_weightBySpecies.begin(); it != m_weightBySpecies.end(); ++it) {
         QPieSlice *slice = series->append(it.key(), it.value());
-        if (totalWeight > 0)
-            slice->setLabel(QString("%1 ⬆ %2%").arg(it.key()).arg(100.0 * it.value() / totalWeight, 0, 'f', 1));
+        if (totalWeight > 0) {
+            double percentage = (it.value() / totalWeight) * 100.0;
+            slice->setLabel(QString("%1: %2 Kg (%3%)")
+                            .arg(it.key())
+                            .arg(QLocale().toString(it.value(), 'f', 0))
+                            .arg(QString::number(percentage, 'f', 1)));
+        }
+        slice->setLabelVisible(true);
+        slice->setLabelFont(QFont("Segoe UI", 9, QFont::Bold));
     }
 
     QChart *chart = new QChart();
@@ -164,8 +165,11 @@ QChartView* PecheStatisticsDialog::createWeightPieChart()
     chart->legend()->setAlignment(Qt::AlignBottom);
     chart->legend()->setFont(QFont("Segoe UI", 9));
 
+    series->setPieSize(0.85);
+
     QChartView *chartView = new QChartView(chart);
     chartView->setRenderHint(QPainter::Antialiasing);
+    chartView->setMinimumHeight(450); // Tall pie chart
     chartView->setStyleSheet("background: white; border-radius: 16px; border: 1px solid #e2e8f0;");
     return chartView;
 }

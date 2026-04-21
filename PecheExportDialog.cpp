@@ -21,7 +21,7 @@ PecheExportDialog::PecheExportDialog(QWidget *parent) : QDialog(parent)
     QLabel* typeL = new QLabel("Type de rapport :");
     typeL->setStyleSheet("font-weight: 600; color: #475569;");
     typeCombo = new QComboBox();
-    typeCombo->addItems({"Rapport Complet (Total)", "Rapport par Bateau", "Rapport par Date"});
+    typeCombo->addItems({"Rapport Complet (Total)", "Rapport par Bateau", "Rapport par Date", "Rapport par Bateau & Date"});
     typeCombo->setFixedHeight(35);
     mainLay->addWidget(typeL);
     mainLay->addWidget(typeCombo);
@@ -87,16 +87,18 @@ PecheExportDialog::PecheExportDialog(QWidget *parent) : QDialog(parent)
 
 void PecheExportDialog::loadBoats()
 {
-    QSqlQuery q("SELECT DISTINCT IDBATEAU FROM BATEAUX");
+    QSqlQuery q("SELECT IDBATEAU, NOMBATEAU FROM BATEAUX");
     while(q.next()){
-        boatCombo->addItem(q.value(0).toString());
+        QString id = q.value(0).toString();
+        QString name = q.value(1).toString();
+        boatCombo->addItem(name + " (" + id + ")", id);
     }
 }
 
 void PecheExportDialog::onTypeChanged(int index)
 {
-    boatWidget->setVisible(index == 1);
-    dateWidget->setVisible(index == 2);
+    boatWidget->setVisible(index == 1 || index == 3);
+    dateWidget->setVisible(index == 2 || index == 3);
 }
 
 PecheExportDialog::ExportType PecheExportDialog::exportType() const 
@@ -104,6 +106,6 @@ PecheExportDialog::ExportType PecheExportDialog::exportType() const
     return static_cast<ExportType>(typeCombo->currentIndex());
 }
 
-QString PecheExportDialog::selectedBoat() const { return boatCombo->currentText(); }
+QString PecheExportDialog::selectedBoat() const { return boatCombo->currentData().toString(); }
 QDate PecheExportDialog::startDate() const { return startDateEdit->date(); }
 QDate PecheExportDialog::endDate() const { return endDateEdit->date(); }
