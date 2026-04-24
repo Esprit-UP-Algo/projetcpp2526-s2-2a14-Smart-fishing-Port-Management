@@ -2,6 +2,7 @@
 #include "bateauwindow.h"
 #include "loginwindow.h"
 #include "connection.h"
+#include "quaimanager.h"
 #include <QMessageBox>
 
 int main(int argc, char *argv[])
@@ -38,6 +39,9 @@ int main(int argc, char *argv[])
     app.setStyle("Fusion");
 
     // Create and show login window
+    QuaiManager quaiManager;
+    quaiManager.start();
+
     LoginWindow loginWindow;
     loginWindow.show();
 

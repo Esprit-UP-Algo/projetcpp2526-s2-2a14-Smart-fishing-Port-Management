@@ -68,6 +68,17 @@ static QString boatDisplayLabel(const QVariantMap& bateauInfo)
     return QString("%1 (%2)").arg(nom, immatriculation);
 }
 
+static QString manualDockingDurationSettingsKey(const QString& boatId)
+{
+    return QString("quais/manual_docking_duration/%1").arg(boatId);
+}
+
+static void persistManualDockingDurationMinutes(const QString& boatId, int dockingMinutes)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    settings.setValue(manualDockingDurationSettingsKey(boatId), std::max(1, dockingMinutes) * 60);
+}
+
 static bool isOccupiedState(const QString& etat)
 {
     return etat.contains("occup", Qt::CaseInsensitive);
@@ -1755,6 +1766,7 @@ bool QuaisWindow::assignBoatToQuai(const QVariantMap& bateauInfo, const Quai& qu
     persistAvailabilityDeadline(quai.getNumero(), deadline);
     persistSessionStart(quai.getNumero(), sessionStart);
     persistPendingDockAssignment(quai.getNumero(), QVariantMap());
+    persistManualDockingDurationMinutes(bateauInfo.value("id").toString(), dockingMinutes);
 
     loadQuaisFromDatabase();
     populateTable(searchInput->text());
@@ -2444,8 +2456,8 @@ void QuaisWindow::onAutoAssignBoat()
     dockingLay->addWidget(customDockingCheck);
 
     QSpinBox* dockingSpin = new QSpinBox();
-    dockingSpin->setRange(15, 1440);
-    dockingSpin->setSingleStep(15);
+    dockingSpin->setRange(1, 1440);
+    dockingSpin->setSingleStep(1);
     dockingSpin->setSuffix(" min");
     dockingSpin->setEnabled(true);
     dockingSpin->setFixedHeight(40);
@@ -2457,7 +2469,32 @@ void QuaisWindow::onAutoAssignBoat()
         }
         QSpinBox:focus { border: 2px solid #EA580C; }
     )");
-    dockingLay->addWidget(dockingSpin);
+
+    QPushButton* confirmDockingBtn = new QPushButton("Confirmer");
+    confirmDockingBtn->setFixedHeight(40);
+    confirmDockingBtn->setMinimumWidth(120);
+    confirmDockingBtn->setCursor(Qt::PointingHandCursor);
+    confirmDockingBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    confirmDockingBtn->setStyleSheet(R"(
+        QPushButton {
+            background: #EA580C; color: white; border: none;
+            border-radius: 12px; padding: 0 18px;
+        }
+        QPushButton:hover { background: #C2410C; }
+        QPushButton:disabled { background: #CBD5E1; color: #F8FAFC; }
+    )");
+
+    QHBoxLayout* dockingControlsLay = new QHBoxLayout();
+    dockingControlsLay->setSpacing(10);
+    dockingControlsLay->addWidget(dockingSpin, 1);
+    dockingControlsLay->addWidget(confirmDockingBtn);
+    dockingLay->addLayout(dockingControlsLay);
+
+    QLabel* dockingStatus = new QLabel("Aucune duree manuelle confirmee. Le temps estime sera utilise.");
+    dockingStatus->setWordWrap(true);
+    dockingStatus->setFont(QFont("Segoe UI", 9, QFont::Medium));
+    dockingStatus->setStyleSheet("color: #64748b; background: transparent;");
+    dockingLay->addWidget(dockingStatus);
 
     QLabel* dockingHint = new QLabel("Le champ est pre-rempli avec le temps estime. Vous pouvez le modifier directement si besoin.");
     dockingHint->setWordWrap(true);
@@ -2503,8 +2540,17 @@ void QuaisWindow::onAutoAssignBoat()
     btnLay->addWidget(assignBtn);
     mainLay->addLayout(btnLay);
 
+    int confirmedDockingMinutes = 0;
+    bool dockingTimeConfirmed = false;
+
+    auto markDockingAsPending = [dockingStatus, &dockingTimeConfirmed]() {
+        dockingTimeConfirmed = false;
+        dockingStatus->setText("Aucune duree manuelle confirmee. Le temps estime sera utilise.");
+        dockingStatus->setStyleSheet("color: #64748b; background: transparent;");
+    };
+
     auto refreshPreview = [boatCombo, valLongueur, valCapacite, valEtat, valEstimation,
-                           dockingSpin]() {
+                           dockingSpin, markDockingAsPending]() {
         const QVariantMap bateau = boatCombo->currentData().toMap();
         const int longueur = bateau.value("longueur").toInt();
         const int estimation = Quai::calculerTempsEstime(longueur);
@@ -2512,9 +2558,22 @@ void QuaisWindow::onAutoAssignBoat()
         valCapacite->setText(QString("%1 m minimum").arg(longueur));
         valEtat->setText(bateau.value("etat").toString());
         valEstimation->setText(QString("%1 min").arg(estimation));
-        if (!dockingSpin->hasFocus())
+        if (!dockingSpin->hasFocus()) {
             dockingSpin->setValue(estimation);
+            markDockingAsPending();
+        }
     };
+
+    connect(confirmDockingBtn, &QPushButton::clicked, dlg, [dockingSpin, dockingStatus,
+                                                            &confirmedDockingMinutes, &dockingTimeConfirmed]() {
+        confirmedDockingMinutes = dockingSpin->value();
+        dockingTimeConfirmed = true;
+        dockingStatus->setText(QString("Duree manuelle confirmee : %1 min.").arg(confirmedDockingMinutes));
+        dockingStatus->setStyleSheet("color: #059669; background: transparent;");
+    });
+    connect(dockingSpin, QOverload<int>::of(&QSpinBox::valueChanged), dlg, [markDockingAsPending](int) {
+        markDockingAsPending();
+    });
     refreshPreview();
     connect(boatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), dlg, [refreshPreview](int) {
         refreshPreview();
@@ -2538,7 +2597,9 @@ void QuaisWindow::onAutoAssignBoat()
         return;
     }
 
-    const int dockingMinutes = customDockingCheck->isChecked() ? dockingSpin->value() : tempsEstime;
+    const int dockingMinutes = (customDockingCheck->isChecked() && dockingTimeConfirmed)
+        ? confirmedDockingMinutes
+        : tempsEstime;
     const bool delayedAssignment = (quaiChoisi.getEtat() != "Disponible");
 
     if (delayedAssignment && bateau.value("etat").toString() == "En mer") {

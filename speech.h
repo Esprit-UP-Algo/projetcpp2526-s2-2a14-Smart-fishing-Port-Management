@@ -1,8 +1,8 @@
 #ifndef SPEECH_H
 #define SPEECH_H
 
-#include <string>
+#include <QString>
 
-void speakBoat(const std::string& boatName);
+void speakBoat(const QString& boatName);
 
 #endif

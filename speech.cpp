@@ -1,14 +1,22 @@
 #include "speech.h"
-#include <cstdlib>
 
-void speakBoat(const std::string& boatName) {
-    std::string command =
-        "PowerShell -Command \"Add-Type -AssemblyName System.Speech; "
-        "$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-        "$speak.Speak('Boat ";
+#include <QProcess>
+#include <QStringList>
 
-    command += boatName;
-    command += " is leaving');\"";
+void speakBoat(const QString& boatName)
+{
+    QString safeBoatName = boatName;
+    safeBoatName.replace("'", "''");
 
-    system(command.c_str());
+    const QString script =
+        "Add-Type -AssemblyName System.Speech; "
+        "$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+        "$speaker.Rate = 0; "
+        "$speaker.Volume = 100; "
+        "$speaker.Speak('Boat " + safeBoatName + " is now at sea');";
+
+    QProcess::startDetached("powershell.exe",
+                            QStringList() << "-NoProfile"
+                                          << "-ExecutionPolicy" << "Bypass"
+                                          << "-Command" << script);
 }

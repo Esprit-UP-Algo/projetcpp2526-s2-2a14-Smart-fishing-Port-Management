@@ -38,6 +38,7 @@ SOURCES += main.cpp \
            loginwindow.cpp \
            peche.cpp \
            quai.cpp \
+           quaimanager.cpp \
            quaiswindow.cpp \
            speech.cpp \
            temperaturealert.cpp \
@@ -75,6 +76,7 @@ HEADERS += mainwindow.h \
            loginwindow.h \
            peche.h \
            quai.h \
+           quaimanager.h \
            quaiswindow.h \
            speech.h \
            temperaturealert.h \
