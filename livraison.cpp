@@ -60,7 +60,7 @@ bool Livraison::ajouter() {
 
 QSqlQueryModel* Livraison::afficher() {
     QSqlQueryModel* model = new QSqlQueryModel();
-    // Use stable uppercase aliases for reliable mapping in UI
+    // Consistent column ordering: ID, REFERENCE, DATELIV, ADRESSE, ID_EMPLOYE, STATUT, TRANSPORT, VEHICULE, PRIX, DUREE, DATE_DEPART, DUREE_ESTIMEE
     model->setQuery("SELECT IDLIVRAISON as ID, REFERENCE, DATELIVRAISON as DATELIV, "
                     "ADRESSELIVRAISON as ADRESSE, ID_EMPLOYE, STATUT as STATUT, TYPETRANSPORT as TRANSPORT, "
                     "VEHICULE as VEHICULE, PRIXLIVRAISON as PRIX, DUREE as DUREE, "
@@ -136,16 +136,36 @@ QSqlQueryModel* Livraison::trier(QString critere, QString ordre) {
 QSqlQueryModel* Livraison::rechercher(QString val) {
     QSqlQueryModel* model = new QSqlQueryModel();
     QSqlQuery query;
+    // Ensure aliases are used EVEN in prepared queries for consistency with model->record().value()
     query.prepare("SELECT IDLIVRAISON as ID, REFERENCE, DATELIVRAISON as DATELIV, "
                   "ADRESSELIVRAISON as ADRESSE, ID_EMPLOYE, STATUT as STATUT, TYPETRANSPORT as TRANSPORT, "
                   "VEHICULE as VEHICULE, PRIXLIVRAISON as PRIX, DUREE as DUREE, "
                   "DATE_DEPART, DUREE_ESTIMEE "
-                  "FROM LIVRAISONS WHERE IDLIVRAISON LIKE :val OR REFERENCE LIKE :val OR ADRESSELIVRAISON LIKE :val OR STATUT LIKE :val");
+                  "FROM LIVRAISONS WHERE UPPER(IDLIVRAISON) LIKE UPPER(:val) "
+                  "OR UPPER(REFERENCE) LIKE UPPER(:val) "
+                  "OR UPPER(ADRESSELIVRAISON) LIKE UPPER(:val) "
+                  "OR UPPER(STATUT) LIKE UPPER(:val) "
+                  "OR UPPER(ID_EMPLOYE) LIKE UPPER(:val) "
+                  "OR TO_CHAR(DATELIVRAISON, 'DD/MM/YYYY') LIKE :val");
     query.bindValue(":val", "%" + val + "%");
     query.exec();
-    model->setQuery(query);
+    model->setQuery(std::move(query));
     return model;
 }
+
+bool Livraison::updateStatut(int id, QString nouveauStatut) {
+    QSqlQuery query;
+    query.prepare("UPDATE LIVRAISONS SET STATUT = :statut WHERE IDLIVRAISON = :id");
+    query.bindValue(":id", id);
+    query.bindValue(":statut", nouveauStatut);
+    if (!query.exec()) {
+        lastError = "Update Status failed: " + query.lastError().text();
+        return false;
+    }
+    query.finish();
+    return true;
+}
+
 bool Livraison::idExists(int id) {
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM LIVRAISONS WHERE IDLIVRAISON = :id");

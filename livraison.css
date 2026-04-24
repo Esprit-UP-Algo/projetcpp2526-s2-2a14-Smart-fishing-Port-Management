@@ -89,6 +89,15 @@
     background-color: #BAE6FD;
 }
 
+.cancel-btn {
+    background-color: #FFF7ED;
+    color: #EA580C;
+}
+
+.cancel-btn:hover {
+    background-color: #FFEDD5;
+}
+
 /* Stats Cards */
 .stats-card {
     background: white;

@@ -45,6 +45,7 @@ private slots:
     void onSort(int index);
     void onExportPDF(int row);
     void onTrackDelivery(int row);
+    void onCancelLivraison(int row);
     void onShowStatistics();
     void onExportAllPDF();
     void onLiveUpdate();

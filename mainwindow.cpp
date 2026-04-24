@@ -700,7 +700,7 @@ void MainWindow::handleTemperatureData()
 
 void MainWindow::checkFridgeTemperature(int sensorId, double currentTemp)
 {
-    // Mapping: S1 -> FRG-001, S2 -> FRG-002 (as proposed in the plan)
+    // Mapping: S1 -> FRG-001, S2 -> FRG-002
     QString fridgeRef = (sensorId == 1) ? "FRG-001" : "FRG-002";
     
     QSqlQuery query;
@@ -710,25 +710,28 @@ void MainWindow::checkFridgeTemperature(int sensorId, double currentTemp)
     if (query.exec() && query.next()) {
         double threshold = query.value(0).toDouble();
         
-        // User logic: "if the temperature goes below the required temperature"
-        if (currentTemp < threshold) {
-            static QSet<QString> activeAlerts; // Prevent spamming alerts
+        qDebug() << "Fridge:" << fridgeRef << "| Current:" << currentTemp << "°C | Threshold:" << threshold << "°C";
+
+        // Logic: Alert if it's TOO HOT (Current > Threshold)
+        if (currentTemp > threshold) {
+            static QSet<QString> activeAlerts; 
             if (!activeAlerts.contains(fridgeRef)) {
                 activeAlerts.insert(fridgeRef);
                 
                 TemperatureAlert* alert = new TemperatureAlert(fridgeRef, threshold, currentTemp, this);
                 connect(alert, &QDialog::finished, [fridgeRef]() {
-                    // Allow alert to reappear after closing if condition persists (maybe with a delay)
-                    // For now, we clear it so it can trigger again next time
-                    QTimer::singleShot(10000, [fridgeRef]() {
-                         // ActiveAlerts is static so this is tricky, let's keep it simple for now
-                    });
+                    // Logic to allow alert to trigger again if it happens later
+                    // We don't remove it immediately to avoid "alert spam"
                 });
                 alert->show();
-                qDebug() << "ALERT: Fridge" << fridgeRef << "is too cold!" << currentTemp << "<" << threshold;
+                qDebug() << "!!! ALERT TRIGGERED !!!";
             }
+        } 
+        else {
+            // If temperature is now safe, we COULD allow the alert to trigger again
+            // activeAlerts.remove(fridgeRef); 
         }
     } else {
-        qDebug() << "Warning: No temperature threshold found for fridge" << fridgeRef;
+        qDebug() << "Looking for Fridge:" << fridgeRef << "... Not found in database yet.";
     }
 }

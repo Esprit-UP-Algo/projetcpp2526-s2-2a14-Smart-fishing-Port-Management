@@ -49,6 +49,7 @@ public:
     QSqlQueryModel* trier(QString critere, QString ordre);
     QSqlQueryModel* rechercher(QString val);
     
+    static bool updateStatut(int id, QString nouveauStatut);
     static bool idExists(int id);
     static QString getLastError() { return lastError; }
 };

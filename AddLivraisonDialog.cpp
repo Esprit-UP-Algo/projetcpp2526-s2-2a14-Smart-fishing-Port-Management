@@ -423,16 +423,31 @@ void AddLivraisonDialog::onAddressDebounceTimeout() {
 }
 
 void AddLivraisonDialog::onPrixChanged() {
-    QString p = prixEdit->text();
+    QString p = prixEdit->text().trimmed();
     if (p.contains("-")) {
         p.remove("-");
         prixEdit->setText(p);
-        return; // Signal will re-trigger
+        return;
     }
-    p = p.trimmed();
-    bool valid = !p.isEmpty() && (p.endsWith("DT") || p.endsWith("$") || p.endsWith("€"));
+    
+    // Check if it matches: (Number) (Space)? (DT|$|€)
+    // We want to ensure it's not just random text (like an address)
+    QString numericPart = p;
+    numericPart.remove("DT").remove("$").remove("€").trimmed();
+    
+    bool isNumeric;
+    numericPart.toDouble(&isNumeric);
+    
+    bool hasCurrency = p.endsWith("DT") || p.endsWith("$") || p.endsWith("€");
+    bool valid = !p.isEmpty() && isNumeric && hasCurrency;
+    
     updateFieldStyle(prixEdit, valid);
     errorPrix->setVisible(!valid);
+    if (!valid && !p.isEmpty()) {
+        errorPrix->setText(isNumeric ? "⚠ Manque devise (DT, $, €)" : "⚠ Le prix doit être un nombre");
+    } else {
+        errorPrix->setText("⚠ Doit finir par DT, $ ou €");
+    }
 }
 
 void AddLivraisonDialog::updateFieldStyle(QWidget* field, bool isValid) {

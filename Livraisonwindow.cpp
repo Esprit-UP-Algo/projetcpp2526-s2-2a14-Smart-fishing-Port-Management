@@ -226,7 +226,7 @@ QFrame* LivraisonWindow::createToolbar()
 
     /* Search bar */
     searchInput = new QLineEdit();
-    searchInput->setPlaceholderText("🔍  Rechercher par date, adresse ou statut...");
+    searchInput->setPlaceholderText("🔍  Rechercher par référence, date, adresse, statut...");
     searchInput->setFixedWidth(350);
     searchInput->setFixedHeight(40);
     searchInput->setStyleSheet(R"(
@@ -440,7 +440,7 @@ void LivraisonWindow::setupTable()
     table->setColumnWidth(5, 100);   // Prix
     table->setColumnWidth(6, 100);   // ETA
     table->setColumnWidth(7, 100);   // Avancement
-    table->setColumnWidth(8, 160);   // Actions
+    table->setColumnWidth(8, 240);   // Actions (Increased to prevent squeezing)
 
     table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 }
@@ -469,8 +469,19 @@ void LivraisonWindow::populateTable(const QString& filterText, const QString& so
         QString adresse = model->record(i).value("ADRESSE").toString();
         QString chauffeur = model->record(i).value("ID_EMPLOYE").toString();
         QString statut = model->record(i).value("STATUT").toString();
-        QString prix = model->record(i).value("PRIX").toString();
-        if (!prix.endsWith(" DT")) prix += " DT";
+        
+        // Robust retrieval for PRIX: Try alias first, then index 8 as fallback
+        QSqlRecord rec = model->record(i);
+        double prixVal = rec.value("PRIX").toDouble();
+        if (prixVal == 0 && rec.count() > 8) {
+             // Second check: if 'PRIX' alias returned 0, it might be due to a mapping issue, 
+             // but only if the actual column contains a non-zero value.
+             QVariant v = rec.value(8);
+             if (v.toReal() > 0) prixVal = v.toReal();
+        }
+        
+        QString prix = QString::number(prixVal, 'f', 2);
+        if (!prix.isEmpty()) prix += " DT";
 
         table->setItem(row, 0, new QTableWidgetItem(reference));
         table->setItem(row, 1, new QTableWidgetItem(date));
@@ -554,27 +565,32 @@ QWidget* LivraisonWindow::createActionButtons(int row)
     QPushButton* deleteBtn = new QPushButton("🗑️");
     QPushButton* pdfBtn = new QPushButton("📄");
     QPushButton* trackBtn = new QPushButton("📍");
+    QPushButton* cancelBtn = new QPushButton("🚫");
 
     editBtn->setFixedSize(36, 36);
     deleteBtn->setFixedSize(36, 36);
     pdfBtn->setFixedSize(36, 36);
     trackBtn->setFixedSize(36, 36);
+    cancelBtn->setFixedSize(36, 36);
     
     editBtn->setCursor(Qt::PointingHandCursor);
     deleteBtn->setCursor(Qt::PointingHandCursor);
     pdfBtn->setCursor(Qt::PointingHandCursor);
     trackBtn->setCursor(Qt::PointingHandCursor);
+    cancelBtn->setCursor(Qt::PointingHandCursor);
     
     editBtn->setProperty("class", "action-btn edit-btn");
     deleteBtn->setProperty("class", "action-btn delete-btn");
     pdfBtn->setProperty("class", "action-btn pdf-btn");
     trackBtn->setProperty("class", "action-btn track-btn");
+    cancelBtn->setProperty("class", "action-btn cancel-btn");
 
     // Initial styling for track button
     trackBtn->setStyleSheet("QPushButton { background-color: #E0F2FE; border: none; border-radius: 8px; font-size: 16px; } QPushButton:hover { background-color: #BAE6FD; }");
+    cancelBtn->setStyleSheet("QPushButton { background-color: #FFF7ED; border: none; border-radius: 8px; font-size: 16px; color: #EA580C; } QPushButton:hover { background-color: #FFEDD5; }");
 
     // Force style refresh for dynamic buttons
-    for (QPushButton* btn : {editBtn, deleteBtn, pdfBtn, trackBtn}) {
+    for (QPushButton* btn : {editBtn, deleteBtn, pdfBtn, trackBtn, cancelBtn}) {
         btn->style()->unpolish(btn);
         btn->style()->polish(btn);
     }
@@ -584,11 +600,13 @@ QWidget* LivraisonWindow::createActionButtons(int row)
     connect(deleteBtn, &QPushButton::clicked, [this, row]() { onDeleteLivraison(row); });
     connect(pdfBtn, &QPushButton::clicked, [this, row]() { onExportPDF(row); });
     connect(trackBtn, &QPushButton::clicked, [this, row]() { onTrackDelivery(row); });
+    connect(cancelBtn, &QPushButton::clicked, [this, row]() { onCancelLivraison(row); });
 
     layout->addWidget(editBtn);
     layout->addWidget(deleteBtn);
     layout->addWidget(pdfBtn);
     layout->addWidget(trackBtn);
+    layout->addWidget(cancelBtn);
 
     return widget;
 }
@@ -603,6 +621,22 @@ void LivraisonWindow::onTrackDelivery(int row)
     // Refresh table when done to see updated status
     connect(dlg, &QDialog::finished, this, [this]() { populateTable(searchInput->text()); });
     dlg->show();
+}
+
+void LivraisonWindow::onCancelLivraison(int row)
+{
+    if (row < 0 || row >= table->rowCount()) return;
+    int id = table->item(row, 0)->data(Qt::UserRole).toInt();
+    QString ref = table->item(row, 0)->text();
+
+    if (QMessageBox::question(this, "Confirmation d'annulation", 
+                               "Êtes-vous sûr de vouloir annuler la livraison " + ref + " ?") == QMessageBox::Yes) {
+        if (Livraison::updateStatut(id, "Annulé")) {
+            populateTable(searchInput->text());
+        } else {
+            QMessageBox::critical(this, "Erreur", "Impossible d'annuler la livraison.\n" + Livraison::getLastError());
+        }
+    }
 }
 
 void LivraisonWindow::onSearch(const QString& text)
@@ -701,66 +735,107 @@ void LivraisonWindow::onExportPDF(int row)
     int id = table->item(row, 0)->data(Qt::UserRole).toInt();
 
     QSqlQuery query;
-    query.prepare("SELECT * FROM LIVRAISONS WHERE IDLIVRAISON = :id");
+    query.prepare("SELECT L.*, E.NOM || ' ' || E.PRENOM as LIVREUR_NAME "
+                  "FROM LIVRAISONS L "
+                  "LEFT JOIN EMPLOYEES E ON L.ID_EMPLOYE = E.ID_EMPLOYE "
+                  "WHERE L.IDLIVRAISON = :id");
     query.bindValue(":id", id);
     
     if (!query.exec() || !query.next()) return;
 
-    Livraison liv;
-    liv.setID(id);
-    liv.setReference(query.value("REFERENCE").toString());
-    liv.setDate(query.value("DATELIVRAISON").toDate().toString("dd/MM/yyyy"));
-    liv.setAdresse(query.value("ADRESSELIVRAISON").toString());
-    liv.setStatut(query.value("STATUT").toString());
-    liv.setTransport(query.value("TYPETRANSPORT").toString());
-    liv.setVehicule(query.value("VEHICULE").toString());
-    liv.setPrix(query.value("PRIXLIVRAISON").toString());
-    liv.setDuree(query.value("DUREE").toInt());
+    QString ref = query.value("REFERENCE").toString();
+    QString date = query.value("DATELIVRAISON").toDate().toString("dd/MM/yyyy");
+    QString adresse = query.value("ADRESSELIVRAISON").toString();
+    QString statut = query.value("STATUT").toString();
+    QString transport = query.value("TYPETRANSPORT").toString();
+    QString vehicule = query.value("VEHICULE").toString();
+    double prixVal = query.value("PRIXLIVRAISON").toDouble();
+    QString prix = QString::number(prixVal, 'f', 2);
+    QString livreur = query.value("LIVREUR_NAME").toString();
+    if (livreur.isEmpty()) livreur = query.value("ID_EMPLOYE").toString();
 
-    QString fileName = QFileDialog::getSaveFileName(this, "Exporter en PDF", 
-                                                    QString("Livraison_%1.pdf").arg(liv.getID()),
+    QString fileName = QFileDialog::getSaveFileName(this, "Exporter Reçu de Livraison", 
+                                                    QString("Recu_Livraison_%1.pdf").arg(ref),
                                                     "PDF Files (*.pdf)");
     if (fileName.isEmpty()) return;
 
     QPdfWriter writer(fileName);
     writer.setPageSize(QPageSize(QPageSize::A4));
-    writer.setPageMargins(QMarginsF(30, 30, 30, 30));
-
+    writer.setResolution(300);
     QPainter painter(&writer);
+    
+    int wPage = writer.width();
+    int hPage = writer.height();
+    int margin = (wPage * 5) / 100;
+    int w = wPage - 2 * margin;
+    int y = margin;
+    
+    QColor mainBlue("#1E3A8A"); 
+    QColor lightBlue("#F0F4F8");
+    
+    // Header section
+    painter.setPen(mainBlue);
+    painter.setFont(QFont("Arial", 22, QFont::Bold));
+    painter.drawText(margin, y, "REÇU DE LIVRAISON OFFICIEL");
+    y += 150;
+    
+    painter.setPen(Qt::darkGray);
+    painter.setFont(QFont("Arial", 12));
+    painter.drawText(margin, y, "PortFlow Logistics - Division de Mahdia");
+    y += 100;
+    painter.drawText(margin, y, "Date d'édition : " + QDateTime::currentDateTime().toString("dd/MM/yyyy HH:mm"));
+    y += 300;
+
+    // Structured Information Block
+    auto drawDetailRow = [&](const QString& label, const QString& value, int& currentY, bool shaded) {
+        if (shaded) {
+            painter.fillRect(margin, currentY - 50, w, 180, lightBlue);
+        }
+        painter.setPen(mainBlue);
+        painter.setFont(QFont("Arial", 10, QFont::Bold));
+        painter.drawText(margin + 100, currentY + 50, label);
+        
+        painter.setPen(Qt::black);
+        painter.setFont(QFont("Arial", 11));
+        painter.drawText(margin + 1500, currentY + 50, value);
+        
+        currentY += 180;
+    };
+
+    // Header bar for the "details" area
+    painter.fillRect(margin, y - 80, w, 130, mainBlue); 
+    painter.setPen(Qt::white);
+    painter.setFont(QFont("Arial", 11, QFont::Bold));
+    painter.drawText(margin + 100, y, "DÉTAILS DE LA LIVRAISON");
+    y += 150;
+
+    drawDetailRow("Référence :", ref, y, false);
+    drawDetailRow("Date de Livraison :", date, y, true);
+    drawDetailRow("Destination :", adresse, y, false);
+    drawDetailRow("Statut Actuel :", statut, y, true);
+    drawDetailRow("Type Transport :", transport, y, false);
+    drawDetailRow("Véhicule Assigné :", vehicule, y, true);
+    drawDetailRow("Chauffeur / Livreur :", livreur, y, false);
+    drawDetailRow("Prix Total :", prix + " DT", y, true);
+
+    y += 300;
+    
+    // Bottom border
+    painter.setPen(QPen(mainBlue, 3));
+    painter.drawLine(margin, y, wPage - margin, y);
+    y += 200;
+
+    // Signature Area
+    painter.setFont(QFont("Arial", 12, QFont::Bold));
     painter.setPen(Qt::black);
+    int sigW = (w * 40) / 100;
+    int sigX = wPage - margin - sigW;
     
-    // Header
-    painter.setFont(QFont("Segoe UI", 20, QFont::Bold));
-    painter.drawText(QRect(0, 50, 5000, 100), Qt::AlignCenter, "REÇU DE LIVRAISON");
-    
-    painter.setPen(QPen(Qt::black, 2));
-    painter.drawLine(100, 200, 4900, 200);
+    painter.drawText(sigX, y, "Signature du Responsable :");
+    painter.setPen(QPen(Qt::gray, 2, Qt::DashLine));
+    painter.drawRect(sigX, y + 50, sigW, 400);
 
-    // Content
-    painter.setFont(QFont("Segoe UI", 12));
-    int y = 400;
-    painter.drawText(500, y, "Référence Livraison :");
-    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
-    painter.drawText(2000, y, liv.getReference());
-    
-    y += 200;
-    painter.setFont(QFont("Segoe UI", 12));
-    painter.drawText(500, y, "Date :");
-    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
-    painter.drawText(2000, y, liv.getDate());
-    
-    y += 200;
-    painter.setFont(QFont("Segoe UI", 12));
-    painter.drawText(500, y, "Adresse :");
-    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
-    painter.drawText(2000, y, liv.getAdresse());
-
-    painter.setPen(QPen(Qt::gray, 1, Qt::DashLine));
-    painter.drawLine(100, y + 200, 4900, y + 200);
-
-    painter.end();
-
-    QMessageBox::information(this, "Export PDF", "Le reçu de livraison a été exporté avec succès !");
+    QMessageBox::information(this, "Succès", "Le reçu de livraison professionnel a été généré avec succès !");
 }
 
 void LivraisonWindow::onShowStatistics()

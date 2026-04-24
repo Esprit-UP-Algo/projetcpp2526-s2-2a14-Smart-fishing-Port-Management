@@ -8,18 +8,15 @@
 #define SCREEN_HEIGHT 64
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-// DHT Configuration
-#define DHTPIN1 2
-#define DHTPIN2 3 // Second sensor
+// DHT Configuration (Single Sensor)
+#define DHTPIN 2
 #define DHTTYPE DHT11
 
-DHT dht1(DHTPIN1, DHTTYPE);
-DHT dht2(DHTPIN2, DHTTYPE);
+DHT dht(DHTPIN, DHTTYPE);
 
 void setup() {
   Serial.begin(9600);
-  dht1.begin();
-  dht2.begin();
+  dht.begin();
 
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -29,30 +26,30 @@ void setup() {
   display.clearDisplay();
   display.setTextColor(WHITE);
   display.setTextSize(1);
-  display.setCursor(20, 20);
+  display.setCursor(15, 20);
   display.println("PORTFLOW SYSTEM");
+  display.setCursor(15, 35);
+  display.println("SINGLE SENSOR MODE");
   display.display();
   delay(2000);
 }
 
 void loop() {
-  float temp1 = dht1.readTemperature();
-  float temp2 = dht2.readTemperature();
+  float temp = dht.readTemperature();
 
-  // Handle missing sensors/errors
-  if (isnan(temp1)) temp1 = 0.0; 
-  if (isnan(temp2)) temp2 = 0.0;
+  // Handle missing sensor/errors
+  bool sensorError = false;
+  if (isnan(temp)) {
+    temp = 0.0;
+    sensorError = true;
+  }
 
   // --- SEND TO QT APPLICATION ---
-  // Format: S1:<val>;S2:<val>;
+  // Format: S1:<val>;
   Serial.print("S1:");
-  Serial.print(temp1);
+  Serial.print(temp);
   Serial.print(";");
-  
-  Serial.print("S2:");
-  Serial.print(temp2);
-  Serial.print(";");
-  Serial.println(); // Newline for clean serial monitor viewing
+  Serial.println(); 
 
   // --- UPDATE OLED DISPLAY ---
   display.clearDisplay();
@@ -60,25 +57,31 @@ void loop() {
   // Header
   display.setTextSize(1);
   display.setCursor(0, 0);
-  display.println("MONITORING FRIGOS");
+  display.println("SURVEILLANCE FRIGO 1");
   display.drawLine(0, 10, 128, 10, WHITE);
 
-  // Fridge 1
-  display.setCursor(0, 20);
-  display.print("F1 (S1): ");
-  display.setTextSize(2);
-  display.print(temp1);
-  display.print("C");
-
-  // Fridge 2
-  display.setTextSize(1);
-  display.setCursor(0, 45);
-  display.print("F2 (S2): ");
-  display.setTextSize(2);
-  display.print(temp2);
-  display.print("C");
+  if (sensorError) {
+    display.setCursor(0, 30);
+    display.setTextSize(1);
+    display.println("ERREUR CAPTEUR !");
+    display.setCursor(0, 45);
+    display.println("Verifiez Pin 2");
+  } else {
+    // Current Temperature
+    display.setCursor(10, 25);
+    display.setTextSize(1);
+    display.println("TEMPERATEUR LIVE:");
+    
+    display.setCursor(25, 40);
+    display.setTextSize(3); // Big font for single sensor
+    display.print((int)temp);
+    display.setTextSize(1);
+    display.print(" .");
+    display.print((int)((temp - (int)temp) * 10));
+    display.setTextSize(2);
+    display.print("C");
+  }
 
   display.display();
-
-  delay(2000); // Wait 2 seconds between updates
+  delay(2000); 
 }
