@@ -12,7 +12,22 @@
 #include <QLabel>
 #include <QVector>
 #include <QComboBox>
+#include <QTimer>
+#include <QDateTime>
 #include "livraison.h"
+
+class LiveProgressIndicator : public QWidget {
+    Q_OBJECT
+public:
+    explicit LiveProgressIndicator(QWidget* parent = nullptr);
+    void setProgress(double progress); // 0.0 to 1.0
+protected:
+    void paintEvent(QPaintEvent* event) override;
+private:
+    double m_progress = 0.0;
+    double m_animationOffset = 0.0;
+    QTimer* m_animationTimer;
+};
 
 class LivraisonWindow : public QMainWindow
 {
@@ -32,6 +47,7 @@ private slots:
     void onTrackDelivery(int row);
     void onShowStatistics();
     void onExportAllPDF();
+    void onLiveUpdate();
 
 private:
     void setupUi();
@@ -53,6 +69,7 @@ private:
     QComboBox* sortCombo;
     QLabel* totalDeliveriesLabel;
     QLabel* efficiencyLabel;
+    QTimer* liveUpdateTimer;
 };
 
 #endif // LIVRAISONWINDOW_H

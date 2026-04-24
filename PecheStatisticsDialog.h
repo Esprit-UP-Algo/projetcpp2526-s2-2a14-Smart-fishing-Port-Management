@@ -2,44 +2,31 @@
 #define PECHESTATISTICSDIALOG_H
 
 #include <QDialog>
+#include <QtCharts>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFrame>
+#include <QLabel>
 #include <QMap>
-#include <QString>
-#include <QWidget>
-#include <QList>
-#include <QColor>
-#include <QPainter>
-#include <QPaintEvent>
-
-class PechePieChartWidget : public QWidget
-{
-    Q_OBJECT
-public:
-    explicit PechePieChartWidget(const QString& title,
-                            const QMap<QString, double>& data,
-                            QWidget* parent = nullptr);
-
-protected:
-    void paintEvent(QPaintEvent* event) override;
-
-private:
-    QString m_title;
-    QMap<QString, double> m_data;
-    QList<QColor> m_colors;
-};
+#include <QScrollArea>
 
 class PecheStatisticsDialog : public QDialog
 {
     Q_OBJECT
+
 public:
     explicit PecheStatisticsDialog(const QMap<QString, double>& speciesCount,
                                    const QMap<QString, double>& weightBySpecies,
-                                   const QMap<QString, double>& avgWeightByBoat,
                                    QWidget* parent = nullptr);
 
 private:
-    void setupUi(const QMap<QString, double>& speciesCount,
-                 const QMap<QString, double>& weightBySpecies,
-                 const QMap<QString, double>& avgWeightByBoat);
+    void setupUi();
+    QFrame*      createStatCard(const QString& title, const QString& value, const QString& color);
+    QChartView*  createWeightBarChart();
+    QChartView*  createWeightPieChart();
+
+    QMap<QString, double> m_speciesCount;
+    QMap<QString, double> m_weightBySpecies;
 };
 
 #endif // PECHESTATISTICSDIALOG_H

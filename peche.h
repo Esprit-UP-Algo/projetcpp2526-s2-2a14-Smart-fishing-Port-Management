@@ -13,11 +13,12 @@ class Peche {
     QString dateCapture;
     QString idBateau;
     QString idFrigo;
+    QString idPecheur;
     static QString lastError;
 
 public:
     Peche();
-    Peche(QString id, QString ref, QString esp, QString qte, QString date, QString idB, QString idF);
+    Peche(QString id, QString ref, QString esp, QString qte, QString date, QString idB, QString idF, QString idP);
 
     // Getters
     QString getIdLot() const { return idLot; }
@@ -27,6 +28,7 @@ public:
     QString getDateCapture() const { return dateCapture; }
     QString getIdBateau() const { return idBateau; }
     QString getIdFrigo() const { return idFrigo; }
+    QString getIdPecheur() const { return idPecheur; }
 
     // Setters
     void setIdLot(QString s) { idLot = s; }
@@ -36,6 +38,7 @@ public:
     void setDateCapture(QString s) { dateCapture = s; }
     void setIdBateau(QString s) { idBateau = s; }
     void setIdFrigo(QString s) { idFrigo = s; }
+    void setIdPecheur(QString s) { idPecheur = s; }
 
     // CRUD Methods
     bool ajouter();

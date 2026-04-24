@@ -2,7 +2,6 @@
 #include "pechedialog.h"
 #include "PecheStatisticsDialog.h"
 #include "PecheExportDialog.h"
-#include "StatisticsDialog.h"
 #include <QDebug>
 #include <QMessageBox>
 #include <QHeaderView>
@@ -18,6 +17,7 @@
 #include <QSqlQuery>
 #include <QSqlQueryModel>
 #include <QSqlRecord>
+#include <QSqlError>
 #include <QSet>
 #include <algorithm>
 
@@ -337,12 +337,13 @@ QFrame* PecheWindow::createTableCard()
 void PecheWindow::setupTable()
 {
     table = new QTableWidget();
-    table->setColumnCount(9);
+    table->setColumnCount(10);
     table->setHorizontalHeaderLabels({
-        "Référence", "Catégorie", "Quantité (Kg)", "Date", "Bateau", "Frigo", "Actions", "ID_BAT", "ID_FRI"
+        "Référence", "Catégorie", "Quantité (Kg)", "Date", "Bateau", "Frigo", "Actions", "ID_BAT", "ID_FRI", "ID_PECH"
     });
     table->setColumnHidden(7, true);
     table->setColumnHidden(8, true);
+    table->setColumnHidden(9, true);
 
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     table->horizontalHeader()->setStretchLastSection(false);
@@ -411,13 +412,13 @@ void PecheWindow::populateTable(const QString& filterText)
         int si = sortCombo ? sortCombo->currentIndex() : 0;
         if (si == 0) model = pecheModel.afficher();
         else {
-            QString critere = "IDLOT", ordre = "ASC";
-            if (si == 1) { critere = "QUANTITELOT"; ordre = "ASC"; }
-            else if (si == 2) { critere = "QUANTITELOT"; ordre = "DESC"; }
-            else if (si == 3) { critere = "DATELOT"; ordre = "ASC"; }
-            else if (si == 4) { critere = "DATELOT"; ordre = "DESC"; }
-            else if (si == 5) { critere = "ESPECELOT"; ordre = "ASC"; }
-            else if (si == 6) { critere = "ESPECELOT"; ordre = "DESC"; }
+            QString critere = "ID", ordre = "ASC";
+            if (si == 1) { critere = "Quantité";  ordre = "ASC"; }
+            else if (si == 2) { critere = "Quantité";  ordre = "DESC"; }
+            else if (si == 3) { critere = "Date";      ordre = "ASC"; }
+            else if (si == 4) { critere = "Date";      ordre = "DESC"; }
+            else if (si == 5) { critere = "Espèce";    ordre = "ASC"; }
+            else if (si == 6) { critere = "Espèce";    ordre = "DESC"; }
             model = pecheModel.trier(critere, ordre);
         }
     }
@@ -458,6 +459,11 @@ void PecheWindow::populateTable(const QString& filterText)
         fItem->setData(Qt::UserRole, model->record(i).value("IDFRIGO").toString());
         fItem->setTextAlignment(Qt::AlignCenter);
         table->setItem(r, 5, fItem);
+
+        // Stocker l'ID du pêcheur dans la colonne cachée 9
+        QTableWidgetItem* pItem = it("");
+        pItem->setData(Qt::UserRole, model->record(i).value("ID_PECHEUR").toString());
+        table->setItem(r, 9, pItem);
 
         table->setCellWidget(r, 6, createActionButtons(r));
     }
@@ -518,42 +524,55 @@ void PecheWindow::onGeneratePDF()
     QString path = QFileDialog::getSaveFileName(this,"Exporter PDF","rapport_peches.pdf","PDF (*.pdf)");
     if(path.isEmpty()) return;
 
-    // ── Query & title ──────────────────────────────────────────
-    QString queryStr  = "SELECT p.*, b.NOMBATEAU FROM PECHES p LEFT JOIN BATEAUX b ON p.IDBATEAU = b.IDBATEAU";
-    QString rpTitle   = "Justificatif de Pêche";
-    QString rpSub     = "Rapport global — toutes les captures";
+    // ── Dynamic Query Construction ─────────────────────────────
+    QString queryStr = "SELECT p.*, b.NOMBATEAU, q.LOCATION "
+                       "FROM PECHES p "
+                       "LEFT JOIN BATEAUX b ON p.IDBATEAU = b.IDBATEAU "
+                       "LEFT JOIN QUAIS q ON b.IDQUAI = q.IDQUAI ";
+    QStringList filters;
+
+    if (dlg.exportType() == PecheExportDialog::ByBoat || dlg.exportType() == 3) { // 3 = ByBoatAndDate
+        filters << QString("p.IDBATEAU = '%1'").arg(dlg.selectedBoat());
+    }
+    
+    if (dlg.exportType() == PecheExportDialog::ByDate || dlg.exportType() == 3) {
+        filters << QString("p.DATECAPTURE BETWEEN TO_DATE('%1','YYYY-MM-DD') AND TO_DATE('%2','YYYY-MM-DD')")
+                   .arg(dlg.startDate().toString("yyyy-MM-dd"))
+                   .arg(dlg.endDate().toString("yyyy-MM-dd"));
+    }
+
+    if (!filters.isEmpty()) {
+        queryStr += " WHERE " + filters.join(" AND ");
+    }
+
+    // Titles
+    QString rpTitle = "Justificatif de Pêche";
+    QString rpSub   = "Rapport global — toutes les captures";
 
     if (dlg.exportType() == PecheExportDialog::ByBoat) {
-        queryStr = QString("SELECT p.*, b.NOMBATEAU, b.TYPE_BATEAU, q.EMPLACEMENT "
-                           "FROM PECHES p "
-                           "LEFT JOIN BATEAUX b ON p.IDBATEAU = b.IDBATEAU "
-                           "LEFT JOIN QUAIS q ON b.IDQUAI = q.IDQUAI "
-                           "WHERE p.IDBATEAU = '%1'").arg(dlg.selectedBoat());
-        
         QSqlQuery nameQ;
         nameQ.prepare("SELECT NOMBATEAU FROM BATEAUX WHERE IDBATEAU = :id");
         nameQ.bindValue(":id", dlg.selectedBoat());
         QString bName = dlg.selectedBoat();
         if(nameQ.exec() && nameQ.next()) bName = nameQ.value(0).toString();
-
-        rpTitle  = QString("Rapport de Pêche — Bateau %1").arg(bName);
-        rpSub    = QString("Captures et détails techniques du bateau");
+        rpTitle = "Rapport de Pêche — Bateau " + bName;
+        rpSub   = "Détails des captures pour ce bâtiment";
     } else if (dlg.exportType() == PecheExportDialog::ByDate) {
-        queryStr = QString("SELECT p.*, b.NOM_BATEAU "
-                           "FROM PECHES p "
-                           "LEFT JOIN BATEAUX b ON p.IDBATEAU = b.IDBATEAU "
-                           "WHERE p.DATECAPTURE BETWEEN "
-                           "TO_DATE('%1','YYYY-MM-DD') AND TO_DATE('%2','YYYY-MM-DD')")
-                   .arg(dlg.startDate().toString("yyyy-MM-dd"))
-                   .arg(dlg.endDate().toString("yyyy-MM-dd"));
         rpTitle = "Rapport de Pêche — Période";
         rpSub   = QString("Du %1 au %2")
                   .arg(dlg.startDate().toString("dd/MM/yyyy"))
                   .arg(dlg.endDate().toString("dd/MM/yyyy"));
+    } else if (dlg.exportType() == 3) {
+        rpTitle = "Rapport Combiné — Bateau & Période";
+        rpSub   = "Filtré par bâtiment et dates spécifiques";
     }
 
     QSqlQueryModel mdl;
     mdl.setQuery(queryStr);
+    if (mdl.lastError().isValid()) {
+        QMessageBox::critical(this, "Erreur SQL", "Impossible de générer le rapport :\n" + mdl.lastError().text());
+        return;
+    }
 
     // ── PDF writer setup ───────────────────────────────────────
     QPdfWriter writer(path);
@@ -664,8 +683,8 @@ void PecheWindow::onGeneratePDF()
         p.setPen(QColor("#1e3a8a")); p.setFont(QFont("Segoe UI", 12, QFont::Bold));
         p.drawText(mX, y, "Informations du Bateau :"); y += 30;
         p.setPen(QColor("#1f2937")); p.setFont(QFont("Segoe UI", 10));
-        p.drawText(mX + 20, y, "Type : " + mdl.record(0).value("TYPE_BATEAU").toString());
-        p.drawText(mX + 250, y, "Quai : " + mdl.record(0).value("EMPLACEMENT").toString());
+        p.drawText(mX + 20, y, "Bateau ID : " + dlg.selectedBoat());
+        p.drawText(mX + 250, y, "Quai : " + mdl.record(0).value("LOCATION").toString());
         y += 50;
     }
 
@@ -683,6 +702,14 @@ void PecheWindow::onGeneratePDF()
     } else {
         cw = { cW*22/100, cW*26/100, cW*24/100, cW*28/100 };
         hd = { "Référence", "Catégorie", "Quantité (Kg)", "Date" };
+    }
+    
+    // Si c'est combiné, on préfère afficher le bateau aussi ? 
+    // Non, restons sur la logique initiale : si ByBoat (ou combiné), on cache le bateau car il est en titre.
+    if (dlg.exportType() == 3) {
+        cw = { cW*22/100, cW*26/100, cW*24/100, cW*28/100 };
+        hd = { "Référence", "Catégorie", "Quantité (Kg)", "Date" };
+        isTotal = false;
     }
     const int rH = 40;
 
@@ -766,29 +793,19 @@ void PecheWindow::onGeneratePDF()
 
 void PecheWindow::onShowStatistics()
 {
-    QMap<QString, double> speciesCount, weightBySpecies, totalWeightByBoat, countByBoat, avgWeightByBoat;
+    QMap<QString, double> speciesCount, weightBySpecies;
     QSqlQueryModel* model = pecheModel.afficher();
     
     for(int i = 0; i < model->rowCount(); ++i){
         QString esp = model->record(i).value("Espèce").toString();
         double qte = model->record(i).value("Quantité").toDouble();
-        QString boat = model->record(i).value("Bateau").toString();
         
         speciesCount[esp]++;
         weightBySpecies[esp] += qte;
-        
-        totalWeightByBoat[boat] += qte;
-        countByBoat[boat]++;
-    }
-    
-    // Calcul de la moyenne par bateau
-    for (auto it = totalWeightByBoat.begin(); it != totalWeightByBoat.end(); ++it) {
-        QString boat = it.key();
-        avgWeightByBoat[boat] = it.value() / countByBoat[boat];
     }
     
     delete model;
-    PecheStatisticsDialog dlg(speciesCount, weightBySpecies, avgWeightByBoat, this);
+    PecheStatisticsDialog dlg(speciesCount, weightBySpecies, this);
     dlg.exec();
 }
 
@@ -824,6 +841,9 @@ void PecheWindow::onEditPeche(int row) {
     current.setDateCapture(table->item(row, 3)->text());
     current.setIdBateau(table->item(row, 4)->data(Qt::UserRole).toString());
     current.setIdFrigo(table->item(row, 5)->data(Qt::UserRole).toString());
+    // Récupérer l'ID du pêcheur depuis la colonne cachée
+    if (table->item(row, 9))
+        current.setIdPecheur(table->item(row, 9)->data(Qt::UserRole).toString());
 
     PecheDialog d(this, &current);
     if(d.exec()==QDialog::Accepted){ 

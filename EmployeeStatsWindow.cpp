@@ -56,13 +56,26 @@ QFrame* EmployeeStatsWindow::createStatCard(const QString& title, const QString&
     card->setFixedHeight(100);
 
     QVBoxLayout* lay = new QVBoxLayout(card);
+    lay->setContentsMargins(15, 10, 15, 10);
+
     QLabel* lblTitle = new QLabel(title);
     lblTitle->setStyleSheet("color: #64748b; font-size: 14px; font-weight: 500; border: none;");
+    
+    QHBoxLayout* valLay = new QHBoxLayout();
     QLabel* lblValue = new QLabel(value);
     lblValue->setStyleSheet(QString("color: %1; font-size: 28px; font-weight: bold; border: none;").arg(color));
 
+    valLay->addWidget(lblValue);
+    
+    if (value.contains("%")) {
+        QLabel* arrow = new QLabel("⬆");
+        arrow->setStyleSheet(QString("color: %1; font-size: 18px; font-weight: bold; border: none;").arg(color));
+        valLay->addWidget(arrow);
+    }
+    valLay->addStretch();
+
     lay->addWidget(lblTitle);
-    lay->addWidget(lblValue);
+    lay->addLayout(valLay);
     return card;
 }
 
@@ -155,16 +168,26 @@ QChartView* EmployeeStatsWindow::createOvertimePieChart()
     QPieSeries *series = new QPieSeries();
 
     // Simulating overtime categories
-    series->append("Admin (10h)", 10);
-    series->append("Logistique (45h)", 45);
-    series->append("Sécurité (30h)", 30);
-    series->append("Maintenance (25h)", 25);
+    QList<QPair<QString, double>> data = {
+        {"Admin", 10}, {"Logistique", 45}, {"Sécurité", 30}, {"Maintenance", 25}
+    };
+    
+    double total = 0;
+    for(auto& p : data) total += p.second;
 
-    QPieSlice *slice = series->slices().at(1);
-    slice->setExploded();
-    slice->setLabelVisible();
-    slice->setPen(QPen(Qt::darkGreen, 2));
-    slice->setBrush(Qt::green);
+    for(auto& p : data) {
+        QPieSlice *slice = series->append(p.first, p.second);
+        if (total > 0)
+            slice->setLabel(QString("%1 (%2%)").arg(p.first).arg(100.0 * p.second / total, 0, 'f', 1));
+    }
+
+    if(series->slices().size() > 1) {
+        QPieSlice *slice = series->slices().at(1); // Logistique
+        slice->setExploded();
+        slice->setLabelVisible(true);
+        slice->setPen(QPen(Qt::darkGreen, 2));
+        slice->setBrush(Qt::green);
+    }
 
     QChart *chart = new QChart();
     chart->addSeries(series);

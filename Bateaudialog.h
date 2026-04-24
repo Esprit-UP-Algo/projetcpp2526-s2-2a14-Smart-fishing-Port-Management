@@ -42,6 +42,7 @@ private:
     QComboBox* employeeCombo;
     QComboBox* quaiCombo;
     QComboBox* etatCombo;
+    QLineEdit* codeSecInput;
 
     Bateau* bateauData;
     bool isEdit;

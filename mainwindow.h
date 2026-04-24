@@ -16,13 +16,14 @@
 #include <QStackedWidget>
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
+#include "arduino.h"
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(const QString& userName = "", const QString& userRole = "", QWidget *parent = nullptr);
     ~MainWindow();
 
 private slots:
@@ -38,6 +39,8 @@ private slots:
     void onLogout();
     void onSettingsClicked();
     void onTrayMessageClicked();
+    void handleSerialData(); // Unified slot for Arduino data
+    void processPortAccess(const QString& code);
 
 private:
     void setupUi();
@@ -74,6 +77,13 @@ private:
     QWidget* livraisonPage;
     QWidget* quaisPage;
     QSystemTrayIcon* trayIcon = nullptr;
+
+    Arduino A;
+    QByteArray serialBuffer;
+    void checkFridgeTemperature(int sensorId, double currentTemp);
+    QString loggedUserName;
+    QString loggedUserRole;
+    QLabel* welcomeLabel;
 
 };
 

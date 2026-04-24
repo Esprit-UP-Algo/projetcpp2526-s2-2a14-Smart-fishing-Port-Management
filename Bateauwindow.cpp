@@ -1,4 +1,5 @@
 #include "bateauwindow.h"
+#include "quaiswindow.h"
 #include "bateaudialog.h"
 #include "BateauStatisticsDialog.h"
 #include "PredictMaintenanceDialog.h"
@@ -54,10 +55,8 @@ BateauWindow::~BateauWindow()
 
 void BateauWindow::refreshAllTables()
 {
-    for (BateauWindow* window : s_instances) {
-        if (window) {
-            window->populateTable();
-        }
+    for (BateauWindow* win : s_instances) {
+        win->populateTable();
     }
 }
 
@@ -268,11 +267,11 @@ QFrame* BateauWindow::createTableCard()
 
 void BateauWindow::setupTable()
 {
-    table->setColumnCount(14);
-    table->setHorizontalHeaderLabels({"ID", "Nom Bateau", "Immatriculation", "Capacité (T)", "Longueur (m)", "Âge (ans)", "Dernière Maintenance", "Prochaine Maint. (Est.)", "Employé", "Quai", "État du Bateau", "Actions", "ID_EMP", "ID_QUAI"});
+    table->setColumnCount(15);
+    table->setHorizontalHeaderLabels({"ID", "Nom Bateau", "Immatriculation", "Capacité (T)", "Longueur (m)", "Âge (ans)", "Dernière Maintenance", "Prochaine Maint. (Est.)", "Employé", "Quai", "État du Bateau", "Code Secret", "Actions", "ID_EMP", "ID_QUAI"});
     table->setColumnHidden(0, true);
-    table->setColumnHidden(12, true);
     table->setColumnHidden(13, true);
+    table->setColumnHidden(14, true);
 
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table->horizontalHeader()->setStretchLastSection(false);
@@ -393,11 +392,18 @@ void BateauWindow::populateTable(const QString& filterText)
         // Column 10: État du Bateau
         QString etat = model->data(model->index(i, 11)).toString();
         table->setCellWidget(r, 10, createDisponibleBadge(etat));
+
+        // Column 11: Code Secret
+        QString sec = model->data(model->index(i, 13)).toString(); // Index 13 in model is b.CODE_SECRET (fetched in bateau.cpp)
+        QTableWidgetItem* secItem = new QTableWidgetItem(sec);
+        secItem->setTextAlignment(Qt::AlignCenter); secItem->setFont(cellFont);
+        table->setItem(r, 11, secItem);
+
         // Action buttons
-        table->setCellWidget(r, 11, createActionButtons(r));
+        table->setCellWidget(r, 12, createActionButtons(r));
         // Hidden IDs
-        table->setItem(r, 12, new QTableWidgetItem(model->data(model->index(i, 9)).toString()));
-        table->setItem(r, 13, new QTableWidgetItem(model->data(model->index(i, 10)).toString()));
+        table->setItem(r, 13, new QTableWidgetItem(model->data(model->index(i, 9)).toString()));
+        table->setItem(r, 14, new QTableWidgetItem(model->data(model->index(i, 10)).toString()));
     }
     delete model;
 }
@@ -671,8 +677,9 @@ void BateauWindow::onEditBateau(int row)
     b.setLongueur(table->item(row, 4)->text().split(" ").first());
     b.setAgeBateau(table->item(row, 5)->text().split(" ").first());
     b.setDateMaintenance(table->item(row, 6)->text());
-    b.setIdEmploye(table->item(row, 12)->text());
-    b.setIdQuai(table->item(row, 13)->text());
+    b.setIdEmploye(table->item(row, 13)->text());
+    b.setIdQuai(table->item(row, 14)->text());
+    b.setCodeSecret(table->item(row, 11)->text().toInt());
     
     // Status from badge text or model? Easier to get from Model when populating.
     // Or just check radio button logic in Dialog correctly.
@@ -702,7 +709,11 @@ void BateauWindow::onEditBateau(int row)
 
     if (diag.exec() == QDialog::Accepted) {
         Bateau nb = diag.getData();
-        if (nb.modifier(b.getIdBateau())) { QMessageBox::information(this, "OK", "Modification effectuée."); populateTable(); }
+        if (nb.modifier(b.getIdBateau())) { 
+            QMessageBox::information(this, "OK", "Modification effectuée."); 
+            populateTable();
+            QuaisWindow::refreshAll(); // <--- AJOUTÉ
+        }
         else QMessageBox::critical(this, "Erreur", "Echec : " + Bateau::getLastError());
     }
 }
@@ -711,7 +722,12 @@ void BateauWindow::onDeleteBateau(int row)
 {
     QString id = table->item(row, 0)->text();
     if (QMessageBox::question(this, "Suppression", "Supprimer ?", QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes) {
-        Bateau b; if (b.supprimer(id)) { QMessageBox::information(this, "OK", "Supprimé."); populateTable(); }
+        Bateau b; 
+        if (b.supprimer(id)) { 
+            QMessageBox::information(this, "OK", "Supprimé."); 
+            populateTable(); 
+            QuaisWindow::refreshAll(); // <--- AJOUTÉ
+        }
         else QMessageBox::critical(this, "Erreur", "Echec : " + Bateau::getLastError());
     }
 }

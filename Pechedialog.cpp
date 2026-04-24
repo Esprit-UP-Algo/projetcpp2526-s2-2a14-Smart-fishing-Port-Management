@@ -6,6 +6,7 @@
 #include <QFrame>
 #include <QFont>
 #include <QDate>
+#include <QTimer>
 #include <QScrollArea>
 #include <QSqlQuery>
 #include <QSqlRecord>
@@ -228,18 +229,72 @@ void PecheDialog::setupUi()
     fridgeLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
     formLayout->addWidget(fridgeLabel);
 
+    QHBoxLayout* fridgeLayout = new QHBoxLayout();
     fridgeCombo = new QComboBox();
     fridgeCombo->setFont(inputFont);
-    fridgeCombo->setFixedHeight(50);
     fridgeCombo->setStyleSheet(getInputStyle());
-    formLayout->addWidget(fridgeCombo);
+    fridgeLayout->addWidget(fridgeCombo, 4);
+
+    autoSelectBtn = new QPushButton("✨ Auto");
+    autoSelectBtn->setToolTip("Choisir automatiquement le meilleur frigo");
+    autoSelectBtn->setFixedWidth(100);
+    autoSelectBtn->setFixedHeight(50);
+    autoSelectBtn->setCursor(Qt::PointingHandCursor);
+    autoSelectBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: #3498DB;
+            color: white;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        QPushButton:hover { background-color: #2980B9; }
+    )");
+    fridgeLayout->addWidget(autoSelectBtn, 1);
+    formLayout->addLayout(fridgeLayout);
+
+    autoMsgLabel = new QLabel("");
+    autoMsgLabel->setStyleSheet("color: #27AE60; font-size: 12px; font-weight: 500; margin-top: -5px;");
+    autoMsgLabel->hide();
+    formLayout->addWidget(autoMsgLabel);
+
+    availableSpaceLabel = new QLabel("");
+    availableSpaceLabel->setStyleSheet("color: #34495E; font-size: 13px; font-weight: 600; margin-top: -2px;");
+    formLayout->addWidget(availableSpaceLabel);
+
+    connect(autoSelectBtn, &QPushButton::clicked, this, &PecheDialog::autoSelectFridge);
+    connect(fridgeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PecheDialog::updateAvailableSpaceDisplay);
+    connect(quantiteInput, &QLineEdit::textChanged, this, &PecheDialog::updateAvailableSpaceDisplay);
+
+    formLayout->addSpacing(10);
+
+    // Pêcheur
+    QLabel* fishermanLabel = new QLabel("Pêcheur (Responsable)");
+    fishermanLabel->setFont(labelFont);
+    fishermanLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
+    formLayout->addWidget(fishermanLabel);
+
+    fishermanCombo = new QComboBox();
+    fishermanCombo->setFont(inputFont);
+    fishermanCombo->setFixedHeight(50);
+    fishermanCombo->setStyleSheet(getInputStyle());
+    formLayout->addWidget(fishermanCombo);
 
     // Initialisation des combos
     QSqlQuery bQuery("SELECT IdBateau, NomBateau FROM BATEAUX");
     while (bQuery.next()) boatCombo->addItem(bQuery.value(1).toString(), bQuery.value(0));
-    
-    QSqlQuery fQuery("SELECT IDFRIGO, REFERENCE FROM FRIGOS");
-    while (fQuery.next()) fridgeCombo->addItem(fQuery.value(1).toString(), fQuery.value(0));
+
+    // Peuple les pêcheurs
+    QSqlQuery eQuery("SELECT ID_EMPLOYE, PRENOM || ' ' || NOM FROM EMPLOYEES WHERE \"POSITION\" = 'Pêcheur'");
+    while (eQuery.next()) fishermanCombo->addItem(eQuery.value(1).toString(), eQuery.value(0));
+
+    // Peuple les frigos filtrés par type de poisson
+    refreshFridgeCombo(especeCombo->currentText());
+
+    // Quand l'espèce change, re-filtrer les frigos
+    connect(especeCombo, &QComboBox::currentTextChanged, this, [=](const QString &e){
+        refreshFridgeCombo(e);
+        autoMsgLabel->hide();
+    });
 
     formLayout->addStretch();
 
@@ -375,6 +430,10 @@ void PecheDialog::populateFields()
     
     int fIdx = fridgeCombo->findData(pecheData->getIdFrigo());
     if (fIdx >= 0) fridgeCombo->setCurrentIndex(fIdx);
+    else if (fridgeCombo->count() > 0) fridgeCombo->setCurrentIndex(0);
+
+    int eIdx = fishermanCombo->findData(pecheData->getIdPecheur());
+    if (eIdx >= 0) fishermanCombo->setCurrentIndex(eIdx);
 }
 
 void PecheDialog::onSave()
@@ -438,8 +497,39 @@ bool PecheDialog::validateInputs()
         isValid = false;
     }
 
-    if (fridgeCombo->currentIndex() == -1) {
-        showError("Veuillez sélectionner un frigo.");
+    if (fridgeCombo->currentIndex() == -1 || fridgeCombo->currentData().toString().isEmpty()) {
+        showError(QString("Aucun frigo compatible pour l'espèce '%1'. Veuillez d'abord créer un frigo de type '%1'.")
+                      .arg(especeCombo->currentText()));
+        isValid = false;
+    } else {
+        // [NOUVEAU] Vérification de la capacité restante du frigo
+        QString fid = fridgeCombo->currentData().toString();
+        QSqlQuery capQ;
+        capQ.prepare("SELECT CAPACITE, OCCUPATION FROM FRIGOS WHERE IDFRIGO = :id");
+        capQ.bindValue(":id", fid);
+        if (capQ.exec() && capQ.next()) {
+            double cap = capQ.value(0).toDouble();
+            double occ = capQ.value(1).toDouble();
+            
+            // Si on est en mode édition, on doit soustraire l'ancienne quantité pour le calcul
+            double oldQte = 0;
+            if (isEdit && pecheData) {
+                // On ne soustrait que si le frigo n'a pas changé
+                if (pecheData->getIdFrigo() == fid) {
+                    oldQte = pecheData->getQuantiteKg().toDouble();
+                }
+            }
+            
+            double projectedOcc = occ - oldQte + val;
+            if (projectedOcc > cap) {
+                showError(QString("Capacité insuffisante ! Ce frigo ne peut plus accepter que %1 Kg.").arg(cap - occ + oldQte));
+                isValid = false;
+            }
+        }
+    }
+
+    if (fishermanCombo->currentIndex() == -1) {
+        showError("Veuillez sélectionner un pêcheur.");
         isValid = false;
     }
 
@@ -465,6 +555,205 @@ Peche PecheDialog::getData() const
     peche.setDateCapture(dateInput->date().toString("dd/MM/yyyy"));
     peche.setIdBateau(boatCombo->currentData().toString());
     peche.setIdFrigo(fridgeCombo->currentData().toString());
+    peche.setIdPecheur(fishermanCombo->currentData().toString());
 
     return peche;
+}
+
+void PecheDialog::refreshFridgeCombo(const QString &espece)
+{
+    // Sauvegarder l'ID frigo actuellement sélectionné
+    QString currentFrigoId = fridgeCombo->currentData().toString();
+
+    fridgeCombo->clear();
+
+    // Filtrer les frigos compatibles avec le type de poisson sélectionné
+    // On inclut aussi le frigo actuel si on est en mode édition (même s'il n'est plus 'Disponible')
+    QSqlQuery fQuery;
+    QString currentFid = (isEdit && pecheData) ? pecheData->getIdFrigo() : "";
+    
+    if (!currentFid.isEmpty()) {
+        fQuery.prepare("SELECT IDFRIGO, REFERENCE, CAPACITE, OCCUPATION "
+                       "FROM FRIGOS "
+                       "WHERE UPPER(TYPE_POISSON) = UPPER(:espece) "
+                       "AND (STATUT = 'Disponible' OR IDFRIGO = :curid) "
+                       "ORDER BY REFERENCE");
+        fQuery.bindValue(":curid", currentFid);
+    } else {
+        fQuery.prepare("SELECT IDFRIGO, REFERENCE, CAPACITE, OCCUPATION "
+                       "FROM FRIGOS "
+                       "WHERE UPPER(TYPE_POISSON) = UPPER(:espece) "
+                       "AND STATUT = 'Disponible' "
+                       "ORDER BY REFERENCE");
+    }
+    fQuery.bindValue(":espece", espece);
+
+    if (fQuery.exec()) {
+        while (fQuery.next()) {
+            QString frigoId  = fQuery.value(0).toString();
+            QString ref      = fQuery.value(1).toString();
+            double  cap      = fQuery.value(2).toDouble();
+            double  occ      = fQuery.value(3).toDouble();
+            
+            // Correction pour le mode édition
+            double oldQte = 0;
+            if (isEdit && pecheData && pecheData->getIdFrigo() == frigoId) {
+                oldQte = pecheData->getQuantiteKg().toDouble();
+            }
+            
+            double  libre    = cap - occ + oldQte;
+            QString label    = QString("%1  (libre : %2 kg)").arg(ref).arg(libre, 0, 'f', 0);
+            fridgeCombo->addItem(label, frigoId);
+        }
+    }
+
+    if (fridgeCombo->count() == 0) {
+        // Aucun frigo compatible — avertir l'utilisateur
+        fridgeCombo->addItem(QString("⚠️ Aucun frigo disponible pour '%1'").arg(espece), "");
+        fridgeCombo->setStyleSheet(
+            fridgeCombo->styleSheet() +
+            " QComboBox { border: 2px solid #E74C3C; background-color: #FDEDEC; color: #E74C3C; }"
+        );
+    } else {
+        // Restaurer la sélection précédente si possible
+        fridgeCombo->setStyleSheet(getInputStyle());
+        int idx = fridgeCombo->findData(currentFrigoId);
+        if (idx >= 0) fridgeCombo->setCurrentIndex(idx);
+    }
+}
+
+void PecheDialog::autoSelectFridge()
+{
+    QString espece = especeCombo->currentText();
+    bool ok;
+    double qteNeeded = quantiteInput->text().toDouble(&ok);
+
+    if (!ok || qteNeeded <= 0) {
+        showError("Veuillez saisir une quantité valide avant l'auto-sélection.");
+        return;
+    }
+
+    // Définition des températures idéales par espèce (Fraîcheur optimale)
+    QMap<QString, double> idealTemps;
+    idealTemps["Sardine"] = -2.0;
+    idealTemps["Thon"]    = -18.0;
+    idealTemps["Crevette"]= -20.0;
+    idealTemps["Merlan"]  = 0.0;
+    idealTemps["Saumon"]  = -4.0;
+    
+    double targetTemp = idealTemps.value(espece, -5.0); // -5 par défaut
+
+    QSqlQuery query;
+    query.prepare("SELECT IDFRIGO, REFERENCE, CAPACITE, OCCUPATION, TEMPERATURE "
+                  "FROM FRIGOS "
+                  "WHERE UPPER(TYPE_POISSON) = UPPER(:type) "
+                  "AND STATUT = 'Disponible'");
+    query.bindValue(":type", espece);
+
+    if (!query.exec()) {
+        showError("Erreur lors de la recherche de stockage.");
+        return;
+    }
+
+    struct FrigoScore {
+        QString id;
+        QString ref;
+        double tempDiff;
+        double freeSpace;
+    };
+
+    QList<FrigoScore> candidates;
+    while (query.next()) {
+        double cap = query.value(2).toDouble();
+        double occ = query.value(3).toDouble();
+        double temp = query.value(4).toDouble();
+        
+        if ((cap - occ) >= qteNeeded) {
+            candidates.append({
+                query.value(0).toString(),
+                query.value(1).toString(),
+                qAbs(temp - targetTemp),
+                cap - occ
+            });
+        }
+    }
+
+    if (candidates.isEmpty()) {
+        showError(QString("Aucun frigo disponible avec assez d'espace (%1 kg) pour '%2'.").arg(qteNeeded).arg(espece));
+        return;
+    }
+
+    // Trier par différence de température (Fraîcheur) puis par espace libre (Capacité)
+    std::sort(candidates.begin(), candidates.end(), [](const FrigoScore& a, const FrigoScore& b) {
+        if (a.tempDiff != b.tempDiff) return a.tempDiff < b.tempDiff;
+        return a.freeSpace > b.freeSpace;
+    });
+
+    FrigoScore best = candidates.first();
+
+    // Sélectionner dans le combo
+    int idx = fridgeCombo->findData(best.id);
+    if (idx >= 0) {
+        fridgeCombo->setCurrentIndex(idx);
+        autoMsgLabel->setText(QString("✨ Auto-sélection : %1 (Optimisé pour %2°C)").arg(best.ref).arg(targetTemp));
+        autoMsgLabel->show();
+        
+        // Petit effet visuel sur le combo
+        fridgeCombo->setStyleSheet(
+            fridgeCombo->styleSheet() + 
+            " QComboBox { border: 2px solid #27AE60; background-color: #EBF5FB; }"
+        );
+        QTimer::singleShot(2000, this, [=](){ 
+            fridgeCombo->setStyleSheet(getInputStyle()); 
+            autoMsgLabel->hide();
+        });
+    }
+}
+
+void PecheDialog::updateAvailableSpaceDisplay()
+{
+    QString fid = fridgeCombo->currentData().toString();
+    if (fid.isEmpty()) {
+        availableSpaceLabel->setText("");
+        return;
+    }
+
+    QSqlQuery q;
+    q.prepare("SELECT CAPACITE, OCCUPATION, REFERENCE FROM FRIGOS WHERE IDFRIGO = :id");
+    q.bindValue(":id", fid);
+    
+    if (q.exec() && q.next()) {
+        double cap = q.value(0).toDouble();
+        double occ = q.value(1).toDouble();
+        QString ref = q.value(2).toString();
+        
+        double oldQte = 0;
+        if (isEdit && pecheData && pecheData->getIdFrigo() == fid) {
+            oldQte = pecheData->getQuantiteKg().toDouble();
+        }
+        
+        double currentTotalOcc = occ - oldQte;
+        double available = cap - currentTotalOcc;
+        
+        bool ok;
+        double inputQte = quantiteInput->text().toDouble(&ok);
+        if (!ok) inputQte = 0;
+        
+        double remainingAfterInput = available - inputQte;
+        
+        QString text = QString("📦 Espace dans %1 : %2 Kg libres").arg(ref).arg(available, 0, 'f', 1);
+        if (inputQte > 0) {
+            if (remainingAfterInput >= 0) {
+                text += QString(" (Reste %1 Kg après ajout)").arg(remainingAfterInput, 0, 'f', 1);
+                availableSpaceLabel->setStyleSheet("color: #27AE60; font-size: 13px; font-weight: 600;");
+            } else {
+                text += QString(" (⚠️ Dépassement de %1 Kg)").arg(qAbs(remainingAfterInput), 0, 'f', 1);
+                availableSpaceLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: 700;");
+            }
+        } else {
+            availableSpaceLabel->setStyleSheet("color: #34495E; font-size: 13px; font-weight: 600;");
+        }
+        
+        availableSpaceLabel->setText(text);
+    }
 }

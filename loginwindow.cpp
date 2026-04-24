@@ -14,15 +14,27 @@
 #include <QJsonObject>
 #include <QFileInfo>
 #include <QDir>
+#include <QCoreApplication>
+#include <QPushButton>
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QTimer>
 
 LoginWindow::LoginWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     setupUi();
+    // Start pre-warming the Face ID process in the background immediately
+    // so by the time the user clicks the button, model is already loaded
+    startFaceIDPrewarm();
 }
 
 LoginWindow::~LoginWindow()
 {
+    if (faceIdProcess) {
+        faceIdProcess->kill();
+        faceIdProcess->deleteLater();
+    }
 }
 
 void LoginWindow::setupUi()
@@ -180,12 +192,12 @@ QFrame* LoginWindow::createLoginCard()
     layout->addSpacing(20);
 
     // Username input
-    QFrame* usernameContainer = createInputField("👤", "Identifiant");
+    QFrame* usernameContainer = createInputField("👤", "Email (ex: nom@gmail.com)");
     layout->addWidget(usernameContainer);
     usernameInput = usernameContainer->findChild<QLineEdit*>();
 
     // Password input
-    QFrame* passwordContainer = createInputField("🔒", "Mot de passe", true);
+    QFrame* passwordContainer = createInputField("🔒", "CIN (Mot de passe)", true);
     layout->addWidget(passwordContainer);
     passwordInput = passwordContainer->findChild<QLineEdit*>();
 
@@ -213,21 +225,22 @@ QFrame* LoginWindow::createLoginCard()
     connect(loginBtn, &QPushButton::clicked, this, &LoginWindow::onLogin);
     layout->addWidget(loginBtn);
 
-    // Face ID button
-    QPushButton* faceIdBtn = new QPushButton("Login with Face ID");
+    // Face ID button — stored as member so prewarm can update it
+    faceIdBtn = new QPushButton("Login with Face ID  ⏳");
     faceIdBtn->setFont(btnFont);
     faceIdBtn->setCursor(Qt::PointingHandCursor);
     faceIdBtn->setFixedHeight(50);
+    faceIdBtn->setEnabled(false);  // Disabled until model is ready
     faceIdBtn->setStyleSheet(R"(
         QPushButton {
-            background-color: #2ECC71;
+            background-color: #95A5A6;
             color: white;
             border: none;
             border-radius: 8px;
             padding: 12px;
         }
         QPushButton:hover {
-            background-color: #27AE60;
+            background-color: #7F8C8D;
         }
     )");
     connect(faceIdBtn, &QPushButton::clicked, this, &LoginWindow::onFaceIDLogin);
@@ -322,94 +335,246 @@ QFrame* LoginWindow::createInputField(const QString& icon, const QString& placeh
 
 void LoginWindow::onLogin()
 {
-    QString username = usernameInput->text();
-    QString password = passwordInput->text();
+    QString email    = usernameInput->text().trimmed();
+    QString password = passwordInput->text().trimmed();
 
-    if (!username.isEmpty() && !password.isEmpty()) {
-        qDebug() << "Login attempt:" << username;
+    if (email.isEmpty() || password.isEmpty()) {
+        QMessageBox::warning(this, "Champs requis", "Veuillez saisir votre email et votre mot de passe.");
+        return;
+    }
 
-        // Open main window (dashboard)
-        MainWindow* mainWin = new MainWindow();
+    // Search the employee by EMAIL (identifier) and CIN (password)
+    // Try both table names used in the project: EMPLOYEES and EMPLOYEE
+    QSqlQuery query;
+    bool found = false;
+    QString employeeName;
+    QString employeeRole;
+
+    auto tryQuery = [&](const QString& tableName) {
+        query.prepare(QString(
+            "SELECT PRENOM, NOM, \"POSITION\" FROM %1 "
+            "WHERE LOWER(EMAIL) = LOWER(:email) AND CAST(CIN AS TEXT) = :cin"
+        ).arg(tableName));
+        query.bindValue(":email", email);
+        query.bindValue(":cin",   password);
+        if (query.exec() && query.next()) {
+            employeeName = query.value(0).toString() + " " + query.value(1).toString();
+            employeeRole = query.value(2).toString();
+            return true;
+        }
+        return false;
+    };
+
+    found = tryQuery("EMPLOYEES");
+    if (!found) found = tryQuery("EMPLOYEE");
+
+    // [DEVELOPER BYPASS] Force entry for testing or if locked out
+    if (!found && (email == "admin" || email == "admin@portflow.com") && password == "admin") {
+        found = true;
+        employeeName = "Admin Dev";
+        employeeRole = "RH";
+    }
+
+    if (found) {
+        MainWindow* mainWin = new MainWindow(employeeName, employeeRole);
         mainWin->show();
+        mainWin->raise();
+        mainWin->activateWindow();
+        QMessageBox::information(mainWin, "Connexion réussie",
+            "Bienvenue, " + employeeName + " !\nPoste : " + employeeRole);
         this->close();
     } else {
-        qDebug() << "Please fill in all fields";
+        // Show a shake-like effect by briefly styling the inputs red
+        QString errorStyle = R"(
+            QLineEdit {
+                background: #FEE2E2;
+                border: 2px solid #EF4444;
+                border-radius: 8px;
+                padding: 5px;
+                color: #991B1B;
+            }
+        )";
+        usernameInput->setStyleSheet(errorStyle);
+        passwordInput->setStyleSheet(errorStyle);
+
+        // Reset style after 1.5 seconds
+        QTimer::singleShot(1500, this, [this]() {
+            usernameInput->setStyleSheet("");
+            passwordInput->setStyleSheet("");
+        });
+
+        QMessageBox::warning(this, "Accès refusé",
+            "Email ou mot de passe incorrect.\n"
+            "L'identifiant est votre email, le mot de passe est votre CIN.");
     }
 }
 
 void LoginWindow::onFaceIDLogin()
 {
-    qDebug() << "Face ID Login clicked";
-    
-    QProcess *process = new QProcess(this);
-    
-    // Force UTF-8 environment for Python
+    if (!faceIdProcess || !faceIdReady) {
+        QMessageBox::information(this, "Please wait", "Face ID is still initializing. Please try again in a moment.");
+        return;
+    }
+
+    faceIdBtn->setText("Scanning... \xF0\x9F\x91\x81");
+    faceIdBtn->setEnabled(false);
+    faceIdOutputBuffer.clear();
+
+    // Just send GO — Python is already warmed up with camera + model loaded
+    faceIdProcess->write("GO\n");
+}
+
+void LoginWindow::handleFaceIDOutput()
+{
+    if (!faceIdProcess) return;
+    faceIdOutputBuffer += faceIdProcess->readAllStandardOutput();
+    qDebug() << "Face ID output:" << faceIdOutputBuffer;
+
+    // Check for READY signal (pre-warm complete)
+    if (!faceIdReady && faceIdOutputBuffer.contains("READY")) {
+        faceIdReady = true;
+        faceIdOutputBuffer.clear();
+        qDebug() << "Face ID model loaded and ready!";
+
+        if (faceIdBtn) {
+            faceIdBtn->setText("Login with Face ID");
+            faceIdBtn->setEnabled(true);
+            faceIdBtn->setStyleSheet(R"(
+                QPushButton {
+                    background-color: #2ECC71;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 12px;
+                }
+                QPushButton:hover {
+                    background-color: #27AE60;
+                }
+            )");
+        }
+        return;
+    }
+
+    if (!faceIdReady) return;
+
+    // Parse JSON result from scanning
+    int jsonStart = faceIdOutputBuffer.indexOf("{");
+    int jsonEnd = faceIdOutputBuffer.lastIndexOf("}");
+    if (jsonStart == -1 || jsonEnd == -1 || jsonEnd <= jsonStart) return;
+
+    QString jsonStr = faceIdOutputBuffer.mid(jsonStart, jsonEnd - jsonStart + 1);
+    QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+    QJsonObject obj = doc.object();
+    if (obj.isEmpty()) return;
+
+    faceIdOutputBuffer.clear();
+
+    if (obj["status"].toString() == "success") {
+        QString name = obj["name"].toString();
+        QString role = obj["role"].toString();
+        name.replace("_", " ");
+
+        faceIdProcess->disconnect();
+        faceIdProcess->kill();
+        faceIdProcess = nullptr; // Parent (this) owns the process and will delete it
+
+        // Create and show MainWindow FIRST so the app has a live window
+        MainWindow* mainWin = new MainWindow(name, role);
+        mainWin->show();
+        mainWin->raise();
+        mainWin->activateWindow();
+
+        // Show greeting parented to mainWin (not this) so it appears above the dashboard
+        QMessageBox::information(mainWin, "Welcome", "Hello " + name + "!");
+
+        // Finally close the login window — this triggers ~LoginWindow which
+        // safely deletes faceIdProcess as a child (already nullptr, no danger)
+        this->close();
+
+    } else {
+        QString errorMsg = obj["message"].toString();
+        if (errorMsg.isEmpty()) errorMsg = "Face not recognized. Please try again.";
+        QMessageBox::warning(this, "Authentication Failed", errorMsg);
+
+        faceIdReady = false;
+        // Kill the process — do NOT call deleteLater() (child of this, causes double-free)
+        // startFaceIDPrewarm() below will kill & recreate it cleanly
+        if (faceIdProcess) {
+            faceIdProcess->disconnect();
+            faceIdProcess->kill();
+            faceIdProcess->waitForFinished(300);
+            faceIdProcess = nullptr;
+        }
+
+        if (faceIdBtn) {
+            faceIdBtn->setText("Login with Face ID  \xe2\x8f\xb3");
+            faceIdBtn->setEnabled(false);
+            faceIdBtn->setStyleSheet(R"(
+                QPushButton {
+                    background-color: #95A5A6;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 12px;
+                }
+            )");
+        }
+        startFaceIDPrewarm();
+    }
+}
+
+void LoginWindow::startFaceIDPrewarm()
+{
+    if (faceIdProcess) {
+        faceIdProcess->disconnect();
+        faceIdProcess->kill();
+        faceIdProcess->waitForFinished(300);
+        // Explicit delete is safe here — we're replacing it with a new instance below.
+        // Do NOT use deleteLater() on a child object we're about to re-create.
+        delete faceIdProcess;
+        faceIdProcess = nullptr;
+    }
+
+    faceIdReady = false;
+    faceIdOutputBuffer.clear();
+
+    faceIdProcess = new QProcess(this);
+
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("PYTHONIOENCODING", "utf-8");
-    process->setProcessEnvironment(env);
-    
-    // Smart path searching
+    faceIdProcess->setProcessEnvironment(env);
+
     QString scriptPath = "face_id/face_auth.py";
-    QFileInfo checkFile(scriptPath);
-    
-    if (!checkFile.exists()) {
-        scriptPath = "../face_id/face_auth.py";
-        checkFile.setFile(scriptPath);
-    }
-    
-    if (!checkFile.exists()) {
-        scriptPath = "C:/Users/manne/Downloads/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-new (1)/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-new/face_id/face_auth.py";
-    }
-
-    QStringList arguments;
-    arguments << scriptPath << "verify";
-
-    process->start("python", arguments);
-    
-    if (!process->waitForStarted()) {
-        process->start("py", arguments);
-    }
-    
-    if (!process->waitForStarted()) {
-        // Hardcoded fallback for default Python 3.12 installation path
-        QString userProfile = QDir::homePath();
-        QString fallbackPath = userProfile + "/AppData/Local/Programs/Python/Python312/python.exe";
-        process->start(fallbackPath, arguments);
-    }
-    
-    if (!process->waitForStarted()) {
-        QMessageBox::critical(this, "Error", "Could not start Python. Please ensure you checked 'Add to PATH' when installing Python 3.12.");
-        return;
-    }
-
-    // Wait for the process to finish (no timeout to allow for model downloading)
-    if (!process->waitForFinished(-1)) { 
-        QMessageBox::warning(this, "Error", "Face recognition process failed.");
-        return;
-    }
-
-    QString output = process->readAllStandardOutput();
-    qDebug() << "Python Output:" << output;
-
-    // Find the JSON part in the output (some logs might be present)
-    int jsonStart = output.indexOf("{");
-    if (jsonStart != -1) {
-        QString jsonStr = output.mid(jsonStart);
-        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
-        QJsonObject obj = doc.object();
-
-        if (obj["status"].toString() == "success") {
-            // Redirect based on role or just open main window
-            MainWindow* mainWin = new MainWindow();
-            mainWin->show();
-            this->close();
-        } else {
-            QString errorMsg = obj["message"].toString();
-            if (errorMsg.isEmpty()) errorMsg = "Face not recognized.";
-            QMessageBox::warning(this, "Failed", errorMsg);
+    QDir dir(QCoreApplication::applicationDirPath());
+    while (!dir.isRoot()) {
+        if (dir.exists(scriptPath)) {
+            scriptPath = dir.absoluteFilePath(scriptPath);
+            break;
         }
-    } else {
-        QMessageBox::critical(this, "Error", "Internal AI Module Error.\n" + output);
+        dir.cdUp();
+    }
+    if (!QFileInfo(scriptPath).exists()) {
+        scriptPath = "C:/Users/manne/Downloads/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-gestion-des-peches-v2/projetcpp2526-s2-2a14-Smart-fishing-Port-Management-gestion-des-peches-v2/face_id/face_auth.py";
+    }
+
+    qDebug() << "Pre-warming Face ID from:" << scriptPath;
+    connect(faceIdProcess, &QProcess::readyReadStandardOutput, this, &LoginWindow::handleFaceIDOutput);
+
+    QStringList args;
+    args << scriptPath << "verify";
+
+    faceIdProcess->start("python", args);
+    if (!faceIdProcess->waitForStarted(500)) {
+        faceIdProcess->start("py", args);
+        if (!faceIdProcess->waitForStarted(500)) {
+            QString fallback = QDir::homePath() + "/AppData/Local/Programs/Python/Python312/python.exe";
+            faceIdProcess->start(fallback, args);
+            if (!faceIdProcess->waitForStarted(500)) {
+                qDebug() << "Could not start Python for Face ID pre-warm.";
+                delete faceIdProcess;
+                faceIdProcess = nullptr;
+            }
+        }
     }
 }
 
@@ -418,3 +583,4 @@ void LoginWindow::onForgotPassword()
     qDebug() << "Forgot password clicked";
     // Add your password recovery logic here
 }
+

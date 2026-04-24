@@ -17,11 +17,12 @@ class Bateau {
     QString idEmploye;
     QString idQuai;
     QString etat;
+    int codeSecret;
     static QString lastError;
 
 public:
     Bateau();
-    Bateau(QString id, QString nom, QString imm, QString cap, QString lon, QString age, QString date, QString idE, QString idQ, QString etatC = "Au port");
+    Bateau(QString id, QString nom, QString imm, QString cap, QString lon, QString age, QString date, QString idE, QString idQ, QString etatC = "Au port", int codeSec = 0);
 
     // Getters
     QString getIdBateau() const { return idBateau; }
@@ -34,6 +35,7 @@ public:
     QString getIdEmploye() const { return idEmploye; }
     QString getIdQuai() const { return idQuai; }
     QString getEtat() const { return etat; }
+    int getCodeSecret() const { return codeSecret; }
 
     // Setters
     void setIdBateau(QString s) { idBateau = s; }
@@ -46,6 +48,7 @@ public:
     void setIdEmploye(QString s) { idEmploye = s; }
     void setIdQuai(QString s) { idQuai = s; }
     void setEtat(QString e) { etat = e; }
+    void setCodeSecret(int c) { codeSecret = c; }
 
     // CRUD Methods (Architecture Modèle-Vue + Sécurité)
     bool ajouter();

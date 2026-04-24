@@ -349,6 +349,22 @@ void BateauDialog::setupUi()
     etatCombo->setStyleSheet(getInputStyle());
     formLayout->addWidget(etatCombo);
 
+    formLayout->addSpacing(10);
+
+    // --- Code Secret ---
+    QLabel* codeLabel = new QLabel("Code Secret (Entier)");
+    codeLabel->setFont(labelFont);
+    codeLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
+    formLayout->addWidget(codeLabel);
+
+    codeSecInput = new QLineEdit();
+    codeSecInput->setPlaceholderText("ex: 1234");
+    codeSecInput->setFont(inputFont);
+    codeSecInput->setFixedHeight(50);
+    codeSecInput->setStyleSheet(getInputStyle());
+    codeSecInput->setValidator(new QIntValidator(0, 999999, this));
+    formLayout->addWidget(codeSecInput);
+
     formLayout->addStretch();
 
     // --- Buttons ---
@@ -480,6 +496,12 @@ bool BateauDialog::validateInputs() {
         return false;
     }
 
+    // 7. Code Secret
+    if(codeSecInput->text().trimmed().isEmpty()){
+        showError("Le code secret est obligatoire (nombre entier).");
+        return false;
+    }
+
     return true;
 }
 
@@ -502,6 +524,8 @@ void BateauDialog::populateFields() {
     if (etatStr == "En mer") etatCombo->setCurrentIndex(1);
     else if (etatStr == "En maintenance") etatCombo->setCurrentIndex(2);
     else etatCombo->setCurrentIndex(0); // Au port (default)
+    
+    codeSecInput->setText(QString::number(bateauData->getCodeSecret()));
 }
 
 Bateau BateauDialog::getData() const {
@@ -515,6 +539,7 @@ Bateau BateauDialog::getData() const {
     b.setIdEmploye(employeeCombo->currentData().toString());
     b.setIdQuai(quaiCombo->currentData().toString());
     b.setEtat(etatCombo->currentText());
+    b.setCodeSecret(codeSecInput->text().toInt());
     return b;
 }
 

@@ -134,6 +134,7 @@ class QuaisWindow : public QMainWindow
 
 public:
     explicit QuaisWindow(QWidget *parent = nullptr);
+    virtual ~QuaisWindow(); // <--- AJOUTÉ
     void loadQuaisFromDatabase();
 private:
     // UI
@@ -171,6 +172,9 @@ private slots:
     void afficherStatistiques();
     void onGenerateContract(int row);
     void onAutoAssignBoat();
+    
+public:
+    static void refreshAll();
 
 private:
     bool assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
@@ -178,6 +182,10 @@ private:
     void ensureAvailabilityTimerForQuai(const Quai& quai);
     int estimateCountdownSeconds(const Quai& quai) const;
     int remainingAvailabilitySeconds(int numero) const;
+    bool assignBoatToQuai(const QVariantMap& bateauInfo, const Quai& quai, int dockingMinutes,
+                          bool moveBoatToPort, QString& errorMessage);
+    void clearBoatAssociationForQuai(int numero);
+    void processPendingDockAssignment(int numero);
     void markQuaiAsAvailable(int numero, bool showNotification = true);
     void showAvailabilityCountdownPopup(int numero);
 
@@ -188,6 +196,7 @@ private slots:
 private:
     QHash<int, QDateTime> quaiAvailabilityDeadlines;
     QTimer* availabilityRefreshTimer = nullptr;
+    static QList<QuaisWindow*> s_instances;
 };
 
 #endif // QUAISWINDOW_H
