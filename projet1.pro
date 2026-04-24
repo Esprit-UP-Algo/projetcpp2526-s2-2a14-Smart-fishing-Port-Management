@@ -39,6 +39,7 @@ SOURCES += main.cpp \
            peche.cpp \
            quai.cpp \
            quaiswindow.cpp \
+           speech.cpp \
            temperaturealert.cpp \
            ortools_optimizer.cpp
 
@@ -75,6 +76,7 @@ HEADERS += mainwindow.h \
            peche.h \
            quai.h \
            quaiswindow.h \
+           speech.h \
            temperaturealert.h \
            ortools_optimizer.h
 
