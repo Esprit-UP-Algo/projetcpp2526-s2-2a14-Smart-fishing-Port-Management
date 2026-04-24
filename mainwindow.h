@@ -39,7 +39,8 @@ private slots:
     void onLogout();
     void onSettingsClicked();
     void onTrayMessageClicked();
-    void handleTemperatureData(); // Slot for Arduino data
+    void handleSerialData(); // Unified slot for Arduino data
+    void processPortAccess(const QString& code);
 
 private:
     void setupUi();

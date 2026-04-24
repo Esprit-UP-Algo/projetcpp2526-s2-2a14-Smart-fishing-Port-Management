@@ -29,3 +29,9 @@ ADD (
     REFERENCE    VARCHAR2(50)
 );
 
+-- Colonne pour le système d'accès Arduino (Code Secret)
+ALTER TABLE BATEAUX
+ADD (
+    CODE_SECRET NUMBER
+);
+

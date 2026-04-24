@@ -57,6 +57,8 @@
 #include "addquaidialog.h"
 #include "Bateauwindow.h"
 
+QList<QuaisWindow*> QuaisWindow::s_instances;
+
 static QString boatDisplayLabel(const QVariantMap& bateauInfo)
 {
     const QString nom = bateauInfo.value("nom").toString();
@@ -925,6 +927,7 @@ private:
 
 QuaisWindow::QuaisWindow(QWidget *parent) : QMainWindow(parent)
 {
+    s_instances.append(this);
     setMinimumSize(1400, 800);
     setWindowTitle("PortFlow - Gestion des Quais");
     setStyleSheet("QMainWindow { background-color: #F0F4F8; }");
@@ -937,6 +940,11 @@ QuaisWindow::QuaisWindow(QWidget *parent) : QMainWindow(parent)
     availabilityRefreshTimer->start();
     loadQuaisFromDatabase();
     populateTable();
+}
+
+QuaisWindow::~QuaisWindow()
+{
+    s_instances.removeAll(this);
 }
 
 void QuaisWindow::setupUI()
@@ -1405,6 +1413,14 @@ void QuaisWindow::setupQuaiTable()
     quaiTable->setColumnWidth(4, 130);
     quaiTable->setColumnWidth(5, 150);
     connect(quaiTable, &QTableWidget::cellClicked, this, &QuaisWindow::onQuaiCellClicked);
+}
+
+void QuaisWindow::refreshAll()
+{
+    for (QuaisWindow* win : s_instances) {
+        win->loadQuaisFromDatabase();
+        win->populateTable();
+    }
 }
 
 void QuaisWindow::loadQuaisFromDatabase()

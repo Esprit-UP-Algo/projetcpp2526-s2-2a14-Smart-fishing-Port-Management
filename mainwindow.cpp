@@ -38,7 +38,7 @@ MainWindow::MainWindow(const QString& userName, const QString& userRole, QWidget
         case(-1): qDebug() << "Arduino not found."; break;
     }
 
-    connect(A.getserial(), &QSerialPort::readyRead, this, &MainWindow::handleTemperatureData);
+    connect(A.getserial(), &QSerialPort::readyRead, this, &MainWindow::handleSerialData);
 }
 
 MainWindow::~MainWindow()
@@ -683,32 +683,115 @@ void MainWindow::onTrayMessageClicked() {
     QMessageBox::information(this, "PortFlow - Détails Maintenance", detail);
 }
 
-void MainWindow::handleTemperatureData()
+void MainWindow::handleSerialData()
 {
     serialBuffer += A.read_from_arduino();
     
-    // Process full messages delimited by newline or semicolon
+    // 1. Process fridge messages (delimited by ;)
     while (serialBuffer.contains(';')) {
         int index = serialBuffer.indexOf(';');
         QByteArray message = serialBuffer.left(index).trimmed();
         serialBuffer.remove(0, index + 1);
         
         QString msgStr = QString::fromLatin1(message);
-        qDebug() << "Arduino Data Received:" << msgStr;
+        qDebug() << "Fridge Data:" << msgStr;
         
-        // Expected format: S1:24.5 or S2:18.2
         QRegularExpression re("(S[12]):(\\d+\\.?\\d*)");
         QRegularExpressionMatch match = re.match(msgStr);
-        
         if (match.hasMatch()) {
             QString sensorIdStr = match.captured(1);
             double temp = match.captured(2).toDouble();
-            int sensorId = (sensorIdStr == "S1") ? 1 : 2;
-            
-            checkFridgeTemperature(sensorId, temp);
+            checkFridgeTemperature((sensorIdStr == "S1") ? 1 : 2, temp);
+        }
+    }
+
+    // 2. Process port access messages (delimited by #)
+    while (serialBuffer.contains('#')) {
+        int index = serialBuffer.indexOf('#');
+        QString code = QString::fromLatin1(serialBuffer.left(index)).trimmed();
+        serialBuffer.remove(0, index + 1);
+        
+        if (!code.isEmpty()) {
+            processPortAccess(code);
         }
     }
 }
+
+void MainWindow::processPortAccess(const QString& code)
+{
+    qDebug() << "--- Accès Port (Simplifié) ---";
+    
+    QSqlQuery bQuery;
+    // On cherche le bateau par son code secret
+    bQuery.prepare("SELECT IDBATEAU, NOMBATEAU, ETAT, IDQUAI FROM BATEAUX WHERE CODE_SECRET = :code");
+    bQuery.bindValue(":code", code.toInt());
+
+    if (!bQuery.exec()) {
+        QMessageBox::critical(this, "Erreur SQL", "Erreur lecture bateau : " + bQuery.lastError().text());
+        return;
+    }
+
+    if (bQuery.next()) {
+        int idBateau = bQuery.value(0).toInt();
+        QString nomBateau = bQuery.value(1).toString();
+        QString etatBateau = bQuery.value(2).toString();
+        QVariant idQuaiActuel = bQuery.value(3);
+        
+        // [SÉCURITÉ] Si le bateau est déjà au port
+        QString cleanEtat = etatBateau.trimmed().simplified();
+        if (cleanEtat.compare("Au port", Qt::CaseInsensitive) == 0) {
+            A.write_to_arduino("R\n");
+            
+            // On laisse 100ms au système pour envoyer le signal avant de bloquer avec la fenêtre
+            QTimer::singleShot(100, this, [this, nomBateau](){
+                QMessageBox::warning(this, "Accès Refusé", "Bateau déjà au port : " + nomBateau);
+            });
+            return; 
+        }
+
+        // CAS 2 : Recherche de quai libre
+        QSqlQuery qQuery;
+        qQuery.prepare("SELECT IDQUAI, NUMERO FROM QUAIS "
+                       "WHERE (UPPER(TRIM(ETAT)) NOT IN ('OCCUPÉ', 'OCCUPE') OR ETAT IS NULL) "
+                       "AND ROWNUM <= 1");
+
+        if (qQuery.exec()) {
+            if (qQuery.next()) {
+                int idQuaiLibre = qQuery.value(0).toInt();
+                int numQuai = qQuery.value(1).toInt();
+
+                // Envoie l'autorisation en priorité
+                A.write_to_arduino("A:" + QByteArray::number(numQuai) + "\n");
+
+                QSqlQuery upB, upQ;
+                upB.prepare("UPDATE BATEAUX SET IDQUAI = :q, ETAT = 'Au port' WHERE IDBATEAU = :id");
+                upB.bindValue(":q", idQuaiLibre);
+                upB.bindValue(":id", idBateau);
+
+                upQ.prepare("UPDATE QUAIS SET ETAT = 'Occupé' WHERE IDQUAI = :id");
+                upQ.bindValue(":id", idQuaiLibre);
+
+                if (upB.exec() && upQ.exec()) {
+                    BateauWindow::refreshAllTables();
+                    QuaisWindow::refreshAll();
+                    QTimer::singleShot(100, this, [this, nomBateau, numQuai](){
+                        QMessageBox::information(this, "Accès Autorisé", nomBateau + " -> Quai " + QString::number(numQuai));
+                    });
+                }
+            } else {
+                A.write_to_arduino("F\n");
+                QMessageBox::warning(this, "Port Complet", "Plus de place disponible.");
+            }
+        }
+    } else {
+        // AUCUN BATEAU TROUVÉ
+        A.write_to_arduino("E\n");
+        QTimer::singleShot(100, this, [this](){
+            QMessageBox::critical(this, "Accès Refusé", "Code secret incorrect.");
+        });
+    }
+}
+
 
 void MainWindow::checkFridgeTemperature(int sensorId, double currentTemp)
 {

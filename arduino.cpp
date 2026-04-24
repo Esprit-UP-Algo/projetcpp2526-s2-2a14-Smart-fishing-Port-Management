@@ -77,6 +77,7 @@ void Arduino::write_to_arduino(QByteArray d)
 {
     if (serial->isWritable()) {
         serial->write(d);
+        serial->flush(); // Force l'envoi immédiat
     } else {
         qDebug() << "Couldn't write to serial!";
     }

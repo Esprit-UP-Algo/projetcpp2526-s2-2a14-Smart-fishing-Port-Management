@@ -134,6 +134,7 @@ class QuaisWindow : public QMainWindow
 
 public:
     explicit QuaisWindow(QWidget *parent = nullptr);
+    virtual ~QuaisWindow(); // <--- AJOUTÉ
     void loadQuaisFromDatabase();
 private:
     // UI
@@ -171,6 +172,9 @@ private slots:
     void afficherStatistiques();
     void onGenerateContract(int row);
     void onAutoAssignBoat();
+    
+public:
+    static void refreshAll();
 
 private:
     bool assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
@@ -192,6 +196,7 @@ private slots:
 private:
     QHash<int, QDateTime> quaiAvailabilityDeadlines;
     QTimer* availabilityRefreshTimer = nullptr;
+    static QList<QuaisWindow*> s_instances;
 };
 
 #endif // QUAISWINDOW_H

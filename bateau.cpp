@@ -8,9 +8,9 @@ QString Bateau::lastError = "";
 
 Bateau::Bateau() : etat("Au port") {}
 
-Bateau::Bateau(QString id, QString nom, QString imm, QString cap, QString lon, QString age, QString date, QString idE, QString idQ, QString etatC)
+Bateau::Bateau(QString id, QString nom, QString imm, QString cap, QString lon, QString age, QString date, QString idE, QString idQ, QString etatC, int codeSec)
     : idBateau(id), nomBateau(nom), immatriculation(imm), capacite(cap), longueur(lon), 
-      ageBateau(age), dateMaintenance(date), idEmploye(idE), idQuai(idQ), etat(etatC) {}
+      ageBateau(age), dateMaintenance(date), idEmploye(idE), idQuai(idQ), etat(etatC), codeSecret(codeSec) {}
 
 bool Bateau::ajouter() {
     // Validation du format (TN-YYYY-NUMERO)
@@ -28,11 +28,11 @@ bool Bateau::ajouter() {
 
     QSqlQuery query;
     if (idQuai.isEmpty()) {
-        query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT) "
-                      "VALUES (:id, :nom, :imm, :cap, :lon, :age, TO_DATE(:date, 'DD/MM/YYYY'), :idE, NULL, :etat)");
+        query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT, CODE_SECRET) "
+                      "VALUES (:id, :nom, :imm, :cap, :lon, :age, TO_DATE(:date, 'DD/MM/YYYY'), :idE, NULL, :etat, :codeSec)");
     } else {
-        query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT) "
-                      "VALUES (:id, :nom, :imm, :cap, :lon, :age, TO_DATE(:date, 'DD/MM/YYYY'), :idE, :idQ, :etat)");
+        query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT, CODE_SECRET) "
+                      "VALUES (:id, :nom, :imm, :cap, :lon, :age, TO_DATE(:date, 'DD/MM/YYYY'), :idE, :idQ, :etat, :codeSec)");
     }
     
     query.bindValue(":id", idBateau.toInt());
@@ -47,6 +47,7 @@ bool Bateau::ajouter() {
         query.bindValue(":idQ", idQuai.toInt());
     }
     query.bindValue(":etat", etat);
+    query.bindValue(":codeSec", codeSecret);
 
     if (query.exec()) return true;
     lastError = query.lastError().text();
@@ -64,7 +65,7 @@ QSqlQueryModel* Bateau::afficher() {
                     "ELSE 'Quai ' || q.NUMERO || ' (' || q.LOCATION || ')' "
                     "END, "
                     "b.ID_EMPLOYE, b.IDQUAI, b.ETAT, "
-                    "TO_CHAR(b.DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY') "
+                    "TO_CHAR(b.DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY'), b.CODE_SECRET "
                     "FROM BATEAUX b "
                     "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "
                     "LEFT JOIN QUAIS q ON b.IDQUAI = q.IDQUAI");
@@ -73,6 +74,13 @@ QSqlQueryModel* Bateau::afficher() {
 
 bool Bateau::supprimer(QString id) {
     QSqlQuery query;
+    
+    // [NOUVEAU] Libérer le quai avant suppression
+    QSqlQuery freeQ;
+    freeQ.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE IDQUAI = (SELECT IDQUAI FROM BATEAUX WHERE IDBATEAU = :id)");
+    freeQ.bindValue(":id", id.toInt());
+    freeQ.exec();
+
     query.prepare("DELETE FROM BATEAUX WHERE IDBATEAU = :id");
     query.bindValue(":id", id);
     if (query.exec()) return true;
@@ -110,14 +118,25 @@ bool Bateau::modifier(QString id) {
         incQuery.exec();
     }
 
+    // [NOUVEAU] Libérer le quai si le bateau n'est plus au port
+    if (etat.trimmed().compare("Au port", Qt::CaseInsensitive) != 0) {
+        QSqlQuery freeQ;
+        freeQ.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE IDQUAI = (SELECT IDQUAI FROM BATEAUX WHERE IDBATEAU = :id)");
+        freeQ.bindValue(":id", id.toInt());
+        freeQ.exec();
+        
+        // On force IDQUAI à NULL dans l'objet pour la requête SQL suivante
+        idQuai = ""; 
+    }
+
     QSqlQuery query;
-    if (idQuai.isEmpty()) {
+    if (idQuai.isEmpty() || idQuai == "0") {
         query.prepare("UPDATE BATEAUX SET NOMBATEAU=:nom, IMMATRICULATION=:imm, CAPACITE=:cap, LONGEUR=:lon, "
-                      "AGE_BATEAU=:age, DATE_DERNIERE_MAINTENANCE=TO_DATE(:date, 'DD/MM/YYYY'), ID_EMPLOYE=:idE, IDQUAI=NULL, ETAT=:etat "
+                      "AGE_BATEAU=:age, DATE_DERNIERE_MAINTENANCE=TO_DATE(:date, 'DD/MM/YYYY'), ID_EMPLOYE=:idE, IDQUAI=NULL, ETAT=:etat, CODE_SECRET=:codeSec "
                       "WHERE IDBATEAU=:id");
     } else {
         query.prepare("UPDATE BATEAUX SET NOMBATEAU=:nom, IMMATRICULATION=:imm, CAPACITE=:cap, LONGEUR=:lon, "
-                      "AGE_BATEAU=:age, DATE_DERNIERE_MAINTENANCE=TO_DATE(:date, 'DD/MM/YYYY'), ID_EMPLOYE=:idE, IDQUAI=:idQ, ETAT=:etat "
+                      "AGE_BATEAU=:age, DATE_DERNIERE_MAINTENANCE=TO_DATE(:date, 'DD/MM/YYYY'), ID_EMPLOYE=:idE, IDQUAI=:idQ, ETAT=:etat, CODE_SECRET=:codeSec "
                       "WHERE IDBATEAU=:id");
     }
     
@@ -132,6 +151,7 @@ bool Bateau::modifier(QString id) {
         query.bindValue(":idQ", idQuai.toInt());
     }
     query.bindValue(":etat", etat);
+    query.bindValue(":codeSec", codeSecret);
     query.bindValue(":id", id.toInt());
 
     if (query.exec()) return true;
@@ -155,7 +175,7 @@ QSqlQueryModel* Bateau::trier(QString critere, QString ordre) {
                                   "ELSE 'Quai ' || q.NUMERO || ' (' || q.LOCATION || ')' "
                                   "END, "
                                   "b.ID_EMPLOYE, b.IDQUAI, b.ETAT, "
-                                  "TO_CHAR(b.DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY') "
+                                  "TO_CHAR(b.DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY'), b.CODE_SECRET "
                                   "FROM BATEAUX b "
                                   "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "
                                   "LEFT JOIN QUAIS q ON b.IDQUAI = q.IDQUAI "
@@ -176,7 +196,7 @@ QSqlQueryModel* Bateau::rechercher(QString val) {
                   "ELSE 'Quai ' || q.NUMERO || ' (' || q.LOCATION || ')' "
                   "END, "
                   "b.ID_EMPLOYE, b.IDQUAI, b.ETAT, "
-                  "TO_CHAR(b.DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY') "
+                  "TO_CHAR(b.DATE_PROCHAINE_MAINTENANCE, 'DD/MM/YYYY'), b.CODE_SECRET "
                   "FROM BATEAUX b "
                   "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "
                   "LEFT JOIN QUAIS q ON b.IDQUAI = q.IDQUAI "
