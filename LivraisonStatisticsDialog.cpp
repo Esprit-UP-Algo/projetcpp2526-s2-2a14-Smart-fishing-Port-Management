@@ -30,6 +30,10 @@ void LivraisonStatisticsDialog::setupUi()
     int totalLiv = 0;
     for(int v : m_statusData.values()) totalLiv += v;
 
+    int cancelled = m_statusData.value("Annulé", 0) + m_statusData.value("Canceled", 0);
+    int delivered = m_statusData.value("Livré", 0) + m_statusData.value("Arrivé", 0);
+    double deliveryRate = (totalLiv > 0) ? (100.0 * delivered / totalLiv) : 0.0;
+
     double overallAvg = 0;
     if(!m_avgTimeData.isEmpty()){
         for(double t : m_avgTimeData.values()) overallAvg += t;
@@ -37,8 +41,9 @@ void LivraisonStatisticsDialog::setupUi()
     }
 
     cardsLayout->addWidget(createStatCard("Total Livraisons", QString::number(totalLiv), "#2563EB"));
-    cardsLayout->addWidget(createStatCard("Délai Moyen", QString::number(overallAvg, 'f', 1) + "h", "#059669"));
-    cardsLayout->addWidget(createStatCard("Taux Livraison", "98.2%", "#D97706"));
+    cardsLayout->addWidget(createStatCard("Taux Réussite", QString::number(deliveryRate, 'f', 1) + "%", "#059669"));
+    cardsLayout->addWidget(createStatCard("Annulations", QString::number(cancelled), "#DC2626"));
+    cardsLayout->addWidget(createStatCard("Délai Moyen", QString::number(overallAvg, 'f', 1) + "h", "#D97706"));
     mainLayout->addLayout(cardsLayout);
 
     // Middle Row: Charts
@@ -92,6 +97,7 @@ QChartView* LivraisonStatisticsDialog::createStatusPieChart()
     double total = 0;
     for(int v : m_statusData.values()) total += v;
 
+    series->setPieSize(0.45); // Encore plus petit pour une meilleure visibilité des pourcentages
     for (auto it = m_statusData.begin(); it != m_statusData.end(); ++it) {
         QPieSlice *slice = series->append(it.key(), it.value());
         if (total > 0)

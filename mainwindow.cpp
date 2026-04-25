@@ -8,6 +8,7 @@
 #include <QSqlRecord>
 #include "pechewindow.h"
 #include "loginwindow.h"
+#include <QApplication>
 #include <QFont>
 #include <QPixmap>
 #include <QDebug>
@@ -168,9 +169,20 @@ QFrame* MainWindow::createSidebar()
     connect(employeesBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToEmployees);
     navLayout->addWidget(employeesBtn);
 
+    QHBoxLayout* frigoRow = new QHBoxLayout();
     frigosBtn = createNavButton("🧊", "Frigos");
+    frigoNotifyLabel1 = new QLabel("1️⃣🚨");
+    frigoNotifyLabel2 = new QLabel("2️⃣🚨");
+    QString notifyStyle = "font-size: 14px; background: transparent; color: #EF4444; font-weight: bold;";
+    frigoNotifyLabel1->setStyleSheet(notifyStyle);
+    frigoNotifyLabel2->setStyleSheet(notifyStyle);
+    frigoNotifyLabel1->hide();
+    frigoNotifyLabel2->hide();
     connect(frigosBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToFrigos);
-    navLayout->addWidget(frigosBtn);
+    frigoRow->addWidget(frigosBtn, 1);
+    frigoRow->addWidget(frigoNotifyLabel1);
+    frigoRow->addWidget(frigoNotifyLabel2);
+    navLayout->addLayout(frigoRow);
 
     livraisonBtn = createNavButton("🚚", "Livraison");
     connect(livraisonBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToLivraison);
@@ -396,6 +408,12 @@ void MainWindow::onNavigateToFrigos()
         translateRecursive(frigoPage, isEnglish);
         switchPage(stackedWidget->indexOf(frigoPage));
     }
+}
+
+void MainWindow::updateFrigoNotifications()
+{
+    if (frigoNotifyLabel1) frigoNotifyLabel1->setVisible(currentlyInDanger.contains("FRG-001"));
+    if (frigoNotifyLabel2) frigoNotifyLabel2->setVisible(currentlyInDanger.contains("FRG-002"));
 }
 
 void MainWindow::onNavigateToPeches()
@@ -799,28 +817,53 @@ void MainWindow::checkFridgeTemperature(int sensorId, double currentTemp)
     QString fridgeRef = (sensorId == 1) ? "FRG-001" : "FRG-002";
     
     QSqlQuery query;
-    query.prepare("SELECT TEMPERATURE FROM FRIGOS WHERE REFERENCE = :ref");
+    query.prepare("SELECT TEMPERATURE FROM FRIGOS WHERE TRIM(REFERENCE) = :ref");
     query.bindValue(":ref", fridgeRef);
     
     if (query.exec() && query.next()) {
         double threshold = query.value(0).toDouble();
         
-        // User logic: "if the temperature goes below the required temperature"
-        if (currentTemp < threshold) {
-            static QSet<QString> activeAlerts; // Prevent spamming alerts
-            if (!activeAlerts.contains(fridgeRef)) {
-                activeAlerts.insert(fridgeRef);
+        // Alert if temperature is TOO HOT (exceeds safe threshold for fish storage)
+        if (currentTemp > threshold) {
+            currentlyInDanger.insert(fridgeRef);
+            updateFrigoNotifications();
+            
+            // Send danger signal to Arduino OLED
+            if (fridgeRef == "FRG-001") A.write_to_arduino("D1\n");
+            else if (fridgeRef == "FRG-002") A.write_to_arduino("D2\n");
+
+            static QMap<QString, QDateTime> lastAlertTimes;
+            QDateTime now = QDateTime::currentDateTime();
+            
+            qDebug() << "Fridge" << fridgeRef << "Current:" << currentTemp << "Threshold:" << threshold;
+
+            // Re-alert only if 30 seconds have passed since the last alert for this specific fridge
+            if (!lastAlertTimes.contains(fridgeRef) || lastAlertTimes[fridgeRef].secsTo(now) > 30) {
+                // If a modal dialog is open (like a deletion confirmation), skip the pop-up to prevent freezes.
+                // The sidebar 🚨 will still be visible.
+                if (QApplication::activeModalWidget()) {
+                    qDebug() << "Modal active. Skipping pop-up alert for" << fridgeRef;
+                    return; 
+                }
+
+                lastAlertTimes[fridgeRef] = now;
                 
-                TemperatureAlert* alert = new TemperatureAlert(fridgeRef, threshold, currentTemp, this);
-                connect(alert, &QDialog::finished, [fridgeRef]() {
-                    // Allow alert to reappear after closing if condition persists (maybe with a delay)
-                    // For now, we clear it so it can trigger again next time
-                    QTimer::singleShot(10000, [fridgeRef]() {
-                         // ActiveAlerts is static so this is tricky, let's keep it simple for now
-                    });
+                // Use a single shot timer to move creation out of the serial interrupt logic
+                QTimer::singleShot(0, this, [this, fridgeRef, threshold, currentTemp]() {
+                    TemperatureAlert* alert = new TemperatureAlert(fridgeRef, threshold, currentTemp, nullptr);
+                    connect(alert, &TemperatureAlert::requestNavigation, this, &MainWindow::onNavigateToFrigos, Qt::QueuedConnection);
+                    alert->show();
+                    qDebug() << "DANGER: Fridge" << fridgeRef << "is TOO HOT!" << currentTemp << ">" << threshold;
                 });
-                alert->show();
-                qDebug() << "ALERT: Fridge" << fridgeRef << "is too cold!" << currentTemp << "<" << threshold;
+            }
+        } else {
+            // Temperature is back to normal for this specific fridge
+            currentlyInDanger.remove(fridgeRef);
+            updateFrigoNotifications();
+            
+            // If all fridges are safe, tell Arduino to go back to normal mode
+            if (currentlyInDanger.isEmpty()) {
+                A.write_to_arduino("OK\n");
             }
         }
     } else {

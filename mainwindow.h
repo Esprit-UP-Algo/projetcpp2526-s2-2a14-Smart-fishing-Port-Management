@@ -81,10 +81,13 @@ private:
     Arduino A;
     QByteArray serialBuffer;
     void checkFridgeTemperature(int sensorId, double currentTemp);
+    void updateFrigoNotifications();
+    QLabel* frigoNotifyLabel1;
+    QLabel* frigoNotifyLabel2;
+    QSet<QString> currentlyInDanger;
     QString loggedUserName;
     QString loggedUserRole;
     QLabel* welcomeLabel;
-
 };
 
 #endif // MAINWINDOW_H

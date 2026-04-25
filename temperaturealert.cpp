@@ -6,7 +6,7 @@
 #include <QScreen>
 
 TemperatureAlert::TemperatureAlert(const QString& fridgeRef, double threshold, double current, QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
 {
     setupUi(fridgeRef, threshold, current);
     
@@ -24,19 +24,21 @@ TemperatureAlert::~TemperatureAlert() {}
 
 void TemperatureAlert::setupUi(const QString& ref, double threshold, double current)
 {
-    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    setWindowModality(Qt::NonModal);
     setAttribute(Qt::WA_TranslucentBackground);
-    setFixedSize(450, 420);
+    setAttribute(Qt::WA_DeleteOnClose);
+    setFixedSize(500, 560);
 
     // Main Card
     QFrame* card = new QFrame(this);
     card->setObjectName("MainCard");
-    card->setFixedSize(450, 420);
+    card->setFixedSize(500, 560);
     card->setStyleSheet(R"(
         #MainCard {
             background-color: #1E293B;
-            border-radius: 24px;
-            border: 1px solid #334155;
+            border-radius: 28px;
+            border: 2px solid #334155;
         }
     )");
 
@@ -61,32 +63,35 @@ void TemperatureAlert::setupUi(const QString& ref, double threshold, double curr
     // Title
     titleLabel = new QLabel("ALERTE TEMPÉRATURE");
     titleLabel->setAlignment(Qt::AlignCenter);
-    titleLabel->setFont(QFont("Segoe UI", 18, QFont::Bold));
-    titleLabel->setStyleSheet("color: #EF4444; letter-spacing: 2px;");
+    titleLabel->setFont(QFont("Segoe UI", 20, QFont::Bold));
+    titleLabel->setStyleSheet("color: #F87171; letter-spacing: 3px;");
     layout->addWidget(titleLabel);
 
     // Message
-    messageLabel = new QLabel(QString("Le frigo <b>%1</b> présente une anomalie de température.").arg(ref));
+    messageLabel = new QLabel(QString("🚨 <b>DANGER IMMÉDIAT</b> 🚨<br>Le frigo <b>%1</b> a dépassé sa température de sécurité !").arg(ref));
     messageLabel->setAlignment(Qt::AlignCenter);
     messageLabel->setWordWrap(true);
-    messageLabel->setFont(QFont("Segoe UI", 12));
-    messageLabel->setStyleSheet("color: #94A3B8;");
+    messageLabel->setFont(QFont("Segoe UI", 13));
+    messageLabel->setStyleSheet("color: #FDA4AF; line-height: 1.5; margin-bottom: 5px;");
     layout->addWidget(messageLabel);
 
     // Temp comparison
     QFrame* dataBox = new QFrame();
-    dataBox->setStyleSheet("background-color: #0F172A; border-radius: 16px; border: 1px solid #1E293B;");
+    dataBox->setStyleSheet("background-color: #0F172A; border-radius: 20px; border: 1px solid #334155;");
+    dataBox->setMinimumHeight(120); // Ensure enough height
     QHBoxLayout* dataLayout = new QHBoxLayout(dataBox);
-    dataLayout->setContentsMargins(20, 20, 20, 20);
+    dataLayout->setContentsMargins(25, 20, 25, 20);
+    dataLayout->setSpacing(15);
 
     auto createTempBox = [this](const QString& label, double val, const QString& color) {
         QVBoxLayout* v = new QVBoxLayout();
+        v->setSpacing(8);
         QLabel* l = new QLabel(label);
-        l->setStyleSheet("color: #64748B; font-weight: bold; font-size: 10pt;");
+        l->setStyleSheet("color: #94A3B8; font-weight: bold; font-size: 11pt; text-transform: uppercase;");
         l->setAlignment(Qt::AlignCenter);
         
         QLabel* vL = new QLabel(QString::number(val, 'f', 1) + " °C");
-        vL->setStyleSheet(QString("color: %1; font-size: 22pt; font-weight: 800;").arg(color));
+        vL->setStyleSheet(QString("color: %1; font-size: 26pt; font-weight: 900;").arg(color));
         vL->setAlignment(Qt::AlignCenter);
         
         v->addWidget(l);
@@ -98,8 +103,8 @@ void TemperatureAlert::setupUi(const QString& ref, double threshold, double curr
     
     // Vertical separator
     QFrame* sep = new QFrame();
-    sep->setFixedWidth(1);
-    sep->setStyleSheet("background-color: #1E293B;");
+    sep->setFixedWidth(2);
+    sep->setStyleSheet("background-color: #334155;");
     dataLayout->addWidget(sep);
     
     dataLayout->addLayout(createTempBox("SEUIL", threshold, "#38BDF8"));
@@ -120,7 +125,10 @@ void TemperatureAlert::setupUi(const QString& ref, double threshold, double curr
         }
         QPushButton:hover { background-color: #DC2626; }
     )");
-    connect(checkBtn, &QPushButton::clicked, this, &QDialog::accept);
+    connect(checkBtn, &QPushButton::clicked, this, [this]() {
+        emit requestNavigation();
+        close();
+    });
 
     QPushButton* dismissBtn = new QPushButton("Ignorer");
     dismissBtn->setFixedHeight(50);
@@ -131,7 +139,7 @@ void TemperatureAlert::setupUi(const QString& ref, double threshold, double curr
         }
         QPushButton:hover { background-color: #334155; color: white; }
     )");
-    connect(dismissBtn, &QPushButton::clicked, this, &QDialog::reject);
+    connect(dismissBtn, &QPushButton::clicked, this, &QWidget::close);
 
     btnLayout->addWidget(dismissBtn, 1);
     btnLayout->addWidget(checkBtn, 2);
