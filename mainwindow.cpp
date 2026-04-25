@@ -708,9 +708,15 @@ void MainWindow::handleSerialData()
     // 2. Process port access messages (delimited by #)
     while (serialBuffer.contains('#')) {
         int index = serialBuffer.indexOf('#');
-        QString code = QString::fromLatin1(serialBuffer.left(index)).trimmed();
+        QString rawCode = QString::fromLatin1(serialBuffer.left(index));
         serialBuffer.remove(0, index + 1);
         
+        // Nettoyage strict : on ne garde que les chiffres
+        QString code = "";
+        for(char c : rawCode.toStdString()) {
+            if(isdigit(c)) code += c;
+        }
+
         if (!code.isEmpty()) {
             processPortAccess(code);
         }
@@ -719,14 +725,24 @@ void MainWindow::handleSerialData()
 
 void MainWindow::processPortAccess(const QString& code)
 {
-    qDebug() << "--- Accès Port (Simplifié) ---";
+    qDebug() << "--- Tentative Accès Port ---";
+    qDebug() << "Code reçu (nettoyé):" << code;
+    
+    bool ok;
+    int codeInt = code.toInt(&ok);
+    if (!ok) {
+        qDebug() << "Erreur: Le code n'est pas un nombre valide.";
+        A.write_to_arduino("E\n");
+        return;
+    }
     
     QSqlQuery bQuery;
     // On cherche le bateau par son code secret
     bQuery.prepare("SELECT IDBATEAU, NOMBATEAU, ETAT, IDQUAI FROM BATEAUX WHERE CODE_SECRET = :code");
-    bQuery.bindValue(":code", code.toInt());
+    bQuery.bindValue(":code", codeInt);
 
     if (!bQuery.exec()) {
+        qDebug() << "Erreur SQL recherche bateau:" << bQuery.lastError().text();
         QMessageBox::critical(this, "Erreur SQL", "Erreur lecture bateau : " + bQuery.lastError().text());
         return;
     }
@@ -735,14 +751,15 @@ void MainWindow::processPortAccess(const QString& code)
         int idBateau = bQuery.value(0).toInt();
         QString nomBateau = bQuery.value(1).toString();
         QString etatBateau = bQuery.value(2).toString();
-        QVariant idQuaiActuel = bQuery.value(3);
+        
+        qDebug() << "Bateau trouvé:" << nomBateau << "(ID:" << idBateau << ")";
         
         // [SÉCURITÉ] Si le bateau est déjà au port
         QString cleanEtat = etatBateau.trimmed().simplified();
         if (cleanEtat.compare("Au port", Qt::CaseInsensitive) == 0) {
-            A.write_to_arduino("R\n");
+            qDebug() << "Refus: Bateau déjà au port.";
+            A.write_to_arduino("R"); // Signal 'R' (Arduino)
             
-            // On laisse 100ms au système pour envoyer le signal avant de bloquer avec la fenêtre
             QTimer::singleShot(100, this, [this, nomBateau](){
                 QMessageBox::warning(this, "Accès Refusé", "Bateau déjà au port : " + nomBateau);
             });
@@ -760,8 +777,10 @@ void MainWindow::processPortAccess(const QString& code)
                 int idQuaiLibre = qQuery.value(0).toInt();
                 int numQuai = qQuery.value(1).toInt();
 
-                // Envoie l'autorisation en priorité
-                A.write_to_arduino("A:" + QByteArray::number(numQuai) + "\n");
+                qDebug() << "Quai libre trouvé:" << numQuai;
+
+                // Envoie l'autorisation : juste le chiffre pour simplifier la lecture Arduino
+                A.write_to_arduino(QByteArray::number(numQuai));
 
                 QSqlQuery upB, upQ;
                 upB.prepare("UPDATE BATEAUX SET IDQUAI = :q, ETAT = 'Au port' WHERE IDBATEAU = :id");
@@ -779,13 +798,15 @@ void MainWindow::processPortAccess(const QString& code)
                     });
                 }
             } else {
-                A.write_to_arduino("F\n");
+                qDebug() << "Refus: Port complet.";
+                A.write_to_arduino("F");
                 QMessageBox::warning(this, "Port Complet", "Plus de place disponible.");
             }
         }
     } else {
         // AUCUN BATEAU TROUVÉ
-        A.write_to_arduino("E\n");
+        qDebug() << "Refus: Aucun bateau trouvé avec le code" << codeInt;
+        A.write_to_arduino("E");
         QTimer::singleShot(100, this, [this](){
             QMessageBox::critical(this, "Accès Refusé", "Code secret incorrect.");
         });
