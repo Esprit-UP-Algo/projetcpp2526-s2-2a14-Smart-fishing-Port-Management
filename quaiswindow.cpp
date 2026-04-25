@@ -2592,7 +2592,7 @@ void QuaisWindow::onAutoAssignBoat()
     Quai quaiChoisi;
     int tempsEstime = 0;
     QString explication;
-    if (!assignerQuaiAutomatiquement(bateau, quaiChoisi, tempsEstime, explication)) {
+    if (!assignerQuaiAvecORTools(bateau, quaiChoisi, tempsEstime, explication)) {
         showWarning("Aucun quai compatible", explication);
         return;
     }
