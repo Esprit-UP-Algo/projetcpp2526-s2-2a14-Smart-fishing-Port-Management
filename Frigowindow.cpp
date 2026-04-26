@@ -16,6 +16,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include "FrigoStatisticsDialog.h"
+#include "arduino.h"
 #include "StorageAlert.h"
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
@@ -607,6 +608,7 @@ void FrigoWindow::populateTable(const QString& filterText)
                 // Trigger a design alert (only for the first one found to avoid spamming)
                 if (!sessionAlertShown) {
                     StorageAlert* alert = new StorageAlert(model->record(i).value(1).toString(), fishType, daysStored, this);
+                    Arduino::triggerSoundEvent(Arduino::SoundEvent::Error);
                     alert->show();
                     sessionAlertShown = true;
                 }

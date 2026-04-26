@@ -676,6 +676,7 @@ void MainWindow::checkMaintenanceAlerts() {
         
         QString message = "Les bateaux suivants nécessitent une maintenance :\n" + boatNames.join("\n");
         trayIcon->showMessage("Alerte Maintenance", message, QSystemTrayIcon::Warning, 15000);
+        A.write_to_arduino("E");
     }
 }
 
@@ -739,7 +740,8 @@ void MainWindow::processPortAccess(const QString& code)
     int codeInt = code.toInt(&ok);
     if (!ok) {
         qDebug() << "Erreur: Le code n'est pas un nombre valide.";
-        A.write_to_arduino("E\n");
+        A.write_to_arduino("C");
+        A.write_to_arduino("E");
         return;
     }
     
@@ -766,6 +768,7 @@ void MainWindow::processPortAccess(const QString& code)
         if (cleanEtat.compare("Au port", Qt::CaseInsensitive) == 0) {
             qDebug() << "Refus: Bateau déjà au port.";
             A.write_to_arduino("R"); // Signal 'R' (Arduino)
+            A.write_to_arduino("E");
             
             QTimer::singleShot(100, this, [this, nomBateau](){
                 QMessageBox::warning(this, "Accès Refusé", "Bateau déjà au port : " + nomBateau);
@@ -787,7 +790,9 @@ void MainWindow::processPortAccess(const QString& code)
                 qDebug() << "Quai libre trouvé:" << numQuai;
 
                 // Envoie l'autorisation : juste le chiffre pour simplifier la lecture Arduino
+                A.write_to_arduino("A");
                 A.write_to_arduino(QByteArray::number(numQuai));
+                A.write_to_arduino("S");
 
                 QSqlQuery upB, upQ;
                 upB.prepare("UPDATE BATEAUX SET IDQUAI = :q, ETAT = 'Au port' WHERE IDBATEAU = :id");
@@ -807,12 +812,14 @@ void MainWindow::processPortAccess(const QString& code)
             } else {
                 qDebug() << "Refus: Port complet.";
                 A.write_to_arduino("F");
+                A.write_to_arduino("E");
                 QMessageBox::warning(this, "Port Complet", "Plus de place disponible.");
             }
         }
     } else {
         // AUCUN BATEAU TROUVÉ
         qDebug() << "Refus: Aucun bateau trouvé avec le code" << codeInt;
+        A.write_to_arduino("C");
         A.write_to_arduino("E");
         QTimer::singleShot(100, this, [this](){
             QMessageBox::critical(this, "Accès Refusé", "Code secret incorrect.");
@@ -847,6 +854,7 @@ void MainWindow::checkFridgeTemperature(int sensorId, double currentTemp)
                          // ActiveAlerts is static so this is tricky, let's keep it simple for now
                     });
                 });
+                A.write_to_arduino("E");
                 alert->show();
                 qDebug() << "ALERT: Fridge" << fridgeRef << "is too cold!" << currentTemp << "<" << threshold;
             }

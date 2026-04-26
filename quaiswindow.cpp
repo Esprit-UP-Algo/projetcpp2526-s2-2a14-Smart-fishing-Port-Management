@@ -1,4 +1,5 @@
 #include "quaiswindow.h"
+#include "arduino.h"
 #include <algorithm>
 #include <limits>
 #include <QVBoxLayout>
@@ -1774,6 +1775,9 @@ bool QuaisWindow::assignBoatToQuai(const QVariantMap& bateauInfo, const Quai& qu
         return false;
     }
 
+    if (moveBoatToPort)
+        Arduino::triggerSoundEvent(Arduino::SoundEvent::Arrival);
+
     const QDateTime sessionStart = QDateTime::currentDateTime();
     const QDateTime deadline = sessionStart.addSecs(std::max(1, dockingMinutes) * 60);
     quaiAvailabilityDeadlines.insert(quai.getNumero(), deadline);
@@ -1935,6 +1939,7 @@ void QuaisWindow::markQuaiAsAvailable(int numero, bool showNotification)
     if (!boatId.isEmpty()) {
         clearManualDockingDuration(boatId);
         speakBoat(boatName);
+        Arduino::triggerSoundEvent(Arduino::SoundEvent::Departure);
     }
 
     const QDateTime sessionStart = loadPersistedSessionStart(numero);

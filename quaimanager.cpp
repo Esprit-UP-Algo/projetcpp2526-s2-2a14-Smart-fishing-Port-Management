@@ -1,6 +1,7 @@
 #include "quaimanager.h"
 
 #include "Bateauwindow.h"
+#include "arduino.h"
 #include "quaiswindow.h"
 #include "speech.h"
 
@@ -255,6 +256,7 @@ void QuaiManager::markBoatAsAtSea(TrackedBoatEntry& entry)
     entry.boat.setIdQuai("");
     clearManualDockingDuration(entry.boat.getIdBateau());
     speakBoat(entry.boat.getNomBateau());
+    Arduino::triggerSoundEvent(Arduino::SoundEvent::Departure);
     BateauWindow::refreshAllTables();
     QuaisWindow::refreshAll();
 

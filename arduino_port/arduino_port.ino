@@ -25,10 +25,105 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 String inputCode = "";
 const int buzzerPin = 11;
 
-void triggerSingleBeep() {
-  tone(buzzerPin, 2200, 180);
+void showReadyMessage();
+
+void boatArrival() {
+  tone(buzzerPin, 500);
+  delay(150);
+  tone(buzzerPin, 800);
+  delay(150);
+  tone(buzzerPin, 1100);
   delay(200);
   noTone(buzzerPin);
+}
+
+void boatDeparture() {
+  tone(buzzerPin, 1100);
+  delay(150);
+  tone(buzzerPin, 800);
+  delay(150);
+  tone(buzzerPin, 500);
+  delay(200);
+  noTone(buzzerPin);
+}
+
+void dockingSuccess() {
+  tone(buzzerPin, 700);
+  delay(120);
+  tone(buzzerPin, 1000);
+  delay(180);
+  noTone(buzzerPin);
+}
+
+void errorAlert() {
+  for (int i = 0; i < 3; i++) {
+    tone(buzzerPin, 2000);
+    delay(100);
+    noTone(buzzerPin);
+    delay(80);
+  }
+}
+
+void playSoundCommand(char command) {
+  if (command == 'A') {
+    boatArrival();
+  } else if (command == 'L') {
+    boatDeparture();
+  } else if (command == 'S' || command == 'B') {
+    dockingSuccess();
+  } else if (command == 'E') {
+    errorAlert();
+  }
+}
+
+void showResponseMessage(char response) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+
+  if (response >= '1' && response <= '9') {
+    lcd.print("ACCES ACCEPTE");
+    lcd.setCursor(0, 1);
+    lcd.print("QUAI No: ");
+    lcd.print(response);
+  } else if (response == 'F') {
+    lcd.print("PORT COMPLET");
+    lcd.setCursor(0, 1);
+    lcd.print("Pas de place");
+  } else if (response == 'C') {
+    lcd.print("CODE INCORRECT");
+    lcd.setCursor(0, 1);
+    lcd.print("Acces Refuse");
+  } else if (response == 'R') {
+    lcd.print("DEJA AU PORT");
+    lcd.setCursor(0, 1);
+    lcd.print("Acces Refuse");
+  } else {
+    return;
+  }
+
+  delay(2500);
+  inputCode = "";
+  showReadyMessage();
+}
+
+void handleSerialCommand(char command) {
+  if (command == '\n' || command == '\r') {
+    return;
+  }
+
+  if (command == 'A' || command == 'L' || command == 'S' || command == 'B' || command == 'E') {
+    playSoundCommand(command);
+    return;
+  }
+
+  if (command == 'F' || command == 'C' || command == 'R') {
+    showResponseMessage(command);
+    return;
+  }
+
+  if (command >= '1' && command <= '9') {
+    showResponseMessage(command);
+  }
 }
 
 void setup() {
@@ -53,24 +148,21 @@ void loop() {
     if (key == '*') { // RESET
       inputCode = "";
       showReadyMessage();
-    } 
-    else if (key != '#') { // SAISIE (Limité à 4 chiffres)
+    } else if (key != '#') {
       if (inputCode.length() < 4) {
         inputCode += key;
-        // Affiche le code sur la 2ème ligne
         lcd.setCursor(inputCode.length() - 1, 1);
         lcd.print(key);
 
-        // ENVOI AUTOMATIQUE quand on atteint 4 chiffres
         if (inputCode.length() == 4) {
-          delay(200); // Petit délai pour voir le dernier chiffre
+          delay(200);
           Serial.print(inputCode);
-          Serial.print("#"); // Garde le délimiteur pour Qt
-          
+          Serial.print("#");
+
           lcd.clear();
           lcd.setCursor(0, 0);
           lcd.print("Verification...");
-          inputCode = ""; 
+          inputCode = "";
         }
       }
     }
@@ -78,43 +170,7 @@ void loop() {
 
   // 2. Handle Response from Qt
   if (Serial.available() > 0) {
-    char response = Serial.read();
-    
-    // Ignore les sauts de ligne
-    if (response == '\n' || response == '\r') return;
-    if (response == 'B') {
-      triggerSingleBeep();
-      return;
-    }
-
-    lcd.clear();
-    lcd.setCursor(0, 0);
-
-    if (response >= '1' && response <= '9') {
-      lcd.print("ACCES ACCEPTE");
-      lcd.setCursor(0, 1);
-      lcd.print("QUAI No: ");
-      lcd.print(response);
-    } 
-    else if (response == 'F') {
-      lcd.print("PORT COMPLET");
-      lcd.setCursor(0, 1);
-      lcd.print("Pas de place");
-    } 
-    else if (response == 'E') {
-      lcd.print("CODE INCORRECT");
-      lcd.setCursor(0, 1);
-      lcd.print("Acces Refuse");
-    }
-    else if (response == 'R') {
-      lcd.print("DEJA AU PORT");
-      lcd.setCursor(0, 1);
-      lcd.print("Acces Refuse");
-    }
-
-    delay(2500); // Délai réduit pour plus de réactivité
-    inputCode = "";
-    showReadyMessage();
+    handleSerialCommand(Serial.read());
   }
 }
 
@@ -123,6 +179,6 @@ void showReadyMessage() {
   lcd.setCursor(0, 0);
   lcd.print("Entrer Code:");
   lcd.setCursor(0, 1);
-  lcd.print("____"); 
+  lcd.print("____");
   lcd.setCursor(0, 1);
 }

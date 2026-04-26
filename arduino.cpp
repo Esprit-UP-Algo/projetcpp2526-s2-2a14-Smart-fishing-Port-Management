@@ -10,16 +10,37 @@ Arduino::Arduino()
     serial = new QSerialPort();
 }
 
-bool Arduino::triggerSingleBeep()
+bool Arduino::writeSoundCommand(char command, const char* debugLabel)
 {
     if (!s_active_serial || !s_active_serial->isOpen() || !s_active_serial->isWritable()) {
-        qDebug() << "Arduino buzzer beep skipped: serial port unavailable.";
+        qDebug() << "Arduino sound skipped for" << debugLabel << ": serial port unavailable.";
         return false;
     }
 
-    s_active_serial->write("B");
+    s_active_serial->write(QByteArray(1, command));
     s_active_serial->flush();
     return true;
+}
+
+bool Arduino::triggerSingleBeep()
+{
+    return writeSoundCommand('B', "single beep");
+}
+
+bool Arduino::triggerSoundEvent(SoundEvent event)
+{
+    switch (event) {
+    case SoundEvent::Arrival:
+        return writeSoundCommand('A', "boat arrival");
+    case SoundEvent::Departure:
+        return writeSoundCommand('L', "boat departure");
+    case SoundEvent::Success:
+        return writeSoundCommand('S', "docking success");
+    case SoundEvent::Error:
+        return writeSoundCommand('E', "error alert");
+    }
+
+    return false;
 }
 
 Arduino::~Arduino()

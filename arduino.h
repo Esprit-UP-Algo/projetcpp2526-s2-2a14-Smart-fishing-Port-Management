@@ -9,6 +9,13 @@
 class Arduino
 {
 public:
+    enum class SoundEvent {
+        Arrival,
+        Departure,
+        Success,
+        Error
+    };
+
     Arduino();
     ~Arduino();
     int connect_arduino();
@@ -18,8 +25,10 @@ public:
     QSerialPort* getserial();
     QString getarduino_port_name();
     static bool triggerSingleBeep();
+    static bool triggerSoundEvent(SoundEvent event);
 
 private:
+    static bool writeSoundCommand(char command, const char* debugLabel);
     QSerialPort *serial;
     static const quint16 arduino_uno_vendor_id = 9025;
     static const quint16 arduino_uno_product_id = 67;
