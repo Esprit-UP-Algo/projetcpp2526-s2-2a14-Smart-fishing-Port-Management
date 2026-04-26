@@ -55,7 +55,10 @@
 #include <QCheckBox>
 
 #include "addquaidialog.h"
+#include "aiintegration.h"
 #include "Bateauwindow.h"
+#include "ortools_optimizer.h"
+#include "speech.h"
 
 QList<QuaisWindow*> QuaisWindow::s_instances;
 
@@ -66,6 +69,23 @@ static QString boatDisplayLabel(const QVariantMap& bateauInfo)
     if (immatriculation.isEmpty())
         return nom;
     return QString("%1 (%2)").arg(nom, immatriculation);
+}
+
+static QString manualDockingDurationSettingsKey(const QString& boatId)
+{
+    return QString("quais/manual_docking_duration/%1").arg(boatId);
+}
+
+static void persistManualDockingDurationMinutes(const QString& boatId, int dockingMinutes)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    settings.setValue(manualDockingDurationSettingsKey(boatId), std::max(1, dockingMinutes) * 60);
+}
+
+static void clearManualDockingDuration(const QString& boatId)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    settings.remove(manualDockingDurationSettingsKey(boatId));
 }
 
 static bool isOccupiedState(const QString& etat)
@@ -418,6 +438,36 @@ static DockUsageMonitoringAnalysis buildDockUsageMonitoringAnalysis(const Quai& 
         analysis.statusLabel = "Utilisation stable";
         analysis.recommendation = "Maintenir la planification actuelle et suivre l'equilibre d'utilisation.";
         analysis.accentColor = QColor(0x05, 0x96, 0x69);
+    }
+
+    DockAnalysisContext aiContext;
+    aiContext.quaiNumber = quai.getNumero();
+    aiContext.capacity = quai.getCapacite();
+    aiContext.state = quai.getEtat();
+    aiContext.sessionCount = analysis.sessionCount;
+    aiContext.totalOccupiedSeconds = analysis.totalOccupiedSeconds;
+    aiContext.averageOccupiedSeconds = analysis.averageOccupiedSeconds;
+    aiContext.longestOccupiedSeconds = analysis.longestOccupiedSeconds;
+    aiContext.hasEnergyWasteRisk = analysis.hasEnergyWasteRisk;
+    aiContext.hasLongOccupationRisk = analysis.hasLongOccupationRisk;
+
+    const DockAnalysisDecision aiDecision = DockIntelligenceService::analyzeDock(aiContext);
+    if (aiDecision.hasOverride) {
+        analysis.utilizationScore = aiDecision.utilizationScore;
+        analysis.anomalyScore = aiDecision.anomalyScore;
+        if (!aiDecision.statusLabel.isEmpty())
+            analysis.statusLabel = aiDecision.statusLabel;
+        if (!aiDecision.recommendation.isEmpty())
+            analysis.recommendation = aiDecision.recommendation;
+        if (!aiDecision.anomalySummary.isEmpty())
+            analysis.anomalySummary = aiDecision.anomalySummary;
+
+        if (analysis.anomalyScore >= 75.0)
+            analysis.accentColor = QColor(0xDC, 0x26, 0x26);
+        else if (analysis.anomalyScore >= 45.0)
+            analysis.accentColor = QColor(0xD9, 0x77, 0x06);
+        else
+            analysis.accentColor = QColor(0x05, 0x96, 0x69);
     }
 
     return analysis;
@@ -947,6 +997,17 @@ QuaisWindow::~QuaisWindow()
     s_instances.removeAll(this);
 }
 
+void QuaisWindow::refreshAll()
+{
+    for (QuaisWindow* win : s_instances) {
+        if (!win) {
+            continue;
+        }
+        win->loadQuaisFromDatabase();
+        win->populateTable();
+    }
+}
+
 void QuaisWindow::setupUI()
 {
     QWidget* centralWidget = new QWidget(this);
@@ -1354,7 +1415,7 @@ QFrame* QuaisWindow::createTableCard()
     warningsHeader->setStyleSheet("color: #1E3A5F;");
     warningsLayout->addWidget(warningsHeader);
 
-    QLabel* warningsSubheader = new QLabel("Alertes operationnelles generees a partir de l'analyse d'occupation des quais.");
+    QLabel* warningsSubheader = new QLabel("Alertes operationnelles generees a partir de l'analyse d'occupation des quais, via regles locales et moteur AI/API si configure.");
     warningsSubheader->setWordWrap(true);
     warningsSubheader->setFont(QFont("Segoe UI", 9));
     warningsSubheader->setStyleSheet("color: #64748B;");
@@ -1415,14 +1476,6 @@ void QuaisWindow::setupQuaiTable()
     connect(quaiTable, &QTableWidget::cellClicked, this, &QuaisWindow::onQuaiCellClicked);
 }
 
-void QuaisWindow::refreshAll()
-{
-    for (QuaisWindow* win : s_instances) {
-        win->loadQuaisFromDatabase();
-        win->populateTable();
-    }
-}
-
 void QuaisWindow::loadQuaisFromDatabase()
 {
     quais.clear();
@@ -1467,22 +1520,10 @@ void QuaisWindow::loadQuaisFromDatabase()
     }
 
     if (!expiredQuais.isEmpty()) {
-        for (int numero : expiredQuais) {
-            QSqlQuery updateQuery;
-            updateQuery.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE NUMERO = :numero");
-            updateQuery.bindValue(":numero", numero);
-
-            if (!updateQuery.exec()) {
-                qDebug() << "Failed to free expired quai" << numero << ":" << updateQuery.lastError().text();
-                continue;
-            }
-
-            quaiAvailabilityDeadlines.remove(numero);
-            persistAvailabilityDeadline(numero, QDateTime());
-            persistSessionStart(numero, QDateTime());
-        }
-
-        loadQuaisFromDatabase();
+        QTimer::singleShot(0, this, [this, expiredQuais]() {
+            for (int numero : expiredQuais)
+                markQuaiAsAvailable(numero);
+        });
     }
 }
 
@@ -1739,6 +1780,7 @@ bool QuaisWindow::assignBoatToQuai(const QVariantMap& bateauInfo, const Quai& qu
     persistAvailabilityDeadline(quai.getNumero(), deadline);
     persistSessionStart(quai.getNumero(), sessionStart);
     persistPendingDockAssignment(quai.getNumero(), QVariantMap());
+    persistManualDockingDurationMinutes(bateauInfo.value("id").toString(), dockingMinutes);
 
     loadQuaisFromDatabase();
     populateTable(searchInput->text());
@@ -1825,15 +1867,74 @@ void QuaisWindow::processPendingDockAssignment(int numero)
 
 void QuaisWindow::markQuaiAsAvailable(int numero, bool showNotification)
 {
-    clearBoatAssociationForQuai(numero);
+    QSqlDatabase db = QSqlDatabase::database();
+    if (!db.isValid() || !db.isOpen()) {
+        qDebug() << "Failed to free quai" << numero << ": database is not available.";
+        return;
+    }
 
-    QSqlQuery query;
+    QString boatId;
+    QString boatName;
+
+    QSqlQuery boatQuery(db);
+    boatQuery.prepare(
+        "SELECT IDBATEAU, NOMBATEAU "
+        "FROM BATEAUX "
+        "WHERE IDQUAI = (SELECT IDQUAI FROM QUAIS WHERE NUMERO = :numero) "
+        "AND ROWNUM = 1");
+    boatQuery.bindValue(":numero", numero);
+
+    if (!boatQuery.exec()) {
+        qDebug() << "Failed to read boat associated with quai" << numero << ":" << boatQuery.lastError().text();
+        return;
+    }
+
+    if (boatQuery.next()) {
+        boatId = boatQuery.value(0).toString();
+        boatName = boatQuery.value(1).toString();
+    }
+
+    if (!db.transaction()) {
+        qDebug() << "Failed to start quai release transaction for" << numero << ":" << db.lastError().text();
+        return;
+    }
+
+    if (!boatId.isEmpty()) {
+        QSqlQuery updateBoatQuery(db);
+        updateBoatQuery.prepare(
+            "UPDATE BATEAUX "
+            "SET IDQUAI = NULL, "
+            "    ETAT = 'En mer', "
+            "    FREQUENCE_SORTIES = COALESCE(FREQUENCE_SORTIES, 0) + 1 "
+            "WHERE IDBATEAU = :id");
+        updateBoatQuery.bindValue(":id", boatId);
+
+        if (!updateBoatQuery.exec()) {
+            qDebug() << "Failed to update departing boat for quai" << numero << ":" << updateBoatQuery.lastError().text();
+            db.rollback();
+            return;
+        }
+    }
+
+    QSqlQuery query(db);
     query.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE NUMERO = :numero");
     query.bindValue(":numero", numero);
 
     if (!query.exec()) {
         qDebug() << "Failed to free quai" << numero << ":" << query.lastError().text();
+        db.rollback();
         return;
+    }
+
+    if (!db.commit()) {
+        qDebug() << "Failed to commit quai release for" << numero << ":" << db.lastError().text();
+        db.rollback();
+        return;
+    }
+
+    if (!boatId.isEmpty()) {
+        clearManualDockingDuration(boatId);
+        speakBoat(boatName);
     }
 
     const QDateTime sessionStart = loadPersistedSessionStart(numero);
@@ -1984,7 +2085,7 @@ void QuaisWindow::showAvailabilityCountdownPopup(int numero)
         countdown->setText(formatRemainingTime(remaining));
 
         if (remaining <= 0) {
-            markQuaiAsAvailable(numero, false);
+            markQuaiAsAvailable(numero);
             status->setText("Le quai est disponible.");
             dialog.accept();
             return;
@@ -2034,6 +2135,52 @@ bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Qua
     const QString etatBateau = bateauInfo.value("etat").toString();
     tempsEstime = Quai::calculerTempsEstime(longueur);
 
+    QList<DockCandidateContext> availableCandidates;
+    QList<DockCandidateContext> reserveCandidates;
+
+    for (int i = 0; i < quais.size(); ++i) {
+        const Quai& q = quais[i];
+        if (q.getEtat() == "Maintenance" || !q.peutAccueillirLongueur(longueur))
+            continue;
+
+        const DockUsageMonitoringAnalysis dockAnalysis = buildDockUsageMonitoringAnalysis(q, quaiAvailabilityDeadlines);
+
+        DockCandidateContext candidate;
+        candidate.quaiNumber = q.getNumero();
+        candidate.capacity = q.getCapacite();
+        candidate.state = q.getEtat();
+        candidate.tariff = q.getTarif();
+        candidate.availabilityMinutes = (q.getEtat() == "Disponible")
+                                            ? 0
+                                            : estimateQuaiAvailabilityMinutes(q.getNumero());
+        candidate.anomalyScore = dockAnalysis.anomalyScore;
+        candidate.utilizationScore = dockAnalysis.utilizationScore;
+
+        reserveCandidates.append(candidate);
+        if (q.getEtat() == "Disponible")
+            availableCandidates.append(candidate);
+    }
+
+    if (!availableCandidates.isEmpty()) {
+        const DockAssignmentDecision aiDecision =
+            DockIntelligenceService::recommendAssignment(bateauInfo, availableCandidates);
+
+        if (aiDecision.success) {
+            const int quaiIndex = findQuaiIndexByNumero(aiDecision.selectedQuaiNumber);
+            if (quaiIndex >= 0) {
+                quaiChoisi = quais[quaiIndex];
+                if (aiDecision.estimatedDockingMinutes > 0)
+                    tempsEstime = aiDecision.estimatedDockingMinutes;
+
+                explication = aiDecision.explanation.isEmpty()
+                                  ? QString("Quai %1 retenu par le moteur intelligent d'affectation.")
+                                        .arg(quaiChoisi.getNumero())
+                                  : aiDecision.explanation;
+                return true;
+            }
+        }
+    }
+
     int meilleurIndex = -1;
     int meilleurScore = std::numeric_limits<int>::max();
 
@@ -2065,6 +2212,27 @@ bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Qua
                               "La capacité du quai représente la longueur maximale autorisée.")
                           .arg(longueur);
         return false;
+    }
+
+    if (!reserveCandidates.isEmpty()) {
+        const DockAssignmentDecision aiDecision =
+            DockIntelligenceService::recommendAssignment(bateauInfo, reserveCandidates);
+
+        if (aiDecision.success) {
+            const int quaiIndex = findQuaiIndexByNumero(aiDecision.selectedQuaiNumber);
+            if (quaiIndex >= 0) {
+                quaiChoisi = quais[quaiIndex];
+                if (aiDecision.estimatedDockingMinutes > 0)
+                    tempsEstime = aiDecision.estimatedDockingMinutes;
+
+                explication = aiDecision.explanation.isEmpty()
+                                  ? QString("Quai %1 reserve par le moteur intelligent avec une disponibilite estimee dans %2 min.")
+                                        .arg(quaiChoisi.getNumero())
+                                        .arg(estimateQuaiAvailabilityMinutes(quaiChoisi.getNumero()))
+                                  : aiDecision.explanation;
+                return true;
+            }
+        }
     }
 
     int meilleurQuaiReserve  = -1;
@@ -2102,6 +2270,25 @@ bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Qua
                       .arg(tempsEstime)
                       .arg(quaiChoisi.getNumero())
                       .arg(meilleurDelai);
+    return true;
+}
+
+bool QuaisWindow::assignerQuaiAvecORTools(const QVariantMap& bateauInfo, Quai& quaiChoisi,
+                                          int& tempsEstime, QString& explication)
+{
+    // Use Google OR-Tools for optimization
+    ORToolsOptimizer optimizer;
+
+    const int longueur = bateauInfo.value("longueur").toInt();
+    tempsEstime = Quai::calculerTempsEstime(longueur);
+
+    if (!optimizer.findOptimalQuai(bateauInfo, quais, quaiChoisi, explication)) {
+        explication = "OR-Tools: " + explication;
+        return false;
+    }
+
+    explication = "OR-Tools Optimization: " + explication;
+    qDebug() << "[OR-Tools] Assignment:" << explication;
     return true;
 }
 
@@ -2249,7 +2436,7 @@ void QuaisWindow::onAutoAssignBoat()
 
     QLabel* subtitle = new QLabel(
         "Selectionnez un bateau et le systeme choisira automatiquement le quai\n"
-        "le plus adapte en fonction de la longueur et de la disponibilite.");
+        "le plus adapte en fonction de la longueur, de la disponibilite et du moteur AI/API si configure.");
     subtitle->setFont(QFont("Segoe UI", 11));
     subtitle->setStyleSheet("color: #6b7280; background: transparent; line-height: 1.4;");
     subtitle->setWordWrap(true);
@@ -2342,8 +2529,8 @@ void QuaisWindow::onAutoAssignBoat()
     dockingLay->addWidget(customDockingCheck);
 
     QSpinBox* dockingSpin = new QSpinBox();
-    dockingSpin->setRange(15, 1440);
-    dockingSpin->setSingleStep(15);
+    dockingSpin->setRange(1, 1440);
+    dockingSpin->setSingleStep(1);
     dockingSpin->setSuffix(" min");
     dockingSpin->setEnabled(true);
     dockingSpin->setFixedHeight(40);
@@ -2355,7 +2542,32 @@ void QuaisWindow::onAutoAssignBoat()
         }
         QSpinBox:focus { border: 2px solid #EA580C; }
     )");
-    dockingLay->addWidget(dockingSpin);
+
+    QPushButton* confirmDockingBtn = new QPushButton("Confirmer");
+    confirmDockingBtn->setFixedHeight(40);
+    confirmDockingBtn->setMinimumWidth(120);
+    confirmDockingBtn->setCursor(Qt::PointingHandCursor);
+    confirmDockingBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    confirmDockingBtn->setStyleSheet(R"(
+        QPushButton {
+            background: #EA580C; color: white; border: none;
+            border-radius: 12px; padding: 0 18px;
+        }
+        QPushButton:hover { background: #C2410C; }
+        QPushButton:disabled { background: #CBD5E1; color: #F8FAFC; }
+    )");
+
+    QHBoxLayout* dockingControlsLay = new QHBoxLayout();
+    dockingControlsLay->setSpacing(10);
+    dockingControlsLay->addWidget(dockingSpin, 1);
+    dockingControlsLay->addWidget(confirmDockingBtn);
+    dockingLay->addLayout(dockingControlsLay);
+
+    QLabel* dockingStatus = new QLabel("Aucune duree manuelle confirmee. Le temps estime sera utilise.");
+    dockingStatus->setWordWrap(true);
+    dockingStatus->setFont(QFont("Segoe UI", 9, QFont::Medium));
+    dockingStatus->setStyleSheet("color: #64748b; background: transparent;");
+    dockingLay->addWidget(dockingStatus);
 
     QLabel* dockingHint = new QLabel("Le champ est pre-rempli avec le temps estime. Vous pouvez le modifier directement si besoin.");
     dockingHint->setWordWrap(true);
@@ -2401,8 +2613,17 @@ void QuaisWindow::onAutoAssignBoat()
     btnLay->addWidget(assignBtn);
     mainLay->addLayout(btnLay);
 
+    int confirmedDockingMinutes = 0;
+    bool dockingTimeConfirmed = false;
+
+    auto markDockingAsPending = [dockingStatus, &dockingTimeConfirmed]() {
+        dockingTimeConfirmed = false;
+        dockingStatus->setText("Aucune duree manuelle confirmee. Le temps estime sera utilise.");
+        dockingStatus->setStyleSheet("color: #64748b; background: transparent;");
+    };
+
     auto refreshPreview = [boatCombo, valLongueur, valCapacite, valEtat, valEstimation,
-                           dockingSpin]() {
+                           dockingSpin, markDockingAsPending]() {
         const QVariantMap bateau = boatCombo->currentData().toMap();
         const int longueur = bateau.value("longueur").toInt();
         const int estimation = Quai::calculerTempsEstime(longueur);
@@ -2410,9 +2631,22 @@ void QuaisWindow::onAutoAssignBoat()
         valCapacite->setText(QString("%1 m minimum").arg(longueur));
         valEtat->setText(bateau.value("etat").toString());
         valEstimation->setText(QString("%1 min").arg(estimation));
-        if (!dockingSpin->hasFocus())
+        if (!dockingSpin->hasFocus()) {
             dockingSpin->setValue(estimation);
+            markDockingAsPending();
+        }
     };
+
+    connect(confirmDockingBtn, &QPushButton::clicked, dlg, [dockingSpin, dockingStatus,
+                                                            &confirmedDockingMinutes, &dockingTimeConfirmed]() {
+        confirmedDockingMinutes = dockingSpin->value();
+        dockingTimeConfirmed = true;
+        dockingStatus->setText(QString("Duree manuelle confirmee : %1 min.").arg(confirmedDockingMinutes));
+        dockingStatus->setStyleSheet("color: #059669; background: transparent;");
+    });
+    connect(dockingSpin, QOverload<int>::of(&QSpinBox::valueChanged), dlg, [markDockingAsPending](int) {
+        markDockingAsPending();
+    });
     refreshPreview();
     connect(boatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), dlg, [refreshPreview](int) {
         refreshPreview();
@@ -2431,12 +2665,14 @@ void QuaisWindow::onAutoAssignBoat()
     Quai quaiChoisi;
     int tempsEstime = 0;
     QString explication;
-    if (!assignerQuaiAutomatiquement(bateau, quaiChoisi, tempsEstime, explication)) {
+    if (!assignerQuaiAvecORTools(bateau, quaiChoisi, tempsEstime, explication)) {
         showWarning("Aucun quai compatible", explication);
         return;
     }
 
-    const int dockingMinutes = customDockingCheck->isChecked() ? dockingSpin->value() : tempsEstime;
+    const int dockingMinutes = (customDockingCheck->isChecked() && dockingTimeConfirmed)
+                                   ? confirmedDockingMinutes
+                                   : tempsEstime;
     const bool delayedAssignment = (quaiChoisi.getEtat() != "Disponible");
 
     if (delayedAssignment && bateau.value("etat").toString() == "En mer") {
@@ -3619,3 +3855,7 @@ void QuaisWindow::onGenerateContract(int row)
         }
     }
 }
+
+
+
+

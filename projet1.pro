@@ -7,6 +7,7 @@ TARGET = PortFlow
 
 # Source files
 SOURCES += main.cpp \
+           aiintegration.cpp \
            mainwindow.cpp \
            arduino.cpp \
            AddLivraisonDialog.cpp \
@@ -36,15 +37,19 @@ SOURCES += main.cpp \
            frigo.cpp \
            livraison.cpp \
            loginwindow.cpp \
+           ortools_optimizer.cpp \
            peche.cpp \
            quai.cpp \
+           quaimanager.cpp \
            quaiswindow.cpp \
+           speech.cpp \
            temperaturealert.cpp \
            SmtpClient.cpp \
            StorageAlert.cpp
 
 # Header files
 HEADERS += mainwindow.h \
+           aiintegration.h \
            arduino.h \
            AddLivraisonDialog.h \
            BateauStatisticsDialog.h \
@@ -73,9 +78,12 @@ HEADERS += mainwindow.h \
            frigo.h \
            livraison.h \
            loginwindow.h \
+           ortools_optimizer.h \
            peche.h \
            quai.h \
+           quaimanager.h \
            quaiswindow.h \
+           speech.h \
            temperaturealert.h \
            SmtpClient.h \
            StorageAlert.h

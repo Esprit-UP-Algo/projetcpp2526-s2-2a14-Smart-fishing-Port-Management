@@ -23,10 +23,20 @@ byte colPins[COLS] = {A0, A1, A2};
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 String inputCode = "";
+const int buzzerPin = 11;
+
+void triggerSingleBeep() {
+  tone(buzzerPin, 2200, 180);
+  delay(200);
+  noTone(buzzerPin);
+}
 
 void setup() {
   // Start Serial at 9600 baud for Qt communication
   Serial.begin(9600);
+
+  pinMode(buzzerPin, OUTPUT);
+  digitalWrite(buzzerPin, LOW);
 
   // Initialize LCD
   lcd.init();
@@ -72,6 +82,10 @@ void loop() {
     
     // Ignore les sauts de ligne
     if (response == '\n' || response == '\r') return;
+    if (response == 'B') {
+      triggerSingleBeep();
+      return;
+    }
 
     lcd.clear();
     lcd.setCursor(0, 0);

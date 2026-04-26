@@ -1,11 +1,25 @@
 #include "arduino.h"
 
+QSerialPort* Arduino::s_active_serial = nullptr;
+
 Arduino::Arduino()
 {
     data = "";
     arduino_port_name = "";
     arduino_is_available = false;
     serial = new QSerialPort();
+}
+
+bool Arduino::triggerSingleBeep()
+{
+    if (!s_active_serial || !s_active_serial->isOpen() || !s_active_serial->isWritable()) {
+        qDebug() << "Arduino buzzer beep skipped: serial port unavailable.";
+        return false;
+    }
+
+    s_active_serial->write("B");
+    s_active_serial->flush();
+    return true;
 }
 
 Arduino::~Arduino()
@@ -48,6 +62,7 @@ int Arduino::connect_arduino()
             serial->setParity(QSerialPort::NoParity);
             serial->setStopBits(QSerialPort::OneStop);
             serial->setFlowControl(QSerialPort::NoFlowControl);
+            s_active_serial = serial;
             return 0; // Success
         }
         return 1; // Could not open port
@@ -59,6 +74,8 @@ int Arduino::close_arduino()
 {
     if (serial->isOpen()) {
         serial->close();
+        if (s_active_serial == serial)
+            s_active_serial = nullptr;
         return 0;
     }
     return 1;

@@ -20,6 +20,7 @@
 #include <QtSql/QSqlRecord>
 
 #include "quai.h"
+#include "ortools_optimizer.h"
 
 // ==================== CIRCULAR PROGRESS WIDGET ====================
 class CircularProgress : public QWidget {
@@ -134,7 +135,8 @@ class QuaisWindow : public QMainWindow
 
 public:
     explicit QuaisWindow(QWidget *parent = nullptr);
-    virtual ~QuaisWindow(); // <--- AJOUTÉ
+    ~QuaisWindow();
+    static void refreshAll();
     void loadQuaisFromDatabase();
 private:
     // UI
@@ -172,12 +174,10 @@ private slots:
     void afficherStatistiques();
     void onGenerateContract(int row);
     void onAutoAssignBoat();
-    
-public:
-    static void refreshAll();
 
 private:
     bool assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
+    bool assignerQuaiAvecORTools(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
     int findQuaiIndexByNumero(int numero) const;
     void ensureAvailabilityTimerForQuai(const Quai& quai);
     int estimateCountdownSeconds(const Quai& quai) const;
