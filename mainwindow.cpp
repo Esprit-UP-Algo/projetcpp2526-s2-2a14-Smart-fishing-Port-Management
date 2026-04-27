@@ -8,6 +8,7 @@
 #include <QSqlRecord>
 #include "pechewindow.h"
 #include "loginwindow.h"
+#include <QApplication>
 #include <QFont>
 #include <QPixmap>
 #include <QDebug>
@@ -22,9 +23,10 @@
 #include <QIcon>
 #include <QStringList>
 #include <QSystemTrayIcon>
+#include <QTimer>
 
 MainWindow::MainWindow(const QString& userName, const QString& userRole, QWidget *parent)
-    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), frigoWindowInstance(nullptr), bateauPage(nullptr), livraisonPage(nullptr), quaisPage(nullptr),
+    : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr), livraisonPage(nullptr), quaisPage(nullptr),
       loggedUserName(userName), loggedUserRole(userRole)
 {
     setupUi();
@@ -39,6 +41,18 @@ MainWindow::MainWindow(const QString& userName, const QString& userRole, QWidget
     }
 
     connect(A.getserial(), &QSerialPort::readyRead, this, &MainWindow::handleSerialData);
+
+    // DEBUG: Force-read timer every second to ensure we don't miss data
+    QTimer* forceReadTimer = new QTimer(this);
+    connect(forceReadTimer, &QTimer::timeout, this, &MainWindow::handleSerialData);
+    forceReadTimer->start(1000);
+
+    // DEBUG: Pulse log to confirm app is alive
+    QTimer* pulseTimer = new QTimer(this);
+    connect(pulseTimer, &QTimer::timeout, this, [](){
+        qDebug() << "--- MONITORING PULSE: App is alive and listening ---";
+    });
+    pulseTimer->start(2000);
 }
 
 MainWindow::~MainWindow()
@@ -168,9 +182,20 @@ QFrame* MainWindow::createSidebar()
     connect(employeesBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToEmployees);
     navLayout->addWidget(employeesBtn);
 
+    QHBoxLayout* frigoRow = new QHBoxLayout();
     frigosBtn = createNavButton("🧊", "Frigos");
+    frigoNotifyLabel1 = new QLabel("1️⃣🚨");
+    frigoNotifyLabel2 = new QLabel("2️⃣🚨");
+    QString notifyStyle = "font-size: 14px; background: transparent; color: #EF4444; font-weight: bold;";
+    frigoNotifyLabel1->setStyleSheet(notifyStyle);
+    frigoNotifyLabel2->setStyleSheet(notifyStyle);
+    frigoNotifyLabel1->hide();
+    frigoNotifyLabel2->hide();
     connect(frigosBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToFrigos);
-    navLayout->addWidget(frigosBtn);
+    frigoRow->addWidget(frigosBtn, 1);
+    frigoRow->addWidget(frigoNotifyLabel1);
+    frigoRow->addWidget(frigoNotifyLabel2);
+    navLayout->addLayout(frigoRow);
 
     livraisonBtn = createNavButton("🚚", "Livraison");
     connect(livraisonBtn, &QPushButton::clicked, this, &MainWindow::onNavigateToLivraison);
@@ -376,9 +401,9 @@ void MainWindow::onNavigateToFrigos()
 {
     setActiveButton(frigosBtn);
     if (!frigoPage) {
-        frigoWindowInstance = new FrigoWindow();
-        frigoWindowInstance->hide();
-        QWidget* centralWidget = frigoWindowInstance->centralWidget();
+        FrigoWindow* frigoWindow = new FrigoWindow();
+        frigoWindow->hide();
+        QWidget* centralWidget = frigoWindow->centralWidget();
         QHBoxLayout* hLayout = qobject_cast<QHBoxLayout*>(centralWidget->layout());
         if (hLayout && hLayout->count() >= 2) {
             QLayoutItem* contentItem = hLayout->itemAt(1);
@@ -392,11 +417,16 @@ void MainWindow::onNavigateToFrigos()
         }
     }
     if (frigoPage) {
-        if (frigoWindowInstance) frigoWindowInstance->setDarkMode(isDarkMode);
         updateThemeRecursive(frigoPage, isDarkMode);
         translateRecursive(frigoPage, isEnglish);
         switchPage(stackedWidget->indexOf(frigoPage));
     }
+}
+
+void MainWindow::updateFrigoNotifications()
+{
+    if (frigoNotifyLabel1) frigoNotifyLabel1->setVisible(currentlyInDanger.contains("FRG-001"));
+    if (frigoNotifyLabel2) frigoNotifyLabel2->setVisible(currentlyInDanger.contains("FRG-002"));
 }
 
 void MainWindow::onNavigateToPeches()
@@ -509,7 +539,6 @@ void MainWindow::onLogout()
 void MainWindow::toggleGlobalTheme()
 {
     isDarkMode = !isDarkMode;
-    if (frigoWindowInstance) frigoWindowInstance->setDarkMode(isDarkMode);
     updateThemeRecursive(this, isDarkMode);
 }
 
@@ -594,16 +623,11 @@ void MainWindow::updateThemeRecursive(QWidget* widget, bool isDark)
             style.replace("#F0F4F8", "#1A202C", Qt::CaseInsensitive);
             style.replace("#f8fafc", "#1A202C", Qt::CaseInsensitive);
             style.replace("#F9FAFB", "#2D3748", Qt::CaseInsensitive);
-            style.replace("#FFFFFFFF", "#2D3748", Qt::CaseInsensitive); // 8 Fs
             style.replace("background-color: white", "background-color: #2D3748", Qt::CaseInsensitive);
             style.replace("background: white", "background: #2D3748", Qt::CaseInsensitive);
             style.replace("#FFFFFF", "#2D3748", Qt::CaseInsensitive);
             style.replace("#e2e8f0", "#4A5568", Qt::CaseInsensitive);
             style.replace("#d1d5db", "#4A5568", Qt::CaseInsensitive);
-            style.replace("#f1f5f9", "#1A202C", Qt::CaseInsensitive); // Missing Slate 100
-            style.replace("#cbd5e1", "#4A5568", Qt::CaseInsensitive); // Missing Slate 200
-            style.replace("#3b82f6", "#60A5FA", Qt::CaseInsensitive); // Bright Blue
-            style.replace("#1e293b", "#F7FAFC", Qt::CaseInsensitive); // Dark Text
             style.replace("color: black", "color: white", Qt::CaseInsensitive);
         }
         widget->setStyleSheet(style);
@@ -676,7 +700,6 @@ void MainWindow::checkMaintenanceAlerts() {
         
         QString message = "Les bateaux suivants nécessitent une maintenance :\n" + boatNames.join("\n");
         trayIcon->showMessage("Alerte Maintenance", message, QSystemTrayIcon::Warning, 15000);
-        A.write_to_arduino("E");
     }
 }
 
@@ -693,7 +716,24 @@ void MainWindow::onTrayMessageClicked() {
 
 void MainWindow::handleSerialData()
 {
-    serialBuffer += A.read_from_arduino();
+    // Connection health check
+    if (!A.getserial()->isOpen()) {
+        static int openErrCount = 0;
+        if (++openErrCount % 5 == 0) qDebug() << "CRITICAL: Serial port is CLOSED!";
+    }
+
+    QByteArray rawData = A.read_from_arduino();
+    if (!rawData.isEmpty()) {
+        qDebug() << "RAW SERIAL DATA RECEIVED:" << rawData;
+    } else {
+        static int waitCount = 0;
+        if (++waitCount % 10 == 0) {
+            qDebug() << "Monitoring Port:" << A.getarduino_port_name() 
+                     << "| Bytes Available:" << A.getserial()->bytesAvailable()
+                     << "| Is Open:" << A.getserial()->isOpen();
+        }
+    }
+    serialBuffer += rawData;
     
     // 1. Process fridge messages (delimited by ;)
     while (serialBuffer.contains(';')) {
@@ -716,15 +756,9 @@ void MainWindow::handleSerialData()
     // 2. Process port access messages (delimited by #)
     while (serialBuffer.contains('#')) {
         int index = serialBuffer.indexOf('#');
-        QString rawCode = QString::fromLatin1(serialBuffer.left(index));
+        QString code = QString::fromLatin1(serialBuffer.left(index)).trimmed();
         serialBuffer.remove(0, index + 1);
         
-        // Nettoyage strict : on ne garde que les chiffres
-        QString code = "";
-        for(char c : rawCode.toStdString()) {
-            if(isdigit(c)) code += c;
-        }
-
         if (!code.isEmpty()) {
             processPortAccess(code);
         }
@@ -733,25 +767,14 @@ void MainWindow::handleSerialData()
 
 void MainWindow::processPortAccess(const QString& code)
 {
-    qDebug() << "--- Tentative Accès Port ---";
-    qDebug() << "Code reçu (nettoyé):" << code;
-    
-    bool ok;
-    int codeInt = code.toInt(&ok);
-    if (!ok) {
-        qDebug() << "Erreur: Le code n'est pas un nombre valide.";
-        A.write_to_arduino("C");
-        A.write_to_arduino("E");
-        return;
-    }
+    qDebug() << "--- Accès Port (Simplifié) ---";
     
     QSqlQuery bQuery;
     // On cherche le bateau par son code secret
     bQuery.prepare("SELECT IDBATEAU, NOMBATEAU, ETAT, IDQUAI FROM BATEAUX WHERE CODE_SECRET = :code");
-    bQuery.bindValue(":code", codeInt);
+    bQuery.bindValue(":code", code.toInt());
 
     if (!bQuery.exec()) {
-        qDebug() << "Erreur SQL recherche bateau:" << bQuery.lastError().text();
         QMessageBox::critical(this, "Erreur SQL", "Erreur lecture bateau : " + bQuery.lastError().text());
         return;
     }
@@ -760,16 +783,14 @@ void MainWindow::processPortAccess(const QString& code)
         int idBateau = bQuery.value(0).toInt();
         QString nomBateau = bQuery.value(1).toString();
         QString etatBateau = bQuery.value(2).toString();
-        
-        qDebug() << "Bateau trouvé:" << nomBateau << "(ID:" << idBateau << ")";
+        QVariant idQuaiActuel = bQuery.value(3);
         
         // [SÉCURITÉ] Si le bateau est déjà au port
         QString cleanEtat = etatBateau.trimmed().simplified();
         if (cleanEtat.compare("Au port", Qt::CaseInsensitive) == 0) {
-            qDebug() << "Refus: Bateau déjà au port.";
-            A.write_to_arduino("R"); // Signal 'R' (Arduino)
-            A.write_to_arduino("E");
+            A.write_to_arduino("R\n");
             
+            // On laisse 100ms au système pour envoyer le signal avant de bloquer avec la fenêtre
             QTimer::singleShot(100, this, [this, nomBateau](){
                 QMessageBox::warning(this, "Accès Refusé", "Bateau déjà au port : " + nomBateau);
             });
@@ -787,12 +808,8 @@ void MainWindow::processPortAccess(const QString& code)
                 int idQuaiLibre = qQuery.value(0).toInt();
                 int numQuai = qQuery.value(1).toInt();
 
-                qDebug() << "Quai libre trouvé:" << numQuai;
-
-                // Envoie l'autorisation : juste le chiffre pour simplifier la lecture Arduino
-                A.write_to_arduino("A");
-                A.write_to_arduino(QByteArray::number(numQuai));
-                A.write_to_arduino("S");
+                // Envoie l'autorisation en priorité
+                A.write_to_arduino("A:" + QByteArray::number(numQuai) + "\n");
 
                 QSqlQuery upB, upQ;
                 upB.prepare("UPDATE BATEAUX SET IDQUAI = :q, ETAT = 'Au port' WHERE IDBATEAU = :id");
@@ -810,17 +827,13 @@ void MainWindow::processPortAccess(const QString& code)
                     });
                 }
             } else {
-                qDebug() << "Refus: Port complet.";
-                A.write_to_arduino("F");
-                A.write_to_arduino("E");
+                A.write_to_arduino("F\n");
                 QMessageBox::warning(this, "Port Complet", "Plus de place disponible.");
             }
         }
     } else {
         // AUCUN BATEAU TROUVÉ
-        qDebug() << "Refus: Aucun bateau trouvé avec le code" << codeInt;
-        A.write_to_arduino("C");
-        A.write_to_arduino("E");
+        A.write_to_arduino("E\n");
         QTimer::singleShot(100, this, [this](){
             QMessageBox::critical(this, "Accès Refusé", "Code secret incorrect.");
         });
@@ -830,36 +843,97 @@ void MainWindow::processPortAccess(const QString& code)
 
 void MainWindow::checkFridgeTemperature(int sensorId, double currentTemp)
 {
-    // Mapping: S1 -> FRG-001, S2 -> FRG-002 (as proposed in the plan)
+    // Mapping: S1 -> FRG-001, S2 -> FRG-002
     QString fridgeRef = (sensorId == 1) ? "FRG-001" : "FRG-002";
     
     QSqlQuery query;
-    query.prepare("SELECT TEMPERATURE FROM FRIGOS WHERE REFERENCE = :ref");
+    query.prepare("SELECT TEMPERATURE FROM FRIGOS WHERE TRIM(REFERENCE) = :ref");
     query.bindValue(":ref", fridgeRef);
     
-    if (query.exec() && query.next()) {
-        double threshold = query.value(0).toDouble();
-        
-        // User logic: "if the temperature goes below the required temperature"
-        if (currentTemp < threshold) {
-            static QSet<QString> activeAlerts; // Prevent spamming alerts
-            if (!activeAlerts.contains(fridgeRef)) {
-                activeAlerts.insert(fridgeRef);
-                
-                TemperatureAlert* alert = new TemperatureAlert(fridgeRef, threshold, currentTemp, this);
-                connect(alert, &QDialog::finished, [fridgeRef]() {
-                    // Allow alert to reappear after closing if condition persists (maybe with a delay)
-                    // For now, we clear it so it can trigger again next time
-                    QTimer::singleShot(10000, [fridgeRef]() {
-                         // ActiveAlerts is static so this is tricky, let's keep it simple for now
+    double threshold = 0.0;
+    bool thresholdFound = false;
+
+    if (query.exec()) {
+        if (query.next()) {
+            threshold = query.value(0).toDouble();
+            thresholdFound = true;
+            qDebug() << "ALERTE DEBUG: Fridge" << fridgeRef << "| Temp:" << currentTemp << "| Seuil DB:" << threshold;
+        } else {
+            qDebug() << "ALERTE ERROR: Fridge" << fridgeRef << "not found in database! Using fallback threshold 10.0";
+            threshold = 10.0; 
+            thresholdFound = true; 
+        }
+    } else {
+        qDebug() << "ALERTE SQL ERROR:" << query.lastError().text();
+        threshold = 10.0; // Fallback even on SQL error for safety
+        thresholdFound = true;
+    }
+
+    // Alert if temperature is TOO HOT
+    if (thresholdFound && currentTemp > threshold) {
+        currentlyInDanger.insert(fridgeRef);
+        updateFrigoNotifications();
+            
+        // Send danger signal to Arduino OLED ONLY ONCE
+        if (!arduinoNotifiedDanger.contains(fridgeRef)) {
+            if (fridgeRef == "FRG-001") A.write_to_arduino("D1\n");
+            else if (fridgeRef == "FRG-002") A.write_to_arduino("D2\n");
+            arduinoNotifiedDanger.insert(fridgeRef);
+            qDebug() << "Arduino notified: Danger Started for" << fridgeRef;
+        }
+
+        // Handle the unified popup alert
+        if (!unifiedAlert) {
+            if (QApplication::activeModalWidget()) {
+                qDebug() << "Modal active. Skipping pop-up alert.";
+            } else {
+                QDateTime now = QDateTime::currentDateTime();
+                if (lastDismissed.contains(fridgeRef) && lastDismissed[fridgeRef].addSecs(180) > now) {
+                    qDebug() << "Cooldown active for" << fridgeRef;
+                } else {
+                    unifiedAlert = new TemperatureAlert(nullptr);
+                    connect(unifiedAlert, &TemperatureAlert::requestNavigation, this, &MainWindow::onNavigateToFrigos, Qt::QueuedConnection);
+                    connect(unifiedAlert, &TemperatureAlert::fridgesDismissed, this, [this](const QStringList& refs) {
+                        QDateTime now = QDateTime::currentDateTime();
+                        for (const QString& ref : refs) {
+                            lastDismissed[ref] = now;
+                        }
                     });
-                });
-                A.write_to_arduino("E");
-                alert->show();
-                qDebug() << "ALERT: Fridge" << fridgeRef << "is too cold!" << currentTemp << "<" << threshold;
+                    unifiedAlert->show();
+                }
+            }
+        }
+        
+        if (unifiedAlert) {
+            QDateTime now = QDateTime::currentDateTime();
+            if (!(lastDismissed.contains(fridgeRef) && lastDismissed[fridgeRef].addSecs(180) > now)) {
+                unifiedAlert->addOrUpdateFridge(fridgeRef, threshold, currentTemp);
             }
         }
     } else {
-        qDebug() << "Warning: No temperature threshold found for fridge" << fridgeRef;
+        // Temperature is back to normal
+        if (currentlyInDanger.contains(fridgeRef)) {
+            currentlyInDanger.remove(fridgeRef);
+            updateFrigoNotifications();
+            
+            // Clear cooldown when resolved
+            lastDismissed.remove(fridgeRef);
+            
+            if (unifiedAlert) {
+                unifiedAlert->removeFridge(fridgeRef);
+            }
+
+            // Update Arduino state ONLY ONCE when returning to safe
+            if (arduinoNotifiedDanger.contains(fridgeRef)) {
+                if (fridgeRef == "FRG-001") A.write_to_arduino("OK1\n");
+                else if (fridgeRef == "FRG-002") A.write_to_arduino("OK2\n");
+                arduinoNotifiedDanger.remove(fridgeRef);
+                qDebug() << "Arduino notified: Safe Again for" << fridgeRef;
+            }
+
+            if (currentlyInDanger.isEmpty()) {
+                A.write_to_arduino("OK\n");
+            }
+        }
     }
 }

@@ -16,9 +16,10 @@
 #include <QStackedWidget>
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
+#include <QPointer>
+#include <QMap>
+#include <QDateTime>
 #include "arduino.h"
-
-class FrigoWindow;
 
 class MainWindow : public QMainWindow
 {
@@ -75,7 +76,6 @@ private:
     QWidget* employeePage;
     QWidget* pechePage;
     QWidget* frigoPage;
-    FrigoWindow* frigoWindowInstance;
     QWidget* bateauPage;
     QWidget* livraisonPage;
     QWidget* quaisPage;
@@ -84,10 +84,16 @@ private:
     Arduino A;
     QByteArray serialBuffer;
     void checkFridgeTemperature(int sensorId, double currentTemp);
+    void updateFrigoNotifications();
+    QLabel* frigoNotifyLabel1;
+    QLabel* frigoNotifyLabel2;
+    QSet<QString> currentlyInDanger;
+    QSet<QString> arduinoNotifiedDanger;
+    QPointer<class TemperatureAlert> unifiedAlert;
+    QMap<QString, QDateTime> lastDismissed;
     QString loggedUserName;
     QString loggedUserRole;
     QLabel* welcomeLabel;
-
 };
 
 #endif // MAINWINDOW_H

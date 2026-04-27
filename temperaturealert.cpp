@@ -4,13 +4,13 @@
 #include <QPropertyAnimation>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QCloseEvent>
 
-TemperatureAlert::TemperatureAlert(const QString& fridgeRef, double threshold, double current, QWidget *parent)
-    : QDialog(parent)
+TemperatureAlert::TemperatureAlert(QWidget *parent)
+    : QWidget(parent)
 {
-    setupUi(fridgeRef, threshold, current);
+    setupUi();
     
-    // Smooth entry animation
     setWindowOpacity(0);
     QPropertyAnimation* anim = new QPropertyAnimation(this, "windowOpacity");
     anim->setDuration(300);
@@ -22,25 +22,24 @@ TemperatureAlert::TemperatureAlert(const QString& fridgeRef, double threshold, d
 
 TemperatureAlert::~TemperatureAlert() {}
 
-void TemperatureAlert::setupUi(const QString& ref, double threshold, double current)
+void TemperatureAlert::setupUi()
 {
-    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    setWindowFlags(Qt::Window | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    setWindowModality(Qt::NonModal);
     setAttribute(Qt::WA_TranslucentBackground);
-    setFixedSize(450, 420);
+    setAttribute(Qt::WA_DeleteOnClose);
+    setFixedWidth(550);
 
-    // Main Card
     QFrame* card = new QFrame(this);
     card->setObjectName("MainCard");
-    card->setFixedSize(450, 420);
     card->setStyleSheet(R"(
         #MainCard {
             background-color: #1E293B;
-            border-radius: 24px;
-            border: 1px solid #334155;
+            border-radius: 28px;
+            border: 2px solid #334155;
         }
     )");
 
-    // Shadow Effect
     QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect();
     shadow->setBlurRadius(30);
     shadow->setXOffset(0);
@@ -48,70 +47,40 @@ void TemperatureAlert::setupUi(const QString& ref, double threshold, double curr
     shadow->setColor(QColor(0, 0, 0, 160));
     card->setGraphicsEffect(shadow);
 
-    QVBoxLayout* layout = new QVBoxLayout(card);
-    layout->setContentsMargins(35, 35, 35, 35);
-    layout->setSpacing(20);
+    mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->addWidget(card);
 
-    // Icon Header (Pulsing Warning)
-    iconLabel = new QLabel("⚠️");
+    QVBoxLayout* cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(35, 35, 35, 35);
+    cardLayout->setSpacing(20);
+
+    QLabel* iconLabel = new QLabel("⚠️");
     iconLabel->setAlignment(Qt::AlignCenter);
-    iconLabel->setStyleSheet("font-size: 64px; margin-bottom: 10px;");
-    layout->addWidget(iconLabel);
+    iconLabel->setStyleSheet("font-size: 48px;");
+    cardLayout->addWidget(iconLabel);
 
-    // Title
-    titleLabel = new QLabel("ALERTE TEMPÉRATURE");
+    QLabel* titleLabel = new QLabel("ALERTE TEMPÉRATURE");
     titleLabel->setAlignment(Qt::AlignCenter);
     titleLabel->setFont(QFont("Segoe UI", 18, QFont::Bold));
-    titleLabel->setStyleSheet("color: #EF4444; letter-spacing: 2px;");
-    layout->addWidget(titleLabel);
+    titleLabel->setStyleSheet("color: #F87171; letter-spacing: 2px;");
+    cardLayout->addWidget(titleLabel);
 
-    // Message
-    messageLabel = new QLabel(QString("Le frigo <b>%1</b> présente une anomalie de température.").arg(ref));
+    messageLabel = new QLabel("🚨 <b>DANGER IMMÉDIAT</b> 🚨");
     messageLabel->setAlignment(Qt::AlignCenter);
-    messageLabel->setWordWrap(true);
-    messageLabel->setFont(QFont("Segoe UI", 12));
-    messageLabel->setStyleSheet("color: #94A3B8;");
-    layout->addWidget(messageLabel);
+    messageLabel->setStyleSheet("color: #FDA4AF; font-size: 13pt;");
+    cardLayout->addWidget(messageLabel);
 
-    // Temp comparison
-    QFrame* dataBox = new QFrame();
-    dataBox->setStyleSheet("background-color: #0F172A; border-radius: 16px; border: 1px solid #1E293B;");
-    QHBoxLayout* dataLayout = new QHBoxLayout(dataBox);
-    dataLayout->setContentsMargins(20, 20, 20, 20);
+    contentLayout = new QVBoxLayout();
+    contentLayout->setSpacing(15);
+    cardLayout->addLayout(contentLayout);
 
-    auto createTempBox = [this](const QString& label, double val, const QString& color) {
-        QVBoxLayout* v = new QVBoxLayout();
-        QLabel* l = new QLabel(label);
-        l->setStyleSheet("color: #64748B; font-weight: bold; font-size: 10pt;");
-        l->setAlignment(Qt::AlignCenter);
-        
-        QLabel* vL = new QLabel(QString::number(val, 'f', 1) + " °C");
-        vL->setStyleSheet(QString("color: %1; font-size: 22pt; font-weight: 800;").arg(color));
-        vL->setAlignment(Qt::AlignCenter);
-        
-        v->addWidget(l);
-        v->addWidget(vL);
-        return v;
-    };
-
-    dataLayout->addLayout(createTempBox("ACTUELLE", current, "#F87171"));
+    cardLayout->addStretch();
     
-    // Vertical separator
-    QFrame* sep = new QFrame();
-    sep->setFixedWidth(1);
-    sep->setStyleSheet("background-color: #1E293B;");
-    dataLayout->addWidget(sep);
-    
-    dataLayout->addLayout(createTempBox("SEUIL", threshold, "#38BDF8"));
-
-    layout->addWidget(dataBox);
-
-    // Buttons
-    layout->addStretch();
     QHBoxLayout* btnLayout = new QHBoxLayout();
     btnLayout->setSpacing(15);
 
-    QPushButton* checkBtn = new QPushButton("Vérifier Frigo");
+    QPushButton* checkBtn = new QPushButton("Vérifier Frigos");
     checkBtn->setFixedHeight(50);
     checkBtn->setCursor(Qt::PointingHandCursor);
     checkBtn->setStyleSheet(R"(
@@ -120,7 +89,10 @@ void TemperatureAlert::setupUi(const QString& ref, double threshold, double curr
         }
         QPushButton:hover { background-color: #DC2626; }
     )");
-    connect(checkBtn, &QPushButton::clicked, this, &QDialog::accept);
+    connect(checkBtn, &QPushButton::clicked, this, [this]() {
+        emit requestNavigation();
+        close();
+    });
 
     QPushButton* dismissBtn = new QPushButton("Ignorer");
     dismissBtn->setFixedHeight(50);
@@ -131,16 +103,104 @@ void TemperatureAlert::setupUi(const QString& ref, double threshold, double curr
         }
         QPushButton:hover { background-color: #334155; color: white; }
     )");
-    connect(dismissBtn, &QPushButton::clicked, this, &QDialog::reject);
+    connect(dismissBtn, &QPushButton::clicked, this, &QWidget::close);
 
     btnLayout->addWidget(dismissBtn, 1);
     btnLayout->addWidget(checkBtn, 2);
-    layout->addLayout(btnLayout);
+    cardLayout->addLayout(btnLayout);
 
-    // Center on screen
     QScreen *screen = QGuiApplication::primaryScreen();
     QRect screenGeometry = screen->geometry();
-    int x = (screenGeometry.width() - width()) / 2;
-    int y = (screenGeometry.height() - height()) / 2;
-    move(x, y);
+    move((screenGeometry.width() - width()) / 2, (screenGeometry.height() - height()) / 2);
+}
+
+void TemperatureAlert::addOrUpdateFridge(const QString& ref, double threshold, double current)
+{
+    if (fridgeRows.contains(ref)) {
+        fridgeRows[ref].currentLabel->setText(QString::number(current, 'f', 1) + " °C");
+        fridgeRows[ref].thresholdLabel->setText(QString::number(threshold, 'f', 1) + " °C");
+        return;
+    }
+
+    QWidget* row = createFridgeRow(ref, threshold, current);
+    contentLayout->addWidget(row);
+    adjustSize();
+    
+    QScreen *screen = QGuiApplication::primaryScreen();
+    move((screen->geometry().width() - width()) / 2, (screen->geometry().height() - height()) / 2);
+}
+
+void TemperatureAlert::removeFridge(const QString& ref)
+{
+    if (fridgeRows.contains(ref)) {
+        QWidget* container = fridgeRows[ref].container;
+        contentLayout->removeWidget(container);
+        container->deleteLater();
+        fridgeRows.remove(ref);
+        
+        if (fridgeRows.isEmpty()) {
+            close();
+        } else {
+            adjustSize();
+            QScreen *screen = QGuiApplication::primaryScreen();
+            move((screen->geometry().width() - width()) / 2, (screen->geometry().height() - height()) / 2);
+        }
+    }
+}
+
+void TemperatureAlert::closeEvent(QCloseEvent *event)
+{
+    if (!fridgeRows.isEmpty()) {
+        emit fridgesDismissed(fridgeRows.keys());
+    }
+    event->accept();
+}
+
+QWidget* TemperatureAlert::createFridgeRow(const QString& ref, double threshold, double current)
+{
+    QFrame* row = new QFrame();
+    row->setStyleSheet("background-color: #0F172A; border-radius: 15px; border: 1px solid #334155;");
+    
+    QVBoxLayout* rowLayout = new QVBoxLayout(row);
+    rowLayout->setContentsMargins(15, 10, 15, 10);
+    rowLayout->setSpacing(5);
+
+    QLabel* refLabel = new QLabel("FRIGO: " + ref);
+    refLabel->setStyleSheet("color: #38BDF8; font-weight: bold; font-size: 10pt; border: none;");
+    rowLayout->addWidget(refLabel);
+
+    QHBoxLayout* dataLayout = new QHBoxLayout();
+    
+    auto createValBox = [&](const QString& label, double val, const QString& color, QLabel** outLabel) {
+        QVBoxLayout* v = new QVBoxLayout();
+        QLabel* l = new QLabel(label);
+        l->setStyleSheet("color: #64748B; font-size: 8pt; font-weight: bold; border: none;");
+        l->setAlignment(Qt::AlignCenter);
+        *outLabel = new QLabel(QString::number(val, 'f', 1) + " °C");
+        (*outLabel)->setStyleSheet(QString("color: %1; font-size: 16pt; font-weight: bold; border: none;").arg(color));
+        (*outLabel)->setAlignment(Qt::AlignCenter);
+        v->addWidget(l);
+        v->addWidget(*outLabel);
+        return v;
+    };
+
+    QLabel *curLab, *threshLab;
+    dataLayout->addLayout(createValBox("ACTUELLE", current, "#F87171", &curLab));
+    
+    QFrame* sep = new QFrame();
+    sep->setFixedWidth(1);
+    sep->setStyleSheet("background-color: #334155;");
+    dataLayout->addWidget(sep);
+    
+    dataLayout->addLayout(createValBox("SEUIL", threshold, "#38BDF8", &threshLab));
+    
+    rowLayout->addLayout(dataLayout);
+
+    FridgeWidgets fw;
+    fw.container = row;
+    fw.currentLabel = curLab;
+    fw.thresholdLabel = threshLab;
+    fridgeRows[ref] = fw;
+
+    return row;
 }

@@ -104,9 +104,11 @@ int Arduino::close_arduino()
 
 QByteArray Arduino::read_from_arduino()
 {
-    if (serial->isReadable()) {
-        data = serial->readAll();
-        return data;
+    if (serial->isOpen() && serial->isReadable()) {
+        if (serial->bytesAvailable() > 0) {
+            data = serial->readAll();
+            return data;
+        }
     }
     return QByteArray();
 }
