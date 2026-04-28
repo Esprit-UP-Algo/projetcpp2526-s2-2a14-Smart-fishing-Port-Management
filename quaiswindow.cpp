@@ -227,6 +227,125 @@ static QVariantMap loadBoatInfoById(const QString& boatId)
     return bateau;
 }
 
+static QString displayQuaiNameForId(int idQuai)
+{
+    QSqlQuery query;
+    query.prepare(
+        "SELECT ordre_affichage FROM ("
+        "    SELECT IDQUAI, ROW_NUMBER() OVER (ORDER BY IDQUAI) AS ordre_affichage "
+        "    FROM QUAIS"
+        ") WHERE IDQUAI = :idquai");
+    query.bindValue(":idquai", idQuai);
+
+    if (query.exec() && query.next()) {
+        return QString("Quai %1").arg(query.value(0).toInt());
+    }
+
+    return QString("Quai");
+}
+
+static bool applyMaintenanceImpactToDatabase(int idQuai, QString* errorMessage)
+{
+    QSqlDatabase db = QSqlDatabase::database();
+    if (!db.isValid() || !db.isOpen()) {
+        if (errorMessage) {
+            *errorMessage = "La base de donnees n'est pas disponible.";
+        }
+        return false;
+    }
+
+    QSqlQuery existsQuery(db);
+    existsQuery.prepare(
+        "SELECT COUNT(*) "
+        "FROM QUAIS "
+        "WHERE IDQUAI = :idquai");
+    existsQuery.bindValue(":idquai", idQuai);
+
+    if (!existsQuery.exec() || !existsQuery.next() || existsQuery.value(0).toInt() == 0) {
+        if (errorMessage) {
+            *errorMessage = QString("Le quai selectionne est introuvable (ID %1).").arg(idQuai);
+        }
+        return false;
+    }
+
+    QSqlQuery stateQuery(db);
+    stateQuery.prepare(
+        "SELECT COUNT(*) "
+        "FROM QUAIS "
+        "WHERE IDQUAI = :idquai AND UPPER(TRIM(ETAT)) = 'MAINTENANCE'");
+    stateQuery.bindValue(":idquai", idQuai);
+
+    if (!stateQuery.exec() || !stateQuery.next()) {
+        if (errorMessage) {
+            *errorMessage = "Impossible de verifier l'etat du quai.";
+        }
+        return false;
+    }
+
+    if (stateQuery.value(0).toInt() > 0) {
+        if (errorMessage) {
+            *errorMessage = QString("%1 est deja en maintenance.").arg(displayQuaiNameForId(idQuai));
+        }
+        return false;
+    }
+
+    if (!db.transaction()) {
+        if (errorMessage) {
+            *errorMessage = "Impossible de demarrer la transaction de maintenance.";
+        }
+        return false;
+    }
+
+    QSqlQuery updateBoatsQuery(db);
+    updateBoatsQuery.prepare(
+        "UPDATE BATEAUX "
+        "SET IDQUAI = NULL "
+        "WHERE IDQUAI = :idquai");
+    updateBoatsQuery.bindValue(":idquai", idQuai);
+
+    if (!updateBoatsQuery.exec()) {
+        db.rollback();
+        if (errorMessage) {
+            *errorMessage = "Impossible de liberer les bateaux associes a ce quai.";
+        }
+        return false;
+    }
+
+    QSqlQuery updateQuaiQuery(db);
+    updateQuaiQuery.prepare(
+        "UPDATE QUAIS "
+        "SET ETAT = 'Maintenance' "
+        "WHERE IDQUAI = :idquai");
+    updateQuaiQuery.bindValue(":idquai", idQuai);
+
+    if (!updateQuaiQuery.exec()) {
+        db.rollback();
+        if (errorMessage) {
+            *errorMessage = "Impossible de passer le quai en maintenance.";
+        }
+        return false;
+    }
+
+    if (!db.commit()) {
+        db.rollback();
+        if (errorMessage) {
+            *errorMessage = "Impossible de valider la maintenance du quai.";
+        }
+        return false;
+    }
+
+    QSqlQuery numeroQuery(db);
+    numeroQuery.prepare("SELECT NUMERO FROM QUAIS WHERE IDQUAI = :idquai");
+    numeroQuery.bindValue(":idquai", idQuai);
+    if (numeroQuery.exec() && numeroQuery.next()) {
+        const int numero = numeroQuery.value(0).toInt();
+        persistAvailabilityDeadline(numero, QDateTime());
+        persistSessionStart(numero, QDateTime());
+        persistPendingDockAssignment(numero, QVariantMap());
+    }
+    return true;
+}
+
 static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle);
 
 static bool showStyledActionDialog(QWidget* parent, const QString& title, const QString& message,
@@ -1009,6 +1128,43 @@ void QuaisWindow::refreshAll()
     }
 }
 
+void QuaisWindow::handleMaintenanceImpact(int quaiNumber)
+{
+    QString errorMessage;
+    if (!applyMaintenanceImpactToDatabase(quaiNumber, &errorMessage)) {
+        QWidget* parent = s_instances.isEmpty() ? nullptr : s_instances.first();
+        const QString text = errorMessage.isEmpty()
+            ? QString("Impossible de mettre en maintenance le quai selectionne (ID %1).").arg(quaiNumber)
+            : errorMessage;
+        QMessageBox::warning(parent, "Impact detecte", text);
+        return;
+    }
+
+    QString quaiLabel = displayQuaiNameForId(quaiNumber);
+    for (QuaisWindow* win : s_instances) {
+        if (!win) {
+            continue;
+        }
+        const int quaiIndex = win->findQuaiIndexById(quaiNumber);
+        if (quaiIndex >= 0) {
+            quaiLabel = win->quais[quaiIndex].getNomQuai();
+            win->quaiAvailabilityDeadlines.remove(win->quais[quaiIndex].getNumero());
+        }
+        win->loadQuaisFromDatabase();
+        win->populateTable(win->searchInput ? win->searchInput->text() : QString());
+    }
+
+    BateauWindow::refreshAllTables();
+
+    QWidget* parent = s_instances.isEmpty() ? nullptr : s_instances.first();
+    QMessageBox::warning(
+        parent,
+        "Impact detecte",
+        QString("Un impact a ete detecte sur %1.\n"
+                "Le quai a ete mis en maintenance et les bateaux associes ont ete reaffectes a 'Aucun quai'.")
+            .arg(quaiLabel));
+}
+
 void QuaisWindow::setupUI()
 {
     QWidget* centralWidget = new QWidget(this);
@@ -1483,7 +1639,7 @@ void QuaisWindow::loadQuaisFromDatabase()
     QList<int> expiredQuais;
 
     QSqlQuery query;
-    if (!query.exec("SELECT NUMERO, CAPACITE, LOCATION, ETAT, TARIF_LOCATION, DUREE_LOCATION "
+    if (!query.exec("SELECT IDQUAI, NUMERO, CAPACITE, LOCATION, ETAT, TARIF_LOCATION, DUREE_LOCATION "
                     "FROM QUAIS ORDER BY IDQUAI")) {
         qDebug() << "Database query error:" << query.lastError().text();
         return;
@@ -1491,6 +1647,7 @@ void QuaisWindow::loadQuaisFromDatabase()
 
     int ordreNom = 1;
     while (query.next()) {
+        const int    idQuai        = query.value("IDQUAI").toInt();
         const int    numero        = query.value("NUMERO").toInt();
         const int    capacite      = query.value("CAPACITE").toInt();
         const QString etat         = query.value("ETAT").toString();
@@ -1499,6 +1656,7 @@ void QuaisWindow::loadQuaisFromDatabase()
         const QString dureeLocation = query.value("DUREE_LOCATION").toString();
 
         Quai q(numero, capacite, etat, tarifLocation, location, dureeLocation);
+        q.setIdQuai(idQuai);
         q.setOrdreNom(ordreNom++);
         quais.append(q);
 
@@ -1553,7 +1711,7 @@ void QuaisWindow::populateTable(const QString& filterText)
         QTableWidgetItem* numeroItem = new QTableWidgetItem(q.getReference());
         numeroItem->setForeground(QBrush(QColor(0x5D, 0x9C, 0xEC)));
         numeroItem->setFont(QFont("Segoe UI", 11, QFont::Bold));
-        numeroItem->setData(Qt::UserRole, q.getNumero());
+        numeroItem->setData(Qt::UserRole, q.getIdQuai());
         const DockUsageMonitoringAnalysis monitoringAnalysis = buildDockUsageMonitoringAnalysis(q, quaiAvailabilityDeadlines);
         if (monitoringAnalysis.anomalyScore >= 75.0) {
             numeroItem->setBackground(QColor(0xFE, 0xF2, 0xF2));
@@ -1576,7 +1734,7 @@ void QuaisWindow::populateTable(const QString& filterText)
         quaiTable->setCellWidget(row, 6, createActionButtons(i));
 
         if (monitoringAnalysis.hasEnergyWasteRisk || monitoringAnalysis.hasLongOccupationRisk)
-            warningEntries << QString("Quai %1 : %2").arg(q.getNumero()).arg(monitoringAnalysis.anomalySummary);
+            warningEntries << QString("%1 : %2").arg(q.getNomQuai(), monitoringAnalysis.anomalySummary);
     }
 
     if (warningEntries.isEmpty()) {
@@ -1665,6 +1823,15 @@ int QuaisWindow::findQuaiIndexByNumero(int numero) const
 {
     for (int i = 0; i < quais.size(); ++i) {
         if (quais[i].getNumero() == numero)
+            return i;
+    }
+    return -1;
+}
+
+int QuaisWindow::findQuaiIndexById(int idQuai) const
+{
+    for (int i = 0; i < quais.size(); ++i) {
+        if (quais[i].getIdQuai() == idQuai)
             return i;
     }
     return -1;
@@ -1968,6 +2135,31 @@ void QuaisWindow::markQuaiAsAvailable(int numero, bool showNotification)
     }
 }
 
+bool QuaisWindow::markQuaiAsMaintenance(int idQuai, QString* errorMessage)
+{
+    if (!applyMaintenanceImpactToDatabase(idQuai, errorMessage)) {
+        return false;
+    }
+
+    QString quaiLabel = displayQuaiNameForId(idQuai);
+    const int quaiIndex = findQuaiIndexById(idQuai);
+    if (quaiIndex >= 0) {
+        quaiAvailabilityDeadlines.remove(quais[quaiIndex].getNumero());
+    }
+    loadQuaisFromDatabase();
+    populateTable(searchInput ? searchInput->text() : QString());
+    BateauWindow::refreshAllTables();
+
+    QMessageBox::warning(
+        this,
+        "Impact detecte",
+        QString("Un impact a ete detecte sur %1.\n"
+                "Le quai a ete mis en maintenance et les bateaux associes ont ete reaffectes a 'Aucun quai'.")
+            .arg(quaiLabel));
+
+    return true;
+}
+
 void QuaisWindow::showAvailabilityCountdownPopup(int numero)
 {
     const int quaiIndex = findQuaiIndexByNumero(numero);
@@ -2113,12 +2305,13 @@ void QuaisWindow::onQuaiCellClicked(int row, int column)
     if (!numeroItem)
         return;
 
-    const int numero = numeroItem->data(Qt::UserRole).toInt();
-    const int quaiIndex = findQuaiIndexByNumero(numero);
+    const int idQuai = numeroItem->data(Qt::UserRole).toInt();
+    const int quaiIndex = findQuaiIndexById(idQuai);
     if (quaiIndex < 0)
         return;
 
-    showAvailabilityCountdownPopup(numero);
+    Arduino::sendCommand(QString("Q%1:%2\n").arg(idQuai).arg(quais[quaiIndex].getOrdreNom()).toLatin1());
+    showAvailabilityCountdownPopup(quais[quaiIndex].getNumero());
 }
 
 void QuaisWindow::refreshAvailabilityCountdowns()

@@ -24,6 +24,7 @@ public:
     QByteArray read_from_arduino();
     QSerialPort* getserial();
     QString getarduino_port_name();
+    static bool sendCommand(const QByteArray& command);
     static bool triggerSingleBeep();
     static bool triggerSoundEvent(SoundEvent event);
 

@@ -43,6 +43,7 @@ private slots:
     void onTrayMessageClicked();
     void handleSerialData(); // Unified slot for Arduino data
     void processPortAccess(const QString& code);
+    void processMaintenanceQuai(int quaiNumber);
 
 private:
     void setupUi();

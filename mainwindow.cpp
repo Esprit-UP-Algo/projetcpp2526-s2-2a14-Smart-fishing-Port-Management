@@ -694,6 +694,37 @@ void MainWindow::onTrayMessageClicked() {
 void MainWindow::handleSerialData()
 {
     serialBuffer += A.read_from_arduino();
+
+    while (serialBuffer.contains('\n')) {
+        int index = serialBuffer.indexOf('\n');
+        QByteArray message = serialBuffer.left(index).trimmed();
+        serialBuffer.remove(0, index + 1);
+
+        const QString msgStr = QString::fromLatin1(message);
+        if (msgStr.startsWith("MAINTENANCE_QUAI:")) {
+            bool ok = false;
+            const int quaiNumber = msgStr.section(':', 1, 1).toInt(&ok);
+            if (ok) {
+                processMaintenanceQuai(quaiNumber);
+                continue;
+            }
+        }
+
+        if (msgStr.startsWith("QUAI_SELECTED:")) {
+            qDebug() << "Arduino selected quai:" << msgStr;
+            continue;
+        }
+
+        if (msgStr.startsWith("S1:") || msgStr.startsWith("S2:")) {
+            serialBuffer.prepend(message + ';');
+            break;
+        }
+
+        if (msgStr.contains('#')) {
+            serialBuffer.prepend(message + '#');
+            break;
+        }
+    }
     
     // 1. Process fridge messages (delimited by ;)
     while (serialBuffer.contains(';')) {
@@ -729,6 +760,12 @@ void MainWindow::handleSerialData()
             processPortAccess(code);
         }
     }
+}
+
+void MainWindow::processMaintenanceQuai(int quaiNumber)
+{
+    qDebug() << "Maintenance impact detected on quai" << quaiNumber;
+    QuaisWindow::handleMaintenanceImpact(quaiNumber);
 }
 
 void MainWindow::processPortAccess(const QString& code)
