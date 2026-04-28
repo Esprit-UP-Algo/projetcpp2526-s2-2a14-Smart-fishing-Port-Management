@@ -784,11 +784,18 @@ void MainWindow::handleSerialData()
     // 2. Process port access messages (delimited by #)
     while (serialBuffer.contains('#')) {
         int index = serialBuffer.indexOf('#');
-        QString code = QString::fromLatin1(serialBuffer.left(index)).trimmed();
+        const QString raw = QString::fromLatin1(serialBuffer.left(index)).trimmed();
         serialBuffer.remove(0, index + 1);
         
-        if (!code.isEmpty()) {
-            processPortAccess(code);
+        QString codeDigits;
+        codeDigits.reserve(raw.size());
+        for (QChar c : raw) {
+            if (c.isDigit())
+                codeDigits.append(c);
+        }
+
+        if (!codeDigits.isEmpty()) {
+            processPortAccess(codeDigits);
         }
     }
 }
@@ -806,7 +813,16 @@ void MainWindow::processPortAccess(const QString& code)
     QSqlQuery bQuery;
     // On cherche le bateau par son code secret
     bQuery.prepare("SELECT IDBATEAU, NOMBATEAU, ETAT, IDQUAI FROM BATEAUX WHERE CODE_SECRET = :code");
-    bQuery.bindValue(":code", code.toInt());
+    bool ok = false;
+    const int codeInt = code.toInt(&ok);
+    if (!ok || codeInt <= 0) {
+        qDebug() << "Invalid code received from Arduino:" << code;
+        A.write_to_arduino("C\n");
+        A.write_to_arduino("E\n");
+        return;
+    }
+
+    bQuery.bindValue(":code", codeInt);
 
     if (!bQuery.exec()) {
         QMessageBox::critical(this, "Erreur SQL", "Erreur lecture bateau : " + bQuery.lastError().text());
@@ -834,7 +850,7 @@ void MainWindow::processPortAccess(const QString& code)
         // CAS 2 : Recherche de quai libre
         QSqlQuery qQuery;
         qQuery.prepare("SELECT IDQUAI, NUMERO FROM QUAIS "
-                       "WHERE (UPPER(TRIM(ETAT)) NOT IN ('OCCUPÉ', 'OCCUPE') OR ETAT IS NULL) "
+                       "WHERE (ETAT IS NULL OR UPPER(TRIM(ETAT)) NOT IN ('OCCUPÉ', 'OCCUPE', 'MAINTENANCE')) "
                        "AND ROWNUM <= 1");
 
         if (qQuery.exec()) {
