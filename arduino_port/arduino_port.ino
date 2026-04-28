@@ -1,145 +1,150 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <Keypad.h>
 
-LiquidCrystal_I2C* lcd = nullptr;
+// LCD I2C Configuration (Address 0x27, 16 columns, 2 rows)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
+// KEYPAD Configuration (from your wiring)
+const byte ROWS = 4;
+const byte COLS = 3;
+
+char keys[ROWS][COLS] = {
+  {'1','2','3'},
+  {'4','5','6'},
+  {'7','8','9'},
+  {'*','0','#'}
+};
+
+// Wiring: Rows -> {9, 8, 7, 6}, Columns -> {A0, A1, A2}
+byte rowPins[ROWS] = {9, 8, 7, 6};
+byte colPins[COLS] = {A0, A1, A2};
+
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+String inputCode = "";
+
+// ================= SW-420 =================
 const int vibrationPin = 2;
-const int buzzerPin = 11;
-const int greenLedPin = 10;  // LED that lights on collision
+int lastState = LOW;
+bool collisionActive = false;
 
-int selectedQuaiId = -1;     // Real DB key: IDQUAI
-int selectedQuaiLabel = -1;  // Friendly label: 1,2,3... for LCD
-int lastVibrationState = LOW;
-bool maintenanceMode = false;
-
-static uint8_t detectLcdAddress()
-{
-  // Common backpack addresses are 0x27 and 0x3F. We scan the bus and pick one.
-  for (uint8_t addr = 1; addr < 127; ++addr) {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) {
-      if (addr == 0x27 || addr == 0x3F) {
-        return addr;
-      }
-    }
-  }
-  return 0;
-}
-
-static void showWaitingMessage()
-{
-  if (!lcd) return;
-  lcd->clear();
-  lcd->setCursor(0, 0);
-    lcd->print("Waiting quai");
-}
-
-static void alarmBeep()
-{
-  // Single short beep on collision
-  digitalWrite(buzzerPin, HIGH);
-  delay(120);
-  digitalWrite(buzzerPin, LOW);
-}
-
-void setup()
-{
+void setup() {
   Serial.begin(9600);
-  Wire.begin();
 
   pinMode(vibrationPin, INPUT);
-  pinMode(buzzerPin, OUTPUT);
-  pinMode(greenLedPin, OUTPUT);
-  digitalWrite(buzzerPin, LOW);
-  digitalWrite(greenLedPin, LOW);
 
-  delay(100);
-  const uint8_t lcdAddr = detectLcdAddress();
-  if (lcdAddr == 0) {
-    Serial.println("LCD_I2C_NOT_FOUND");
-  } else {
-    Serial.print("LCD_I2C_ADDR:0x");
-    Serial.println(lcdAddr, HEX);
-    lcd = new LiquidCrystal_I2C(lcdAddr, 16, 2);
-    // Some LiquidCrystal_I2C variants prefer begin(), others init(). We can safely call init().
-    lcd->init();
-    lcd->backlight();
-    delay(50);
-    showWaitingMessage();
+  lcd.init();
+  lcd.backlight();
+
+  showReadyMessage();
+}
+
+void loop() {
+
+  // ================= SW-420 COLLISION LOGIC =================
+  int vibrationState = digitalRead(vibrationPin);
+
+  if (vibrationState == HIGH && lastState == LOW) {
+
+    collisionActive = true;
+
+    Serial.println("VIBRATION");
+
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("COLLISION !");
+    lcd.setCursor(0,1);
+    lcd.print("CHECK SYSTEM");
+
+    delay(1500);
+
+    showReadyMessage();
+    inputCode = "";
   }
 
-  if (!lcd) {
-    // Still allow the rest of the system to run; just give a small beep to signal LCD failure.
-    digitalWrite(buzzerPin, HIGH);
-    delay(120);
-    digitalWrite(buzzerPin, LOW);
+  lastState = vibrationState;
+
+  if (collisionActive) {
+    // still allow keypad but ignore input if needed
+    collisionActive = false;
+  }
+
+  // ================= KEYPAD INPUT =================
+  char key = keypad.getKey();
+
+  if (key) {
+
+    if (key == '*') {
+      inputCode = "";
+      showReadyMessage();
+    }
+
+    else if (key != '#') {
+
+      if (inputCode.length() < 4) {
+        inputCode += key;
+
+        lcd.setCursor(inputCode.length() - 1, 1);
+        lcd.print(key);
+
+        if (inputCode.length() == 4) {
+          delay(200);
+
+          Serial.print(inputCode);
+          Serial.print("#");
+
+          lcd.clear();
+          lcd.setCursor(0,0);
+          lcd.print("Verification...");
+
+          inputCode = "";
+        }
+      }
+    }
+  }
+
+  // ================= QT RESPONSE =================
+  if (Serial.available() > 0) {
+    char response = Serial.read();
+
+    if (response == '\n' || response == '\r') return;
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+
+    if (response >= '1' && response <= '9') {
+      lcd.print("ACCES ACCEPTE");
+      lcd.setCursor(0, 1);
+      lcd.print("QUAI No: ");
+      lcd.print(response);
+    } 
+    else if (response == 'F') {
+      lcd.print("PORT COMPLET");
+      lcd.setCursor(0, 1);
+      lcd.print("Pas de place");
+    } 
+    else if (response == 'E') {
+      lcd.print("CODE INCORRECT");
+      lcd.setCursor(0, 1);
+      lcd.print("Acces Refuse");
+    }
+    else if (response == 'R') {
+      lcd.print("DEJA AU PORT");
+      lcd.setCursor(0, 1);
+      lcd.print("Acces Refuse");
+    }
+
+    delay(2500);
+    inputCode = "";
+    showReadyMessage();
   }
 }
 
-void loop()
-{
-  String msg = "";
-  bool hasNewQuaiSelection = false;
-
-  if (Serial.available()) {
-    msg = Serial.readStringUntil('\n');
-    msg.trim();
-
-    // Expected: "Q<IDQUAI>:<label>" (example: Q12:1)
-    if (msg.startsWith("Q")) {
-      int separatorIndex = msg.indexOf(':');
-      if (separatorIndex > 1) {
-        selectedQuaiId = msg.substring(1, separatorIndex).toInt();
-        selectedQuaiLabel = msg.substring(separatorIndex + 1).toInt();
-      } else {
-        selectedQuaiId = msg.substring(1).toInt();
-        selectedQuaiLabel = selectedQuaiId;
-      }
-
-      hasNewQuaiSelection = true;
-      maintenanceMode = false;
-      // Turn OFF LED when new quai is selected (maintenance resolved)
-      digitalWrite(greenLedPin, LOW);
-
-      if (lcd) {
-        lcd->clear();
-        lcd->setCursor(0, 0);
-        lcd->print("Selected Quai:");
-        lcd->setCursor(0, 1);
-        lcd->print(selectedQuaiLabel);
-      }
-
-      Serial.print("QUAI_SELECTED:");
-      Serial.println(selectedQuaiLabel);
-    }
-  }
-
-  const int vibrationState = digitalRead(vibrationPin);
-
-  if (vibrationState == HIGH && lastVibrationState == LOW && selectedQuaiId != -1 && !maintenanceMode) {
-    maintenanceMode = true;
-
-    Serial.print("MAINTENANCE_QUAI:");
-    Serial.println(selectedQuaiId);
-
-    if (lcd) {
-      lcd->clear();
-      lcd->setCursor(0, 0);
-      lcd->print("QUAI ");
-      lcd->print(selectedQuaiLabel);
-      lcd->setCursor(0, 1);
-      lcd->print("MAINTENANCE");
-    }
-
-    // Turn ON green LED when collision detected
-    digitalWrite(greenLedPin, HIGH);
-
-    alarmBeep();
-
-    selectedQuaiId = -1;
-    selectedQuaiLabel = -1;
-    showWaitingMessage();
-  }
-
-  lastVibrationState = vibrationState;
+void showReadyMessage() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Entrer Code:");
+  lcd.setCursor(0, 1);
+  lcd.print("____");
 }
