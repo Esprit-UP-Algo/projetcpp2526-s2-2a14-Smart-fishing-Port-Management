@@ -22,6 +22,18 @@ bool Arduino::writeSoundCommand(char command, const char* debugLabel)
     return true;
 }
 
+bool Arduino::sendCommand(const QByteArray& command)
+{
+    if (!s_active_serial || !s_active_serial->isOpen() || !s_active_serial->isWritable()) {
+        qDebug() << "Arduino command skipped: serial port unavailable.";
+        return false;
+    }
+
+    s_active_serial->write(command);
+    s_active_serial->flush();
+    return true;
+}
+
 bool Arduino::triggerSingleBeep()
 {
     return writeSoundCommand('B', "single beep");

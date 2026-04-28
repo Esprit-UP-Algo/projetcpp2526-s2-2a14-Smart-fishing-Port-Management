@@ -137,6 +137,7 @@ public:
     explicit QuaisWindow(QWidget *parent = nullptr);
     ~QuaisWindow();
     static void refreshAll();
+    static void handleMaintenanceImpact(int idQuai);
     void loadQuaisFromDatabase();
 private:
     // UI
@@ -179,6 +180,7 @@ private:
     bool assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
     bool assignerQuaiAvecORTools(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
     int findQuaiIndexByNumero(int numero) const;
+    int findQuaiIndexById(int idQuai) const;
     void ensureAvailabilityTimerForQuai(const Quai& quai);
     int estimateCountdownSeconds(const Quai& quai) const;
     int remainingAvailabilitySeconds(int numero) const;
@@ -188,6 +190,7 @@ private:
     void processPendingDockAssignment(int numero);
     void markQuaiAsAvailable(int numero, bool showNotification = true);
     void showAvailabilityCountdownPopup(int numero);
+    bool markQuaiAsMaintenance(int idQuai, QString* errorMessage = nullptr);
 
 private slots:
     void onQuaiCellClicked(int row, int column);

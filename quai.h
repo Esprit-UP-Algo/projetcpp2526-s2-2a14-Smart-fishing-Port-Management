@@ -11,6 +11,7 @@ struct HistoricData {
 
 class Quai {
 private:
+    int idQuai;
     int numero;
     int ordreNom;
     int capacite;
@@ -28,6 +29,7 @@ public:
 public:
     bool ajouter(); // Add this line in the public section
     // Getters
+    int getIdQuai() const;
     int getNumero() const;
     int getOrdreNom() const;
     int getCapacite() const;
@@ -44,6 +46,7 @@ public:
 
 
     // Setters
+    void setIdQuai(int id);
     void setNumero(int numero);
     void setOrdreNom(int ordre);
     void setCapacite(int capacite);

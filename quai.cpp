@@ -6,14 +6,14 @@
 
 // Default constructor
 Quai::Quai()
-    : numero(0), ordreNom(0), capacite(0), etat("Disponible"),
+    : idQuai(0), numero(0), ordreNom(0), capacite(0), etat("Disponible"),
     tarif(0.0), location(""), dureeLocation("")
 {}
 
 // Parameterized constructor
 Quai::Quai(int numero, int capacite, QString etat, double tarif,
            QString location, const QString& dureeLocation)
-    : numero(numero), ordreNom(0), capacite(capacite), etat(etat), tarif(tarif),
+    : idQuai(0), numero(numero), ordreNom(0), capacite(capacite), etat(etat), tarif(tarif),
     location(location), dureeLocation(dureeLocation)
 {}
 
@@ -42,6 +42,7 @@ bool Quai::ajouter()
 }
 
 // Getters
+int Quai::getIdQuai() const { return idQuai; }
 int Quai::getNumero() const { return numero; }
 int Quai::getOrdreNom() const { return ordreNom; }
 int Quai::getCapacite() const { return capacite; }
@@ -105,6 +106,7 @@ bool Quai::peutAccueillirLongueur(int longueurActuelle) const
 }
 
 // Setters
+void Quai::setIdQuai(int id) { idQuai = id; }
 void Quai::setNumero(int n) { numero = n; }
 void Quai::setOrdreNom(int ordre) { ordreNom = ordre; }
 void Quai::setCapacite(int c) { capacite = c; }
