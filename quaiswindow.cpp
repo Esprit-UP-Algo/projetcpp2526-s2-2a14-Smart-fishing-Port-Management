@@ -63,6 +63,9 @@
 
 QList<QuaisWindow*> QuaisWindow::s_instances;
 
+static QHash<int, QDateTime> s_lastCollisionPopupByQuaiId;
+static constexpr int kCollisionPopupCooldownSeconds = 60; // 1-minute cooldown between collision alerts
+
 static QString boatDisplayLabel(const QVariantMap& bateauInfo)
 {
     const QString nom = bateauInfo.value("nom").toString();
@@ -1100,7 +1103,10 @@ void QuaisWindow::handleMaintenanceImpact(int idQuai)
     QString errorMessage;
     if (!applyMaintenanceImpactToDatabase(idQuai, &errorMessage)) {
         QWidget* parent = s_instances.isEmpty() ? nullptr : s_instances.first();
-        QMessageBox::warning(parent, "Impact detecte", errorMessage);
+        showStyledActionDialog(parent,
+                               "Impact detecte",
+                               errorMessage,
+                               "#1D4ED8", "#60A5FA", "!", false, "Compris");
         return;
     }
 
@@ -1119,13 +1125,20 @@ void QuaisWindow::handleMaintenanceImpact(int idQuai)
 
     BateauWindow::refreshAllTables();
 
+    const QDateTime now = QDateTime::currentDateTime();
+    const QDateTime lastShown = s_lastCollisionPopupByQuaiId.value(idQuai);
+    if (lastShown.isValid() && lastShown.secsTo(now) < kCollisionPopupCooldownSeconds) {
+        return;
+    }
+    s_lastCollisionPopupByQuaiId.insert(idQuai, now);
+
     QWidget* parent = s_instances.isEmpty() ? nullptr : s_instances.first();
-    QMessageBox::warning(
-        parent,
-        "Impact detecte",
-        QString("Un impact a ete detecte sur %1.\n"
-                "Le quai a ete mis en maintenance et les bateaux associes ont ete reaffectes a 'Aucun quai'.")
-            .arg(quaiLabel));
+    showStyledActionDialog(parent,
+                           "Impact detecte",
+                           QString("Un impact a ete detecte sur %1.\n"
+                                   "Le quai a ete mis en maintenance et les bateaux associes ont ete reaffectes a 'Aucun quai'.")
+                               .arg(quaiLabel),
+                           "#1D4ED8", "#60A5FA", "!", false, "Compris");
 }
 
 void QuaisWindow::setupUI()
@@ -2114,12 +2127,19 @@ bool QuaisWindow::markQuaiAsMaintenance(int idQuai, QString* errorMessage)
     populateTable(searchInput ? searchInput->text() : QString());
     BateauWindow::refreshAllTables();
 
-    QMessageBox::warning(
-        this,
-        "Impact detecte",
-        QString("Un impact a ete detecte sur %1.\n"
-                "Le quai a ete mis en maintenance et les bateaux associes ont ete reaffectes a 'Aucun quai'.")
-            .arg(quaiLabel));
+    const QDateTime now = QDateTime::currentDateTime();
+    const QDateTime lastShown = s_lastCollisionPopupByQuaiId.value(idQuai);
+    if (lastShown.isValid() && lastShown.secsTo(now) < kCollisionPopupCooldownSeconds) {
+        return true;
+    }
+    s_lastCollisionPopupByQuaiId.insert(idQuai, now);
+
+    showStyledActionDialog(this,
+                           "Impact detecte",
+                           QString("Un impact a ete detecte sur %1.\n"
+                                   "Le quai a ete mis en maintenance et les bateaux associes ont ete reaffectes a 'Aucun quai'.")
+                               .arg(quaiLabel),
+                           "#1D4ED8", "#60A5FA", "!", false, "Compris");
     return true;
 }
 

@@ -5,6 +5,7 @@ LiquidCrystal_I2C* lcd = nullptr;
 
 const int vibrationPin = 2;
 const int buzzerPin = 11;
+const int greenLedPin = 10;  // LED that lights on collision
 
 int selectedQuaiId = -1;     // Real DB key: IDQUAI
 int selectedQuaiLabel = -1;  // Friendly label: 1,2,3... for LCD
@@ -30,17 +31,15 @@ static void showWaitingMessage()
   if (!lcd) return;
   lcd->clear();
   lcd->setCursor(0, 0);
-  lcd->print("Waiting quai");
+    lcd->print("Waiting quai");
 }
 
 static void alarmBeep()
 {
-  for (int i = 0; i < 3; i++) {
-    digitalWrite(buzzerPin, HIGH);
-    delay(300);
-    digitalWrite(buzzerPin, LOW);
-    delay(300);
-  }
+  // Single short beep on collision
+  digitalWrite(buzzerPin, HIGH);
+  delay(120);
+  digitalWrite(buzzerPin, LOW);
 }
 
 void setup()
@@ -50,7 +49,9 @@ void setup()
 
   pinMode(vibrationPin, INPUT);
   pinMode(buzzerPin, OUTPUT);
+  pinMode(greenLedPin, OUTPUT);
   digitalWrite(buzzerPin, LOW);
+  digitalWrite(greenLedPin, LOW);
 
   delay(100);
   const uint8_t lcdAddr = detectLcdAddress();
@@ -77,8 +78,11 @@ void setup()
 
 void loop()
 {
+  String msg = "";
+  bool hasNewQuaiSelection = false;
+
   if (Serial.available()) {
-    String msg = Serial.readStringUntil('\n');
+    msg = Serial.readStringUntil('\n');
     msg.trim();
 
     // Expected: "Q<IDQUAI>:<label>" (example: Q12:1)
@@ -92,7 +96,10 @@ void loop()
         selectedQuaiLabel = selectedQuaiId;
       }
 
+      hasNewQuaiSelection = true;
       maintenanceMode = false;
+      // Turn OFF LED when new quai is selected (maintenance resolved)
+      digitalWrite(greenLedPin, LOW);
 
       if (lcd) {
         lcd->clear();
@@ -123,6 +130,9 @@ void loop()
       lcd->setCursor(0, 1);
       lcd->print("MAINTENANCE");
     }
+
+    // Turn ON green LED when collision detected
+    digitalWrite(greenLedPin, HIGH);
 
     alarmBeep();
 
