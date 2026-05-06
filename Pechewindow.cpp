@@ -97,13 +97,14 @@ QFrame* PecheWindow::createSidebar()
     lay->addWidget(logoFrame);
 
     /* ── App name ── */
+
+    /* ── Nav ── */
     QLabel* appName = new QLabel("PortFlow");
     appName->setFont(QFont("Segoe UI", 14, QFont::Bold));
     appName->setAlignment(Qt::AlignCenter);
     appName->setStyleSheet("color:white;background:transparent;margin-bottom:6px;");
     lay->addWidget(appName);
 
-    /* ── Nav ── */
     QFrame* nav = new QFrame();
     nav->setStyleSheet("background: transparent;");
     QVBoxLayout* navLay = new QVBoxLayout(nav);

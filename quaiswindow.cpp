@@ -65,6 +65,24 @@ QList<QuaisWindow*> QuaisWindow::s_instances;
 
 static QHash<int, QDateTime> s_lastCollisionPopupByQuaiId;
 static constexpr int kCollisionPopupCooldownSeconds = 60; // 1-minute cooldown between collision alerts
+static constexpr int kCollisionDamagePerImpact = 25;
+static constexpr int kMaxCollisionDamage = 100;
+
+static QString displayQuaiNameForId(int idQuai);
+
+struct CollisionRecoveryState {
+    int damageLevel = 0;
+    QDateTime startedAt;
+    QDateTime recoveryDeadline;
+
+    bool isActive() const
+    {
+        return damageLevel > 0
+               && startedAt.isValid()
+               && recoveryDeadline.isValid()
+               && QDateTime::currentDateTime() < recoveryDeadline;
+    }
+};
 
 static QString boatDisplayLabel(const QVariantMap& bateauInfo)
 {
@@ -95,6 +113,11 @@ static void clearManualDockingDuration(const QString& boatId)
 static bool isOccupiedState(const QString& etat)
 {
     return etat.contains("occup", Qt::CaseInsensitive);
+}
+
+static bool isMaintenanceState(const QString& etat)
+{
+    return etat.contains("maint", Qt::CaseInsensitive);
 }
 
 static QString formatRemainingTime(int totalSeconds)
@@ -128,6 +151,11 @@ static QString quaiSessionHistorySettingsKey(int quaiNumber)
 static QString pendingDockAssignmentSettingsKey(int quaiNumber)
 {
     return QString("quais/pending_dock_assignment/%1").arg(quaiNumber);
+}
+
+static QString collisionRecoverySettingsKey(int quaiNumber)
+{
+    return QString("quais/collision_recovery/%1").arg(quaiNumber);
 }
 
 static QDateTime loadPersistedAvailabilityDeadline(int quaiNumber)
@@ -202,6 +230,113 @@ static void persistPendingDockAssignment(int quaiNumber, const QVariantMap& assi
         settings.remove(key);
     else
         settings.setValue(key, assignment);
+}
+
+static CollisionRecoveryState loadPersistedCollisionRecoveryState(int quaiNumber)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    const QVariantMap map = settings.value(collisionRecoverySettingsKey(quaiNumber)).toMap();
+
+    CollisionRecoveryState state;
+    state.damageLevel = map.value("damageLevel").toInt();
+    state.startedAt = map.value("startedAt").toDateTime();
+    state.recoveryDeadline = map.value("recoveryDeadline").toDateTime();
+    return state;
+}
+
+static void persistCollisionRecoveryState(int quaiNumber, const CollisionRecoveryState& state)
+{
+    QSettings settings("PortFlow", "PortFlow");
+    const QString key = collisionRecoverySettingsKey(quaiNumber);
+
+    if (state.damageLevel <= 0 || !state.startedAt.isValid() || !state.recoveryDeadline.isValid()) {
+        settings.remove(key);
+        return;
+    }
+
+    QVariantMap map;
+    map.insert("damageLevel", state.damageLevel);
+    map.insert("startedAt", state.startedAt);
+    map.insert("recoveryDeadline", state.recoveryDeadline);
+    settings.setValue(key, map);
+}
+
+static int collisionRecoverySecondsForDamage(int damageLevel)
+{
+    const int safeDamage = std::clamp(damageLevel, 0, kMaxCollisionDamage);
+    if (safeDamage <= 0)
+        return 0;
+
+    const int tiers = (safeDamage + kCollisionDamagePerImpact - 1) / kCollisionDamagePerImpact;
+    const int recoveryMinutes = 2 + (tiers * 3);
+    return recoveryMinutes * 60;
+}
+
+static int collisionRemainingSeconds(const CollisionRecoveryState& state)
+{
+    if (!state.startedAt.isValid() || !state.recoveryDeadline.isValid())
+        return 0;
+
+    return static_cast<int>(std::max<qint64>(0, QDateTime::currentDateTime().secsTo(state.recoveryDeadline)));
+}
+
+static int currentCollisionWarningLevel(const CollisionRecoveryState& state)
+{
+    const int totalSeconds = std::max(1, static_cast<int>(state.startedAt.secsTo(state.recoveryDeadline)));
+    const int remainingSeconds = collisionRemainingSeconds(state);
+    if (remainingSeconds <= 0)
+        return 0;
+
+    const double remainingRatio = static_cast<double>(remainingSeconds) / totalSeconds;
+    return std::clamp(static_cast<int>(std::ceil(state.damageLevel * remainingRatio)), 0, kMaxCollisionDamage);
+}
+
+static QString collisionWarningSummary(const CollisionRecoveryState& state)
+{
+    const int warningLevel = currentCollisionWarningLevel(state);
+    const int remainingSeconds = collisionRemainingSeconds(state);
+    return QString("Maintenance apres collision (%1%%) - retour estime dans %2")
+        .arg(warningLevel)
+        .arg(formatRemainingTime(remainingSeconds));
+}
+
+static void registerCollisionRecoveryImpact(int quaiNumber)
+{
+    CollisionRecoveryState state = loadPersistedCollisionRecoveryState(quaiNumber);
+    const int currentLevel = state.isActive() ? currentCollisionWarningLevel(state) : 0;
+    const int nextDamageLevel = std::clamp(currentLevel + kCollisionDamagePerImpact,
+                                           kCollisionDamagePerImpact,
+                                           kMaxCollisionDamage);
+
+    state.damageLevel = nextDamageLevel;
+    state.startedAt = QDateTime::currentDateTime();
+    state.recoveryDeadline = state.startedAt.addSecs(collisionRecoverySecondsForDamage(nextDamageLevel));
+    persistCollisionRecoveryState(quaiNumber, state);
+}
+
+static bool readQuaiCollisionContext(int idQuai, int* quaiNumber, QString* quaiLabel,
+                                     QString* quaiState, QString* errorMessage)
+{
+    QSqlQuery query;
+    query.prepare(
+        "SELECT NUMERO, ETAT "
+        "FROM QUAIS "
+        "WHERE IDQUAI = :idquai");
+    query.bindValue(":idquai", idQuai);
+
+    if (!query.exec() || !query.next()) {
+        if (errorMessage)
+            *errorMessage = QString("Le quai selectionne est introuvable (ID %1).").arg(idQuai);
+        return false;
+    }
+
+    if (quaiNumber)
+        *quaiNumber = query.value(0).toInt();
+    if (quaiState)
+        *quaiState = query.value(1).toString();
+    if (quaiLabel)
+        *quaiLabel = displayQuaiNameForId(idQuai);
+    return true;
 }
 
 static QVariantMap loadBoatInfoById(const QString& boatId)
@@ -469,6 +604,26 @@ static DockUsageMonitoringAnalysis buildDockUsageMonitoringAnalysis(const Quai& 
         if (analysis.anomalyScore >= 75.0)
             analysis.accentColor = QColor(0xDC, 0x26, 0x26);
         else if (analysis.anomalyScore >= 45.0)
+            analysis.accentColor = QColor(0xD9, 0x77, 0x06);
+        else
+            analysis.accentColor = QColor(0x05, 0x96, 0x69);
+    }
+
+    const CollisionRecoveryState collisionState = loadPersistedCollisionRecoveryState(quai.getNumero());
+    if (collisionState.isActive()) {
+        const int warningLevel = currentCollisionWarningLevel(collisionState);
+        analysis.anomalyScore = std::max(analysis.anomalyScore, static_cast<double>(warningLevel));
+        analysis.hasLongOccupationRisk = true;
+        analysis.statusLabel = (warningLevel >= 70)
+                                   ? "Collision critique"
+                                   : (warningLevel >= 40 ? "Collision en recuperation"
+                                                         : "Collision sous controle");
+        analysis.recommendation = "Laisser le quai au repos jusqu'a la fin de la maintenance automatique.";
+        analysis.anomalySummary = collisionWarningSummary(collisionState);
+
+        if (warningLevel >= 70)
+            analysis.accentColor = QColor(0xDC, 0x26, 0x26);
+        else if (warningLevel >= 40)
             analysis.accentColor = QColor(0xD9, 0x77, 0x06);
         else
             analysis.accentColor = QColor(0x05, 0x96, 0x69);
@@ -1100,8 +1255,12 @@ static bool applyMaintenanceImpactToDatabase(int idQuai, QString* errorMessage)
 
 void QuaisWindow::handleMaintenanceImpact(int idQuai)
 {
+    QString quaiLabel;
+    QString quaiState;
     QString errorMessage;
-    if (!applyMaintenanceImpactToDatabase(idQuai, &errorMessage)) {
+    int quaiNumber = 0;
+
+    if (!readQuaiCollisionContext(idQuai, &quaiNumber, &quaiLabel, &quaiState, &errorMessage)) {
         QWidget* parent = s_instances.isEmpty() ? nullptr : s_instances.first();
         showStyledActionDialog(parent,
                                "Impact detecte",
@@ -1110,7 +1269,30 @@ void QuaisWindow::handleMaintenanceImpact(int idQuai)
         return;
     }
 
-    QString quaiLabel = displayQuaiNameForId(idQuai);
+    const CollisionRecoveryState existingState = loadPersistedCollisionRecoveryState(quaiNumber);
+    if (isMaintenanceState(quaiState) && !existingState.isActive()) {
+        QWidget* parent = s_instances.isEmpty() ? nullptr : s_instances.first();
+        showStyledActionDialog(parent,
+                               "Impact detecte",
+                               QString("%1 est deja en maintenance et reste indisponible.")
+                                   .arg(quaiLabel),
+                               "#1D4ED8", "#60A5FA", "!", false, "Compris");
+        return;
+    }
+
+    if (!isMaintenanceState(quaiState) && !applyMaintenanceImpactToDatabase(idQuai, &errorMessage)) {
+        QWidget* parent = s_instances.isEmpty() ? nullptr : s_instances.first();
+        showStyledActionDialog(parent,
+                               "Impact detecte",
+                               errorMessage,
+                               "#1D4ED8", "#60A5FA", "!", false, "Compris");
+        return;
+    }
+
+    registerCollisionRecoveryImpact(quaiNumber);
+    persistAvailabilityDeadline(quaiNumber, QDateTime());
+    persistSessionStart(quaiNumber, QDateTime());
+
     for (QuaisWindow* win : s_instances) {
         if (!win)
             continue;
@@ -1118,6 +1300,8 @@ void QuaisWindow::handleMaintenanceImpact(int idQuai)
         if (quaiIndex >= 0) {
             quaiLabel = win->quais[quaiIndex].getNomQuai();
             win->quaiAvailabilityDeadlines.remove(win->quais[quaiIndex].getNumero());
+            persistAvailabilityDeadline(win->quais[quaiIndex].getNumero(), QDateTime());
+            persistSessionStart(win->quais[quaiIndex].getNumero(), QDateTime());
         }
         win->loadQuaisFromDatabase();
         win->populateTable(win->searchInput ? win->searchInput->text() : QString());
@@ -1132,12 +1316,15 @@ void QuaisWindow::handleMaintenanceImpact(int idQuai)
     }
     s_lastCollisionPopupByQuaiId.insert(idQuai, now);
 
+    const CollisionRecoveryState collisionState = loadPersistedCollisionRecoveryState(quaiNumber);
     QWidget* parent = s_instances.isEmpty() ? nullptr : s_instances.first();
     showStyledActionDialog(parent,
                            "Impact detecte",
                            QString("Un impact a ete detecte sur %1.\n"
-                                   "Le quai a ete mis en maintenance et les bateaux associes ont ete reaffectes a 'Aucun quai'.")
-                               .arg(quaiLabel),
+                                   "Le quai est place en maintenance automatique pendant %2.\n"
+                                   "Les avertissements diminueront progressivement pendant le temps de repos.")
+                               .arg(quaiLabel)
+                               .arg(formatRemainingTime(collisionRemainingSeconds(collisionState))),
                            "#1D4ED8", "#60A5FA", "!", false, "Compris");
 }
 
@@ -1199,7 +1386,6 @@ QFrame* QuaisWindow::createSidebar()
         logoLabel->setAlignment(Qt::AlignCenter);
     }
     logoLabel->setStyleSheet("background: transparent;");
-
     containerLayout->addWidget(logoLabel);
     logoLayout->addWidget(logoContainer);
     layout->addWidget(logoFrame);
@@ -1256,6 +1442,45 @@ QPushButton* QuaisWindow::createNavButton(const QString& icon, const QString& te
 
 QWidget* QuaisWindow::createContentArea()
 {
+    QScrollArea* scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setStyleSheet(R"(
+        QScrollArea {
+            background-color: #F0F4F8;
+            border: none;
+        }
+        QScrollBar:vertical {
+            background: #E2E8F0;
+            width: 12px;
+            border-radius: 6px;
+            margin: 12px 8px 12px 0;
+        }
+        QScrollBar::handle:vertical {
+            background: #94A3B8;
+            border-radius: 6px;
+            min-height: 36px;
+        }
+        QScrollBar:horizontal {
+            background: #E2E8F0;
+            height: 12px;
+            border-radius: 6px;
+            margin: 0 12px 8px 12px;
+        }
+        QScrollBar::handle:horizontal {
+            background: #94A3B8;
+            border-radius: 6px;
+            min-width: 36px;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            width: 0px;
+            height: 0px;
+        }
+    )");
+
     QWidget* content = new QWidget();
     content->setStyleSheet("background-color: #F0F4F8;");
     QVBoxLayout* layout = new QVBoxLayout(content);
@@ -1264,9 +1489,11 @@ QWidget* QuaisWindow::createContentArea()
 
     layout->addWidget(createHeader());
     layout->addWidget(createToolbar());
-    layout->addWidget(createTableCard(), 1);
+    layout->addWidget(createTableCard());
+    layout->addStretch();
 
-    return content;
+    scrollArea->setWidget(content);
+    return scrollArea;
 }
 
 QFrame* QuaisWindow::createHeader()
@@ -2113,14 +2340,32 @@ void QuaisWindow::markQuaiAsAvailable(int numero, bool showNotification)
 
 bool QuaisWindow::markQuaiAsMaintenance(int idQuai, QString* errorMessage)
 {
-    if (!applyMaintenanceImpactToDatabase(idQuai, errorMessage))
+    QString quaiLabel;
+    QString quaiState;
+    int quaiNumber = 0;
+    if (!readQuaiCollisionContext(idQuai, &quaiNumber, &quaiLabel, &quaiState, errorMessage))
         return false;
 
-    QString quaiLabel = displayQuaiNameForId(idQuai);
+    const CollisionRecoveryState existingState = loadPersistedCollisionRecoveryState(quaiNumber);
+    if (isMaintenanceState(quaiState) && !existingState.isActive()) {
+        if (errorMessage)
+            *errorMessage = QString("%1 est deja en maintenance.").arg(quaiLabel);
+        return false;
+    }
+
+    if (!isMaintenanceState(quaiState) && !applyMaintenanceImpactToDatabase(idQuai, errorMessage))
+        return false;
+
+    registerCollisionRecoveryImpact(quaiNumber);
+    persistAvailabilityDeadline(quaiNumber, QDateTime());
+    persistSessionStart(quaiNumber, QDateTime());
+
     const int quaiIndex = findQuaiIndexById(idQuai);
     if (quaiIndex >= 0) {
         quaiLabel = quais[quaiIndex].getNomQuai();
         quaiAvailabilityDeadlines.remove(quais[quaiIndex].getNumero());
+        persistAvailabilityDeadline(quais[quaiIndex].getNumero(), QDateTime());
+        persistSessionStart(quais[quaiIndex].getNumero(), QDateTime());
     }
 
     loadQuaisFromDatabase();
@@ -2134,11 +2379,14 @@ bool QuaisWindow::markQuaiAsMaintenance(int idQuai, QString* errorMessage)
     }
     s_lastCollisionPopupByQuaiId.insert(idQuai, now);
 
+    const CollisionRecoveryState collisionState = loadPersistedCollisionRecoveryState(quaiNumber);
     showStyledActionDialog(this,
                            "Impact detecte",
                            QString("Un impact a ete detecte sur %1.\n"
-                                   "Le quai a ete mis en maintenance et les bateaux associes ont ete reaffectes a 'Aucun quai'.")
-                               .arg(quaiLabel),
+                                   "Le quai est place en maintenance automatique pendant %2.\n"
+                                   "Les avertissements diminueront progressivement pendant le temps de repos.")
+                               .arg(quaiLabel)
+                               .arg(formatRemainingTime(collisionRemainingSeconds(collisionState))),
                            "#1D4ED8", "#60A5FA", "!", false, "Compris");
     return true;
 }
@@ -2149,7 +2397,6 @@ void QuaisWindow::showAvailabilityCountdownPopup(int numero)
     if (quaiIndex < 0)
         return;
 
-    const Quai& quai = quais[quaiIndex];
     QDialog dialog(this);
     dialog.setWindowTitle("Disponibilite du quai");
     dialog.setFixedSize(560, 360);
@@ -2173,17 +2420,10 @@ void QuaisWindow::showAvailabilityCountdownPopup(int numero)
 
     QFrame* headerBand = new QFrame();
     headerBand->setFixedHeight(78);
-    headerBand->setStyleSheet(R"(
-        QFrame {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #2B5EA6, stop:1 #5D9CEC);
-            border-radius: 24px 24px 0 0;
-        }
-    )");
     QHBoxLayout* headerLay = new QHBoxLayout(headerBand);
     headerLay->setContentsMargins(28, 0, 18, 0);
 
-    QLabel* title = new QLabel(QString("Timer du quai %1").arg(quai.getNumero()), headerBand);
+    QLabel* title = new QLabel(QString("Quai %1").arg(numero), headerBand);
     title->setFont(QFont("Segoe UI", 16, QFont::Bold));
     title->setStyleSheet("color: white; background: transparent;");
     headerLay->addWidget(title, 1);
@@ -2215,16 +2455,11 @@ void QuaisWindow::showAvailabilityCountdownPopup(int numero)
     QLabel* countdown = new QLabel(body);
     countdown->setAlignment(Qt::AlignCenter);
     countdown->setMinimumHeight(116);
-    countdown->setStyleSheet(
-        "QLabel { background: #EFF6FF; color: #1D4ED8; border: 2px solid #BFDBFE; "
-        "border-radius: 18px; font: 700 28px 'Consolas'; padding: 14px 10px; }"
-        );
     bodyLay->addWidget(countdown);
 
     QLabel* status = new QLabel(body);
     status->setAlignment(Qt::AlignCenter);
     status->setWordWrap(true);
-    status->setStyleSheet("color: #0f766e; font-size: 12px; background: #F8FAFC; border-radius: 12px; padding: 12px;");
     bodyLay->addWidget(status);
     layout->addWidget(body, 1);
 
@@ -2249,19 +2484,87 @@ void QuaisWindow::showAvailabilityCountdownPopup(int numero)
     QTimer popupTimer(&dialog);
     popupTimer.setInterval(1000);
 
-    auto refreshPopup = [this, numero, quai, subtitle, countdown, status, &dialog]() {
-        const bool occupied = isOccupiedState(quai.getEtat()) || quaiAvailabilityDeadlines.contains(numero);
+    auto refreshPopup = [this, numero, headerBand, title, subtitle, countdown, status, &dialog]() {
+        loadQuaisFromDatabase();
 
-        if (!occupied) {
-            subtitle->setText("Ce quai est actuellement disponible.");
-            countdown->setText("Disponible");
-            status->setText("Aucun compte a rebours actif pour ce quai.");
+        const int currentQuaiIndex = findQuaiIndexByNumero(numero);
+        if (currentQuaiIndex < 0) {
+            subtitle->setText("Ce quai n'est plus disponible dans la liste.");
+            countdown->setText("Indisponible");
+            status->setText("Impossible d'afficher les informations de disponibilite.");
             return;
         }
 
+        const Quai& quai = quais[currentQuaiIndex];
+        const QString quaiState = quai.getEtat();
+        const bool occupied = isOccupiedState(quaiState) || quaiAvailabilityDeadlines.contains(numero);
+        const bool maintenance = isMaintenanceState(quaiState);
+        const CollisionRecoveryState collisionState = loadPersistedCollisionRecoveryState(numero);
+
+        title->setText(QString("%1 - %2").arg(quai.getNomQuai(), quaiState));
+
+        if (maintenance) {
+            headerBand->setStyleSheet(R"(
+                QFrame {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #991B1B, stop:1 #EF4444);
+                    border-radius: 24px 24px 0 0;
+                }
+            )");
+            countdown->setStyleSheet(
+                "QLabel { background: #FEF2F2; color: #B91C1C; border: 2px solid #FECACA; "
+                "border-radius: 18px; font: 700 26px 'Consolas'; padding: 14px 10px; }");
+            status->setStyleSheet(
+                "color: #991B1B; font-size: 12px; background: #FFF1F2; border-radius: 12px; padding: 12px;");
+
+            if (collisionState.isActive()) {
+                subtitle->setText("Ce quai est en maintenance automatique apres collision.");
+                countdown->setText(formatRemainingTime(collisionRemainingSeconds(collisionState)));
+                status->setText(QString("Niveau d'alerte actuel : %1%%.\nLe quai redeviendra disponible a la fin du repos.")
+                                    .arg(currentCollisionWarningLevel(collisionState)));
+            } else {
+                subtitle->setText("Ce quai est actuellement en maintenance.");
+                countdown->setText("00:00:00");
+                status->setText("Compte a rebours indisponible. Ce quai n'est pas disponible tant que la maintenance n'est pas terminee.");
+            }
+            return;
+        }
+
+        if (!occupied) {
+            headerBand->setStyleSheet(R"(
+                QFrame {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                        stop:0 #065F46, stop:1 #34D399);
+                    border-radius: 24px 24px 0 0;
+                }
+            )");
+            countdown->setStyleSheet(
+                "QLabel { background: #ECFDF5; color: #047857; border: 2px solid #A7F3D0; "
+                "border-radius: 18px; font: 700 28px 'Consolas'; padding: 14px 10px; }");
+            status->setStyleSheet(
+                "color: #065F46; font-size: 12px; background: #F0FDF4; border-radius: 12px; padding: 12px;");
+            subtitle->setText("Ce quai est actuellement disponible.");
+            countdown->setText("00:00:00");
+            status->setText("Compte a rebours termine. Vous pouvez affecter un bateau a ce quai immediatement.");
+            return;
+        }
+
+        headerBand->setStyleSheet(R"(
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2B5EA6, stop:1 #5D9CEC);
+                border-radius: 24px 24px 0 0;
+            }
+        )");
+        countdown->setStyleSheet(
+            "QLabel { background: #EFF6FF; color: #1D4ED8; border: 2px solid #BFDBFE; "
+            "border-radius: 18px; font: 700 28px 'Consolas'; padding: 14px 10px; }");
+        status->setStyleSheet(
+            "color: #0f766e; font-size: 12px; background: #F8FAFC; border-radius: 12px; padding: 12px;");
+
         ensureAvailabilityTimerForQuai(quai);
         const int remaining = remainingAvailabilitySeconds(numero);
-        subtitle->setText("Temps restant avant retour au statut disponible :");
+        subtitle->setText("Ce quai est occupe. Temps restant avant retour au statut disponible :");
         countdown->setText(formatRemainingTime(remaining));
 
         if (remaining <= 0) {
@@ -2300,6 +2603,7 @@ void QuaisWindow::onQuaiCellClicked(int row, int column)
 void QuaisWindow::refreshAvailabilityCountdowns()
 {
     QList<int> expiredQuais;
+    bool refreshCollisionWarnings = false;
     for (auto it = quaiAvailabilityDeadlines.constBegin(); it != quaiAvailabilityDeadlines.constEnd(); ++it) {
         if (QDateTime::currentDateTime() >= it.value())
             expiredQuais.append(it.key());
@@ -2307,6 +2611,34 @@ void QuaisWindow::refreshAvailabilityCountdowns()
 
     for (int numero : expiredQuais)
         markQuaiAsAvailable(numero);
+
+    QList<int> recoveredCollisionQuais;
+    for (const Quai& quai : std::as_const(quais)) {
+        const CollisionRecoveryState collisionState = loadPersistedCollisionRecoveryState(quai.getNumero());
+        if (collisionState.isActive() && collisionRemainingSeconds(collisionState) % 10 == 0)
+            refreshCollisionWarnings = true;
+        if (collisionState.damageLevel > 0 && collisionRemainingSeconds(collisionState) <= 0)
+            recoveredCollisionQuais.append(quai.getNumero());
+    }
+
+    for (int numero : recoveredCollisionQuais) {
+        persistCollisionRecoveryState(numero, CollisionRecoveryState{});
+
+        const int quaiIndex = findQuaiIndexByNumero(numero);
+        if (quaiIndex < 0 || !isMaintenanceState(quais[quaiIndex].getEtat()))
+            continue;
+
+        markQuaiAsAvailable(numero, false);
+        showStyledActionDialog(this,
+                               "Maintenance terminee",
+                               QString("Le temps de repos du quai %1 est termine.\n"
+                                       "Le quai redevient automatiquement disponible.")
+                                   .arg(numero),
+                               "#065F46", "#34D399", "+", false, "Compris");
+    }
+
+    if (refreshCollisionWarnings)
+        populateTable(searchInput ? searchInput->text() : QString());
 }
 
 bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi,
@@ -2321,7 +2653,7 @@ bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Qua
 
     for (int i = 0; i < quais.size(); ++i) {
         const Quai& q = quais[i];
-        if (q.getEtat() == "Maintenance" || !q.peutAccueillirLongueur(longueur))
+        if (isMaintenanceState(q.getEtat()) || !q.peutAccueillirLongueur(longueur))
             continue;
 
         const DockUsageMonitoringAnalysis dockAnalysis = buildDockUsageMonitoringAnalysis(q, quaiAvailabilityDeadlines);
@@ -2422,7 +2754,7 @@ bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Qua
 
     for (int i = 0; i < quais.size(); ++i) {
         const Quai& q = quais[i];
-        if (q.getEtat() == "Maintenance" || !q.peutAccueillirLongueur(longueur))
+        if (isMaintenanceState(q.getEtat()) || !q.peutAccueillirLongueur(longueur))
             continue;
 
         const int delaiDisponibilite = (q.getEtat() == "Disponible")
@@ -2457,13 +2789,23 @@ bool QuaisWindow::assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Qua
 bool QuaisWindow::assignerQuaiAvecORTools(const QVariantMap& bateauInfo, Quai& quaiChoisi,
                                           int& tempsEstime, QString& explication)
 {
-    // Use Google OR-Tools for optimization
     ORToolsOptimizer optimizer;
-
     const int longueur = bateauInfo.value("longueur").toInt();
     tempsEstime = Quai::calculerTempsEstime(longueur);
 
-    if (!optimizer.findOptimalQuai(bateauInfo, quais, quaiChoisi, explication)) {
+    QList<Quai> assignableQuais;
+    for (const Quai& quai : std::as_const(quais)) {
+        if (!isMaintenanceState(quai.getEtat()) && quai.peutAccueillirLongueur(longueur))
+            assignableQuais.append(quai);
+    }
+
+    if (assignableQuais.isEmpty()) {
+        explication = QString("Aucun quai disponible ou reservable n'est compatible avec un bateau de %1 m.")
+                          .arg(longueur);
+        return false;
+    }
+
+    if (!optimizer.findOptimalQuai(bateauInfo, assignableQuais, quaiChoisi, explication)) {
         explication = "OR-Tools: " + explication;
         return false;
     }

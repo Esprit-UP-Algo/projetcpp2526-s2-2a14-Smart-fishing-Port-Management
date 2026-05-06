@@ -119,6 +119,7 @@ QFrame* BateauWindow::createSidebar()
     appName->setStyleSheet("color:white;background:transparent;margin-bottom:6px;");
     lay->addWidget(appName);
 
+
     QFrame* nav = new QFrame();
     nav->setStyleSheet("background: transparent;");
     QVBoxLayout* navLay = new QVBoxLayout(nav);

@@ -105,7 +105,6 @@ QFrame* EmployeeWindow::createSidebar()
     containerLayout->setContentsMargins(10, 10, 10, 10);
     containerLayout->setAlignment(Qt::AlignCenter);
 
-    // Logo image
     QLabel* logoLabel = new QLabel();
     QPixmap logoPix("C:/images/logo.png");
 
