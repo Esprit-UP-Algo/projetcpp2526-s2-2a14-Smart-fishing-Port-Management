@@ -831,7 +831,15 @@ void MainWindow::handleSerialData()
         
         if (!msgStr.isEmpty()) {
             qDebug() << "RFID/Arduino Line:" << msgStr;
-            if (msgStr.contains("UID: ")) {
+            if (msgStr.startsWith("MAINTENANCE_QUAI:")) {
+                bool ok = false;
+                const int idQuai = msgStr.mid(QString("MAINTENANCE_QUAI:").length()).trimmed().toInt(&ok);
+                if (ok) {
+                    QuaisWindow::handleMaintenanceImpact(idQuai);
+                } else {
+                    qDebug() << "Invalid maintenance message:" << msgStr;
+                }
+            } else if (msgStr.contains("UID: ")) {
                 int uidPos = msgStr.indexOf("UID: ") + 5;
                 QString uid = msgStr.mid(uidPos).trimmed();
                 emit rfidScanned(uid);

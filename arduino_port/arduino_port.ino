@@ -23,9 +23,25 @@ byte colPins[COLS] = {A0, A1, A2};
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 String inputCode = "";
+String serialBuffer = "";
 const int buzzerPin = 11;
+const int vibrationPin = 2;
+const unsigned long SERIAL_COMMAND_TIMEOUT_MS = 30;
+const unsigned long COLLISION_COOLDOWN_MS = 1500;
+
+int selectedQuai = -1;
+int lastVibrationState = LOW;
+unsigned long serialBufferStartedAt = 0;
+unsigned long lastCollisionAt = 0;
 
 void showReadyMessage();
+void processSerialMessage(String message);
+void handleImmediateCommand(char command);
+void handleVibrationSensor();
+
+bool isImmediateSoundCommand(char command) {
+  return command == 'A' || command == 'L' || command == 'S' || command == 'B' || command == 'E';
+}
 
 void boatArrival() {
   tone(buzzerPin, 500);
@@ -89,7 +105,7 @@ void showResponseMessage(char response) {
     lcd.print("PORT COMPLET");
     lcd.setCursor(0, 1);
     lcd.print("Pas de place");
-  } else if (response == 'C') {
+  } else if (response == 'C' || response == 'E') {
     lcd.print("CODE INCORRECT");
     lcd.setCursor(0, 1);
     lcd.print("Acces Refuse");
@@ -106,72 +122,213 @@ void showResponseMessage(char response) {
   showReadyMessage();
 }
 
-void handleSerialCommand(char command) {
-  if (command == '\n' || command == '\r') {
-    return;
+void showAccessGranted(int quaiNumber) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("ACCES ACCEPTE");
+  lcd.setCursor(0, 1);
+  lcd.print("QUAI No: ");
+  lcd.print(quaiNumber);
+  delay(2500);
+  inputCode = "";
+  showReadyMessage();
+}
+
+void showSelectedQuai(int quaiNumber) {
+  selectedQuai = quaiNumber;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Quai selected:");
+  lcd.setCursor(0, 1);
+  lcd.print(quaiNumber);
+  delay(1200);
+  showReadyMessage();
+}
+
+int parseLeadingNumber(const String& text, int startIndex) {
+  String digits = "";
+
+  for (int i = startIndex; i < text.length(); i++) {
+    char c = text[i];
+    if (c >= '0' && c <= '9') {
+      digits += c;
+    } else {
+      break;
+    }
   }
 
-  if (command == 'A' || command == 'L' || command == 'S' || command == 'B' || command == 'E') {
+  return digits.length() > 0 ? digits.toInt() : -1;
+}
+
+void handleImmediateCommand(char command) {
+  if (isImmediateSoundCommand(command)) {
     playSoundCommand(command);
-    return;
-  }
-
-  if (command == 'F' || command == 'C' || command == 'R') {
-    showResponseMessage(command);
-    return;
-  }
-
-  if (command >= '1' && command <= '9') {
-    showResponseMessage(command);
   }
 }
 
-void setup() {
-  // Start Serial at 9600 baud for Qt communication
-  Serial.begin(9600);
+void processSerialMessage(String message) {
+  message.trim();
 
-  pinMode(buzzerPin, OUTPUT);
-  digitalWrite(buzzerPin, LOW);
+  if (message.length() == 0) {
+    return;
+  }
 
-  // Initialize LCD
-  lcd.init();
-  lcd.backlight();
+  if (message.startsWith("Q")) {
+    int quaiNumber = parseLeadingNumber(message, 1);
+    if (quaiNumber != -1) {
+      showSelectedQuai(quaiNumber);
+    }
+    return;
+  }
 
-  showReadyMessage();
+  if (message.startsWith("A:")) {
+    int quaiNumber = parseLeadingNumber(message, 2);
+    if (quaiNumber != -1) {
+      showAccessGranted(quaiNumber);
+    }
+    return;
+  }
+
+  if (message == "F" || message == "C" || message == "E" || message == "R") {
+    showResponseMessage(message[0]);
+    return;
+  }
+
+  if (message.length() == 1 && message[0] >= '1' && message[0] <= '9') {
+    showResponseMessage(message[0]);
+    return;
+  }
+
+  if (message.length() == 1 && isImmediateSoundCommand(message[0])) {
+    playSoundCommand(message[0]);
+    return;
+  }
+
+  if (message.startsWith("CODE:")) {
+    message = message.substring(5);
+  }
+
+  if (message.endsWith("#")) {
+    message.remove(message.length() - 1);
+  }
+
+  if (message.length() > 0) {
+    Serial.print(message);
+    Serial.print("#");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Verification...");
+    inputCode = "";
+  }
+}
+
+void handleSerialInput() {
+  while (Serial.available() > 0) {
+    char incoming = Serial.read();
+
+    if (incoming == '\r') {
+      continue;
+    }
+
+    if (serialBuffer.length() == 0) {
+      serialBufferStartedAt = millis();
+    }
+
+    if (incoming == '\n') {
+      processSerialMessage(serialBuffer);
+      serialBuffer = "";
+      serialBufferStartedAt = 0;
+      continue;
+    }
+
+    serialBuffer += incoming;
+  }
+
+  if (serialBuffer.length() == 1 &&
+      (millis() - serialBufferStartedAt) >= SERIAL_COMMAND_TIMEOUT_MS &&
+      isImmediateSoundCommand(serialBuffer[0])) {
+    handleImmediateCommand(serialBuffer[0]);
+    serialBuffer = "";
+    serialBufferStartedAt = 0;
+  }
+}
+
+void handleVibrationSensor() {
+  const int vibrationState = digitalRead(vibrationPin);
+  const unsigned long now = millis();
+
+  if (vibrationState == HIGH &&
+      lastVibrationState == LOW &&
+      selectedQuai != -1 &&
+      (now - lastCollisionAt) >= COLLISION_COOLDOWN_MS) {
+    lastCollisionAt = now;
+    inputCode = "";
+
+    Serial.print("MAINTENANCE_QUAI:");
+    Serial.println(selectedQuai);
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("IMPACT DETECTE");
+    lcd.setCursor(0, 1);
+    lcd.print("QUAI ");
+    lcd.print(selectedQuai);
+
+    errorAlert();
+    delay(800);
+    showReadyMessage();
+  }
+
+  lastVibrationState = vibrationState;
+}
+
+void handleKeypadInput() {
+  char key = keypad.getKey();
+
+  if (!key) {
+    return;
+  }
+
+  if (key == '*') { // RESET
+    inputCode = "";
+    showReadyMessage();
+  } else if (key != '#') {
+    if (inputCode.length() < 4) {
+      inputCode += key;
+      lcd.setCursor(inputCode.length() - 1, 1);
+      lcd.print(key);
+
+      if (inputCode.length() == 4) {
+        delay(200);
+        Serial.print(inputCode);
+        Serial.print("#");
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Verification...");
+        inputCode = "";
+      }
+    }
+  } else if (inputCode.length() > 0) {
+    Serial.print(inputCode);
+    Serial.print("#");
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Verification...");
+    inputCode = "";
+  }
 }
 
 void loop() {
   // 1. Handle Keypad Input
-  char key = keypad.getKey();
-
-  if (key) {
-    if (key == '*') { // RESET
-      inputCode = "";
-      showReadyMessage();
-    } else if (key != '#') {
-      if (inputCode.length() < 4) {
-        inputCode += key;
-        lcd.setCursor(inputCode.length() - 1, 1);
-        lcd.print(key);
-
-        if (inputCode.length() == 4) {
-          delay(200);
-          Serial.print(inputCode);
-          Serial.print("#");
-
-          lcd.clear();
-          lcd.setCursor(0, 0);
-          lcd.print("Verification...");
-          inputCode = "";
-        }
-      }
-    }
-  }
+  handleKeypadInput();
 
   // 2. Handle Response from Qt
-  if (Serial.available() > 0) {
-    handleSerialCommand(Serial.read());
-  }
+  handleSerialInput();
+
+  // 3. Detect collisions on the berth sensor
+  handleVibrationSensor();
 }
 
 void showReadyMessage() {
@@ -181,4 +338,18 @@ void showReadyMessage() {
   lcd.setCursor(0, 1);
   lcd.print("____");
   lcd.setCursor(0, 1);
+}
+void setup() {
+  // Start Serial at 9600 baud for Qt communication
+  Serial.begin(9600);
+
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(vibrationPin, INPUT);
+  digitalWrite(buzzerPin, LOW);
+
+  // Initialize LCD
+  lcd.init();
+  lcd.backlight();
+
+  showReadyMessage();
 }
