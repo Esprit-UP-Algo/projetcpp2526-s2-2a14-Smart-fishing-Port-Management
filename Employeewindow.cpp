@@ -302,11 +302,14 @@ QFrame* EmployeeWindow::createHeader()
     QAction* reglementAct = new QAction("📜  Règlement Intérieur", this);
     QAction* congeAct = new QAction("📅  Demande de Congé", this);
     QAction* attestationAct = new QAction("📄  Attestation de Travail", this);
+    QAction* presenceAct = new QAction("📋  Rapport Présence", this);
     QAction* registerFaceAct = new QAction("📸  Register Face ID", this);
     
     adminMenu->addAction(reglementAct);
     adminMenu->addAction(congeAct);
     adminMenu->addAction(attestationAct);
+    adminMenu->addSeparator();
+    adminMenu->addAction(presenceAct);
     adminMenu->addSeparator();
     adminMenu->addAction(registerFaceAct);
     
@@ -315,6 +318,7 @@ QFrame* EmployeeWindow::createHeader()
     connect(reglementAct, &QAction::triggered, this, &EmployeeWindow::onReglementInterieur);
     connect(congeAct, &QAction::triggered, this, &EmployeeWindow::onDemandeConge);
     connect(attestationAct, &QAction::triggered, this, &EmployeeWindow::onAttestationTravail);
+    connect(presenceAct, &QAction::triggered, this, &EmployeeWindow::onPresenceReport);
     connect(registerFaceAct, &QAction::triggered, this, &EmployeeWindow::onRegisterFaceID);
     
     lay->addWidget(adminBtn);
@@ -323,6 +327,11 @@ QFrame* EmployeeWindow::createHeader()
     QPushButton* statsBtn = makeBtn("📊  Statistiques", "#F59E0B", "#D97706");
     connect(statsBtn, &QPushButton::clicked, this, &EmployeeWindow::onViewStats);
     lay->addWidget(statsBtn);
+
+    // Smart AI Report Button
+    QPushButton* aiBtn = makeBtn("✨  Rapport IA", "#8B5CF6", "#6D28D9");
+    connect(aiBtn, &QPushButton::clicked, this, &EmployeeWindow::onSmartAIReport);
+    lay->addWidget(aiBtn);
     
     return hdr;
 }
@@ -480,9 +489,9 @@ void EmployeeWindow::loadEmployeesFromDb()
 {
     employees.clear();
     QSqlQuery query;
-    bool success = query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN, TELEPHONE, EMAIL FROM EMPLOYEES");
+    bool success = query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN, TELEPHONE, EMAIL, RFID_UID FROM EMPLOYEES");
     if (!success) {
-        query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN, TELEPHONE, EMAIL FROM EMPLOYEE");
+        query.exec("SELECT ID_EMPLOYE, PRENOM, NOM, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, CIN, TELEPHONE, EMAIL, RFID_UID FROM EMPLOYEE");
     }
 
     while (query.next()) {
@@ -515,6 +524,7 @@ void EmployeeWindow::loadEmployeesFromDb()
         e.cin = query.value(7).toString();
         e.phone = query.value(8).toString();
         e.email = query.value(9).toString();
+        e.rfid_uid = query.value(10).toString();
         employees.append(e);
     }
 }
@@ -957,7 +967,7 @@ void EmployeeWindow::onAddEmployee()
         newEmployee.id = generateEmployeeId();
 
         QSqlQuery query1;
-        query1.prepare("INSERT INTO EMPLOYEES (ID_EMPLOYE, PRENOM, NOM, CIN, TELEPHONE, EMAIL, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT) VALUES (:id, :pre, :nom, :cin, :phone, :email, :pos, :sal, :date, :stat)");
+        query1.prepare("INSERT INTO EMPLOYEES (ID_EMPLOYE, PRENOM, NOM, CIN, TELEPHONE, EMAIL, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, RFID_UID) VALUES (:id, :pre, :nom, :cin, :phone, :email, :pos, :sal, :date, :stat, :rfid)");
         query1.bindValue(":id", newEmployee.id.toInt());
         query1.bindValue(":pre", newEmployee.firstName);
         query1.bindValue(":nom", newEmployee.lastName);
@@ -972,11 +982,12 @@ void EmployeeWindow::onAddEmployee()
 
         query1.bindValue(":date", QDate::fromString(newEmployee.date, "dd/MM/yyyy"));
         query1.bindValue(":stat", newEmployee.status);
+        query1.bindValue(":rfid", newEmployee.rfid_uid);
         
         if(!query1.exec()) {
             QString err1 = query1.lastError().text();
             QSqlQuery query2;
-            query2.prepare("INSERT INTO EMPLOYEE (ID_EMPLOYE, PRENOM, NOM, CIN, TELEPHONE, EMAIL, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT) VALUES (:id, :pre, :nom, :cin, :phone, :email, :pos, :sal, :date, :stat)");
+            query2.prepare("INSERT INTO EMPLOYEE (ID_EMPLOYE, PRENOM, NOM, CIN, TELEPHONE, EMAIL, \"POSITION\", SALAIRE, DATE_RECRUTEMENT, STATUT, RFID_UID) VALUES (:id, :pre, :nom, :cin, :phone, :email, :pos, :sal, :date, :stat, :rfid)");
             query2.bindValue(":id", newEmployee.id.toInt());
             query2.bindValue(":pre", newEmployee.firstName);
             query2.bindValue(":nom", newEmployee.lastName);
@@ -987,6 +998,7 @@ void EmployeeWindow::onAddEmployee()
             query2.bindValue(":sal", cleanSal.toDouble());
             query2.bindValue(":date", QDate::fromString(newEmployee.date, "dd/MM/yyyy"));
             query2.bindValue(":stat", newEmployee.status);
+            query2.bindValue(":rfid", newEmployee.rfid_uid);
             
             if (!query2.exec()) {
                 QMessageBox::critical(this, "Erreur Base de données", 
@@ -1011,7 +1023,7 @@ void EmployeeWindow::onEditEmployee(int row)
         updatedEmployee.id = employees[row].id;
 
         QSqlQuery query1;
-        query1.prepare("UPDATE EMPLOYEES SET PRENOM=:pre, NOM=:nom, CIN=:cin, TELEPHONE=:phone, EMAIL=:email, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=:date, STATUT=:stat WHERE ID_EMPLOYE=:id");
+        query1.prepare("UPDATE EMPLOYEES SET PRENOM=:pre, NOM=:nom, CIN=:cin, TELEPHONE=:phone, EMAIL=:email, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=:date, STATUT=:stat, RFID_UID=:rfid WHERE ID_EMPLOYE=:id");
         query1.bindValue(":id", updatedEmployee.id.toInt());
         query1.bindValue(":pre", updatedEmployee.firstName);
         query1.bindValue(":nom", updatedEmployee.lastName);
@@ -1026,11 +1038,12 @@ void EmployeeWindow::onEditEmployee(int row)
 
         query1.bindValue(":date", QDate::fromString(updatedEmployee.date, "dd/MM/yyyy"));
         query1.bindValue(":stat", updatedEmployee.status);
+        query1.bindValue(":rfid", updatedEmployee.rfid_uid);
         
         if(!query1.exec()) {
             QString err1 = query1.lastError().text();
             QSqlQuery query2;
-            query2.prepare("UPDATE EMPLOYEE SET PRENOM=:pre, NOM=:nom, CIN=:cin, TELEPHONE=:phone, EMAIL=:email, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=:date, STATUT=:stat WHERE ID_EMPLOYE=:id");
+            query2.prepare("UPDATE EMPLOYEE SET PRENOM=:pre, NOM=:nom, CIN=:cin, TELEPHONE=:phone, EMAIL=:email, \"POSITION\"=:pos, SALAIRE=:sal, DATE_RECRUTEMENT=:date, STATUT=:stat, RFID_UID=:rfid WHERE ID_EMPLOYE=:id");
             query2.bindValue(":id", updatedEmployee.id.toInt());
             query2.bindValue(":pre", updatedEmployee.firstName);
             query2.bindValue(":nom", updatedEmployee.lastName);
@@ -1041,6 +1054,7 @@ void EmployeeWindow::onEditEmployee(int row)
             query2.bindValue(":sal", cleanSalUpd.toDouble());
             query2.bindValue(":date", QDate::fromString(updatedEmployee.date, "dd/MM/yyyy"));
             query2.bindValue(":stat", updatedEmployee.status);
+            query2.bindValue(":rfid", updatedEmployee.rfid_uid);
             
             if (!query2.exec()) {
                 QMessageBox::critical(this, "Erreur Base de données", 
@@ -1341,6 +1355,8 @@ void EmployeeWindow::onRegisterFaceID()
     });
 
     connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, [this, process, emp, outputBuffer, errorBuffer](int exitCode, QProcess::ExitStatus exitStatus) {
+        Q_UNUSED(exitCode);
+        Q_UNUSED(exitStatus);
         qDebug() << "Python STDOUT:" << *outputBuffer;
         qDebug() << "Python STDERR:" << *errorBuffer;
 
@@ -1371,5 +1387,219 @@ void EmployeeWindow::onRegisterFaceID()
                 process->deleteLater();
             }
         }
+    }
+}
+
+void EmployeeWindow::onPresenceReport()
+{
+    QString fileName = QFileDialog::getSaveFileName(this, "Exporter Rapport de Présence",
+                                                     "Rapport_Presence_" + QDate::currentDate().toString("dd_MM_yyyy") + ".pdf", "PDF Files (*.pdf)");
+    if (fileName.isEmpty()) return;
+    if (!fileName.endsWith(".pdf")) fileName += ".pdf";
+
+    QPrinter printer(QPrinter::ScreenResolution);
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setPageSize(QPageSize(QPageSize::A4));
+    printer.setOutputFileName(fileName);
+
+    QTextDocument doc;
+    QString html = R"(
+        <div style='margin: 30px; font-family: sans-serif;'>
+            <h1 style='text-align: center; color: #1e3a5f;'>RAPPORT DE PRÉSENCE – PORTFLOW</h1>
+            <p style='text-align: center;'>Généré le )" + QDate::currentDate().toString("dd/MM/yyyy") + R"(</p>
+            <hr>
+            <table width='100%' border='1' cellspacing='0' cellpadding='8' style='border-collapse: collapse; margin-top: 20px;'>
+                <tr style='background-color: #f1f5f9;'>
+                    <th>Employé</th>
+                    <th>Poste</th>
+                    <th>Date</th>
+                    <th>Arrivée</th>
+                    <th>Départ</th>
+                </tr>
+    )";
+
+    QSqlQuery query;
+    query.prepare("SELECT E.PRENOM, E.NOM, E.\"POSITION\", P.DATE_PRESENCE, P.HEURE_ARRIVEE, P.HEURE_DEPART "
+                  "FROM PRESENCE P JOIN EMPLOYEES E ON P.ID_EMPLOYE = E.ID_EMPLOYE "
+                  "ORDER BY P.DATE_PRESENCE DESC, P.HEURE_ARRIVEE DESC");
+    
+    bool foundData = false;
+    if (query.exec()) {
+        while (query.next()) {
+            foundData = true;
+            QString name = query.value(0).toString() + " " + query.value(1).toString();
+            QString pos = query.value(2).toString();
+            QString date = query.value(3).toDate().toString("dd/MM/yyyy");
+            QString arrival = query.value(4).toDateTime().toString("HH:mm:ss");
+            QString departure = query.value(5).toDateTime().toString("HH:mm:ss");
+            if (query.value(5).isNull()) departure = "<span style='color: #2563EB;'>En cours</span>";
+
+            html += QString("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td></tr>")
+                    .arg(name, pos, date, arrival, departure);
+        }
+    }
+    
+    if (!foundData) {
+        // Fallback for EMPLOYEE table
+        QSqlQuery query2;
+        query2.prepare("SELECT E.PRENOM, E.NOM, E.\"POSITION\", P.DATE_PRESENCE, P.HEURE_ARRIVEE, P.HEURE_DEPART "
+                      "FROM PRESENCE P JOIN EMPLOYEE E ON P.ID_EMPLOYE = E.ID_EMPLOYE "
+                      "ORDER BY P.DATE_PRESENCE DESC, P.HEURE_ARRIVEE DESC");
+        if (query2.exec()) {
+             while (query2.next()) {
+                QString name = query2.value(0).toString() + " " + query2.value(1).toString();
+                QString pos = query2.value(2).toString();
+                QString date = query2.value(3).toDate().toString("dd/MM/yyyy");
+                QString arrival = query2.value(4).toDateTime().toString("HH:mm:ss");
+                QString departure = query2.value(5).toDateTime().toString("HH:mm:ss");
+                if (query2.value(5).isNull()) departure = "<span style='color: #2563EB;'>En cours</span>";
+
+                html += QString("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td></tr>")
+                        .arg(name, pos, date, arrival, departure);
+            }
+        }
+    }
+
+    html += "</table></div>";
+    doc.setHtml(html);
+    doc.print(&printer);
+
+    QMessageBox::information(this, "Succès", "Le rapport de présence a été exporté avec succès.");
+}
+
+#include "aiintegration.h"
+#include <QDateTime>
+
+void EmployeeWindow::onSmartAIReport()
+{
+    int currentRow = table->currentRow();
+    if (currentRow < 0) {
+        QMessageBox::warning(this, "Sélection Requise", "Veuillez sélectionner un employé pour générer son rapport IA.");
+        return;
+    }
+
+    QTableWidgetItem* item = table->item(currentRow, 0);
+    int empIndex = item->data(Qt::UserRole).toInt();
+    const Employee& emp = employees[empIndex];
+
+    // Show loading dialog or message
+    QMessageBox* loading = new QMessageBox(this);
+    loading->setWindowTitle("Analyse IA en cours");
+    loading->setText("Génération du rapport intelligent pour " + emp.firstName + " " + emp.lastName + "...");
+    loading->setStandardButtons(QMessageBox::NoButton);
+    loading->show();
+    QCoreApplication::processEvents();
+
+    // Gather statistics from database
+    EmployeeAnalysisContext context;
+    context.name = emp.firstName + " " + emp.lastName;
+    context.position = emp.position;
+    context.salary = QString(emp.salary).remove(QRegularExpression("[^0-9]")).toDouble();
+    
+    QSqlQuery query;
+    query.prepare("SELECT HEURE_ARRIVEE, HEURE_DEPART FROM PRESENCE WHERE ID_EMPLOYE = :id AND HEURE_DEPART IS NOT NULL");
+    query.bindValue(":id", emp.id.toInt());
+    
+    qint64 totalSeconds = 0;
+    int sessions = 0;
+    if (query.exec()) {
+        while (query.next()) {
+            QDateTime arrival = query.value(0).toDateTime();
+            QDateTime departure = query.value(1).toDateTime();
+            totalSeconds += arrival.secsTo(departure);
+            sessions++;
+        }
+    }
+    context.totalHours = static_cast<int>(totalSeconds / 3600);
+    context.sessionsCount = sessions;
+    context.averageSessionHours = sessions > 0 ? (totalSeconds / 3600.0) / sessions : 0;
+
+    // Call AI Service
+    EmployeeAnalysisReport report = EmployeeIntelligenceService::generateSmartReport(context);
+    
+    loading->close();
+    delete loading;
+
+    if (report.success) {
+        QDialog* dialog = new QDialog(this);
+        dialog->setWindowTitle("Rapport Intelligent IA - PortFlow");
+        dialog->setMinimumWidth(550);
+        
+        QString bgColor = isDarkMode ? "#1A202C" : "#F8FAFC";
+        QString cardBg = isDarkMode ? "#2D3748" : "#F3F4F6";
+        QString textColor = isDarkMode ? "#F7FAFC" : "#1E293B";
+        QString accentColor = "#8B5CF6";
+        
+        dialog->setStyleSheet(QString("QDialog { background-color: %1; }").arg(bgColor));
+        
+        QVBoxLayout* layout = new QVBoxLayout(dialog);
+        layout->setSpacing(20);
+        layout->setContentsMargins(30, 30, 30, 30);
+        
+        QLabel* title = new QLabel("✨ Analyse Prédictive & Performance");
+        title->setStyleSheet(QString("font-size: 22px; font-weight: bold; color: %1;").arg(accentColor));
+        layout->addWidget(title);
+        
+        // Summary Card
+        QFrame* summaryCard = new QFrame();
+        summaryCard->setStyleSheet(QString("background-color: %1; border-radius: 12px; padding: 15px;").arg(cardBg));
+        QVBoxLayout* summaryLay = new QVBoxLayout(summaryCard);
+        
+        QLabel* nameLabel = new QLabel("Employé: " + context.name);
+        nameLabel->setStyleSheet(QString("font-weight: bold; font-size: 14px; color: %1;").arg(textColor));
+        summaryLay->addWidget(nameLabel);
+        
+        QLabel* statsLabel = new QLabel(QString("Heures totales: %1h | Sessions: %2 | Score de Productivité: %3%")
+                                        .arg(context.totalHours).arg(context.sessionsCount).arg(report.productivityScore, 0, 'f', 1));
+        statsLabel->setStyleSheet(isDarkMode ? "color: #A0AEC0;" : "color: #4B5563;");
+        summaryLay->addWidget(statsLabel);
+        layout->addWidget(summaryCard);
+        
+        // Analysis
+        QLabel* analysisTitle = new QLabel("📝 Analyse de l'IA (Google Gemini)");
+        analysisTitle->setStyleSheet(QString("font-weight: bold; color: %1; margin-top: 10px;").arg(isDarkMode ? "#63B3ED" : "#1E3A8A"));
+        layout->addWidget(analysisTitle);
+        
+        QLabel* analysisText = new QLabel(report.analysis);
+        analysisText->setWordWrap(true);
+        analysisText->setStyleSheet(QString(R"(
+            QLabel { 
+                line-height: 1.5; color: %1; background: %2; padding: 12px; 
+                border: 1px solid %3; border-radius: 10px; 
+            }
+        )").arg(textColor, isDarkMode ? "#2D3748" : "white", isDarkMode ? "#4A5568" : "#E5E7EB"));
+        layout->addWidget(analysisText);
+        
+        // Recommendation
+        QLabel* recoTitle = new QLabel("💡 Recommandations Stratégiques");
+        recoTitle->setStyleSheet(QString("font-weight: bold; color: %1; margin-top: 10px;").arg(isDarkMode ? "#68D391" : "#059669"));
+        layout->addWidget(recoTitle);
+        
+        QLabel* recoText = new QLabel(report.recommendation);
+        recoText->setWordWrap(true);
+        recoText->setStyleSheet(QString(R"(
+            QLabel { 
+                line-height: 1.5; color: %1; background: %2; padding: 12px; 
+                border: 1px solid %3; border-radius: 10px; 
+            }
+        )").arg(textColor, isDarkMode ? "#1A365D" : "#ECFDF5", isDarkMode ? "#2B6CB0" : "#A7F3D0"));
+        layout->addWidget(recoText);
+        
+        QPushButton* closeBtn = new QPushButton("Fermer");
+        closeBtn->setFixedHeight(45);
+        closeBtn->setCursor(Qt::PointingHandCursor);
+        closeBtn->setStyleSheet(QString(R"(
+            QPushButton { 
+                background-color: %1; color: white; font-weight: bold; 
+                border-radius: 10px; margin-top: 10px; 
+            }
+            QPushButton:hover { background-color: #7C3AED; }
+        )").arg(accentColor));
+        connect(closeBtn, &QPushButton::clicked, dialog, &QDialog::accept);
+        layout->addWidget(closeBtn);
+        
+        dialog->exec();
+    } else {
+        QMessageBox::critical(this, "Erreur AI", "Impossible de générer le rapport IA pour le moment.");
     }
 }

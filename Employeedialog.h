@@ -25,6 +25,8 @@ private slots:
     void validatePhone(const QString &text);
     void validateEmail(const QString &text);
     void onSaveClicked();
+    void onScanRfid();
+    void updateRfidField(const QString& uid);
 
 private:
     void setupUi();
@@ -46,6 +48,8 @@ private:
     QLabel* emailErrorLabel;
     QDateEdit* dateInput;
     QComboBox* statusCombo;
+    QLineEdit* rfidInput;
+    QPushButton* scanBtn;
 
     Employee* employeeData;
     bool isEdit;

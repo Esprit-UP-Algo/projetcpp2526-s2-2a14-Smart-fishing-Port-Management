@@ -28,6 +28,7 @@ struct Employee {
     QString status;  // Actif / Congé / Inactif
     QString phone;
     QString email;
+    QString rfid_uid;
 };
 
 class EmployeeWindow : public QMainWindow
@@ -50,6 +51,8 @@ private slots:
     void onAttestationTravail();
     void onRegisterFaceID();
     void onViewStats();
+    void onPresenceReport();
+    void onSmartAIReport();
     void toggleDarkMode();
     void onSettingsClicked();
 

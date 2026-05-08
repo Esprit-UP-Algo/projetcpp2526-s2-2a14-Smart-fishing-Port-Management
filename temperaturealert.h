@@ -1,31 +1,50 @@
 #ifndef TEMPERATUREALERT_H
 #define TEMPERATUREALERT_H
 
-#include <QDialog>
+#include <QWidget>
 #include <QString>
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFrame>
+#include <QMap>
+#include <QStringList>
 
-class TemperatureAlert : public QDialog
+class TemperatureAlert : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit TemperatureAlert(const QString& fridgeRef, double threshold, double current, QWidget *parent = nullptr);
+    explicit TemperatureAlert(QWidget *parent = nullptr);
     ~TemperatureAlert();
 
-private:
-    void setupUi(const QString& ref, double threshold, double current);
-    QString getStatusMessage(double threshold, double current);
+    void addOrUpdateFridge(const QString& ref, double threshold, double current);
+    void removeFridge(const QString& ref);
+    QStringList activeFridges() const { return fridgeRows.keys(); }
 
-    QLabel* iconLabel;
-    QLabel* titleLabel;
+signals:
+    void requestNavigation();
+    void fridgesDismissed(const QStringList& refs);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
+private:
+    void setupUi();
+    QWidget* createFridgeRow(const QString& ref, double threshold, double current);
+
+    QVBoxLayout* mainLayout;
+    QVBoxLayout* contentLayout;
     QLabel* messageLabel;
-    QLabel* currentTempLabel;
-    QLabel* thresholdLabel;
+    
+    struct FridgeWidgets {
+        QWidget* container;
+        QLabel* currentLabel;
+        QLabel* thresholdLabel;
+    };
+    
+    QMap<QString, FridgeWidgets> fridgeRows;
 };
 
 #endif // TEMPERATUREALERT_H

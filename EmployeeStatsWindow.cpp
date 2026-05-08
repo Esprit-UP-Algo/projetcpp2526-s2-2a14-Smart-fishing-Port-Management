@@ -18,7 +18,19 @@ void EmployeeStatsWindow::setupUi()
     // Title
     QLabel* headTitle = new QLabel("📊 Statistiques Générales");
     headTitle->setStyleSheet("font-size: 24px; font-weight: bold; color: #1e293b;");
-    mainLayout->addWidget(headTitle);
+    
+    QHBoxLayout* titleLay = new QHBoxLayout();
+    titleLay->addWidget(headTitle);
+    titleLay->addStretch();
+    
+    QPushButton* aiInsightBtn = new QPushButton("✨ Insights IA (Google)");
+    aiInsightBtn->setFixedSize(180, 40);
+    aiInsightBtn->setCursor(Qt::PointingHandCursor);
+    aiInsightBtn->setStyleSheet("background-color: #8B5CF6; color: white; font-weight: bold; border-radius: 20px;");
+    connect(aiInsightBtn, &QPushButton::clicked, this, &EmployeeStatsWindow::onSmartInsight);
+    titleLay->addWidget(aiInsightBtn);
+    
+    mainLayout->addLayout(titleLay);
 
     // Top Row: Cards
     QHBoxLayout* cardsLayout = new QHBoxLayout();
@@ -199,4 +211,125 @@ QChartView* EmployeeStatsWindow::createOvertimePieChart()
     chartView->setRenderHint(QPainter::Antialiasing);
     chartView->setStyleSheet("background: white; border-radius: 12px; border: 1px solid #e2e8f0;");
     return chartView;
+}
+
+#include "aiintegration.h"
+#include <QMessageBox>
+#include <QCoreApplication>
+
+void EmployeeStatsWindow::onSmartInsight()
+{
+    // Gather global data
+    double totalSalary = 0;
+    QMap<QString, int> deptCounts;
+    for (const auto& emp : m_employees) {
+        QString cleanSal = emp.salary;
+        cleanSal.remove(QRegularExpression("[^0-9]"));
+        totalSalary += cleanSal.toDouble();
+        deptCounts[emp.position]++;
+    }
+
+    QMessageBox* loading = new QMessageBox(this);
+    loading->setWindowTitle("Consultation IA Google");
+    loading->setText("L'IA analyse la structure salariale et la répartition des effectifs...");
+    loading->setStandardButtons(QMessageBox::NoButton);
+    loading->show();
+    QCoreApplication::processEvents();
+
+    // Use a generic prompt for global analysis
+    EmployeeAnalysisContext context;
+    context.name = "Analyse Globale du Port";
+    context.position = QString("Effectif total: %1").arg(m_employees.size());
+    context.salary = totalSalary;
+    context.totalHours = m_employees.size() * 160; 
+    
+    EmployeeAnalysisReport report = EmployeeIntelligenceService::generateSmartReport(context);
+    
+    loading->close();
+    delete loading;
+
+    if (report.success) {
+        QDialog* dialog = new QDialog(this);
+        dialog->setWindowTitle("Insights IA Stratégiques - PortFlow");
+        dialog->setMinimumWidth(600);
+        
+        // Since stats window seems to be light mode by default (from previous setup), use light theme colors
+        // or ensure explicit styling for text readability
+        QString bgColor = "#F8FAFC";
+        QString cardBg = "#FFFFFF";
+        QString textColor = "#1E293B";
+        QString accentColor = "#8B5CF6";
+        
+        dialog->setStyleSheet(QString("QDialog { background-color: %1; color: %2; }").arg(bgColor, textColor));
+        
+        QVBoxLayout* layout = new QVBoxLayout(dialog);
+        layout->setSpacing(20);
+        layout->setContentsMargins(30, 30, 30, 30);
+        
+        QLabel* title = new QLabel("✨ Insights Stratégiques (Google AI)");
+        title->setStyleSheet(QString("font-size: 22px; font-weight: bold; color: %1;").arg(accentColor));
+        layout->addWidget(title);
+        
+        // Summary
+        QFrame* summaryCard = new QFrame();
+        summaryCard->setStyleSheet(QString("background-color: %1; border-radius: 12px; padding: 15px; border: 1px solid #E2E8F0;").arg(cardBg));
+        QVBoxLayout* summaryLay = new QVBoxLayout(summaryCard);
+        
+        QLabel* summaryTitle = new QLabel("Résumé Global");
+        summaryTitle->setStyleSheet(QString("font-weight: bold; font-size: 14px; color: %1;").arg(textColor));
+        summaryLay->addWidget(summaryTitle);
+        
+        QLabel* summaryText = new QLabel(report.summary);
+        summaryText->setStyleSheet(QString("color: %1;").arg(textColor));
+        summaryText->setWordWrap(true);
+        summaryLay->addWidget(summaryText);
+        layout->addWidget(summaryCard);
+        
+        // Analysis
+        QLabel* analysisTitle = new QLabel("📝 Analyse Structurelle");
+        analysisTitle->setStyleSheet("font-weight: bold; color: #1E3A8A; margin-top: 10px;");
+        layout->addWidget(analysisTitle);
+        
+        QLabel* analysisText = new QLabel(report.analysis);
+        analysisText->setWordWrap(true);
+        analysisText->setStyleSheet(QString(R"(
+            QLabel { 
+                line-height: 1.5; color: %1; background: %2; padding: 12px; 
+                border: 1px solid #E5E7EB; border-radius: 10px; 
+            }
+        )").arg(textColor, cardBg));
+        layout->addWidget(analysisText);
+        
+        // Recommendation
+        QLabel* recoTitle = new QLabel("💡 Recommandations");
+        recoTitle->setStyleSheet("font-weight: bold; color: #059669; margin-top: 10px;");
+        layout->addWidget(recoTitle);
+        
+        QLabel* recoText = new QLabel(report.recommendation);
+        recoText->setWordWrap(true);
+        recoText->setStyleSheet(QString(R"(
+            QLabel { 
+                line-height: 1.5; color: %1; background: #ECFDF5; padding: 12px; 
+                border: 1px solid #A7F3D0; border-radius: 10px; 
+            }
+        )").arg(textColor));
+        layout->addWidget(recoText);
+        
+        QPushButton* closeBtn = new QPushButton("Fermer");
+        closeBtn->setFixedHeight(45);
+        closeBtn->setCursor(Qt::PointingHandCursor);
+        closeBtn->setStyleSheet(QString(R"(
+            QPushButton { 
+                background-color: %1; color: white; font-weight: bold; 
+                border-radius: 10px; margin-top: 10px; 
+            }
+            QPushButton:hover { background-color: #7C3AED; }
+        )").arg(accentColor));
+        connect(closeBtn, &QPushButton::clicked, dialog, &QDialog::accept);
+        layout->addWidget(closeBtn);
+        
+        dialog->exec();
+    } else {
+        QMessageBox::critical(this, "Erreur AI", "Impossible de générer l'insight IA pour le moment.");
+    }
 }

@@ -61,6 +61,7 @@ public:
 
     // [NOUVEAU] Unicité
     static bool immatriculationExiste(QString imm, int idBateauExclu = -1);
+    static bool codeSecretExiste(int code, int idBateauExclu = -1);
 
     // [NOUVEAU] Alertes maintenance
     static QStringList getUpcomingMaintenanceAlerts();

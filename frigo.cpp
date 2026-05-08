@@ -108,7 +108,7 @@ bool FrigoModel::modifier(QString id)
     query.bindValue(":temp", temperature);
     query.bindValue(":occ", occupation);
     query.bindValue(":tel", telephone);
-    
+
     if (!query.exec()) {
         m_lastError = query.lastError().text();
         return false;

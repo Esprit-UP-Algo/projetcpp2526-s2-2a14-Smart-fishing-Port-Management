@@ -353,14 +353,20 @@ void LoginWindow::onLogin()
     auto tryQuery = [&](const QString& tableName) {
         query.prepare(QString(
             "SELECT PRENOM, NOM, \"POSITION\" FROM %1 "
-            "WHERE LOWER(EMAIL) = LOWER(:email) AND CAST(CIN AS TEXT) = :cin"
+            "WHERE LOWER(EMAIL) = LOWER(:email) AND TO_CHAR(CIN) = :cin"
         ).arg(tableName));
         query.bindValue(":email", email);
         query.bindValue(":cin",   password);
-        if (query.exec() && query.next()) {
-            employeeName = query.value(0).toString() + " " + query.value(1).toString();
-            employeeRole = query.value(2).toString();
-            return true;
+        if (query.exec()) {
+            if (query.next()) {
+                employeeName = query.value(0).toString() + " " + query.value(1).toString();
+                employeeRole = query.value(2).toString();
+                qDebug() << "Login SUCCESS: " << employeeName << " role:" << employeeRole;
+                return true;
+            }
+            qDebug() << "Login: no matching row in" << tableName << "for email:" << email;
+        } else {
+            qDebug() << "Login SQL ERROR on" << tableName << ":" << query.lastError().text();
         }
         return false;
     };
@@ -372,7 +378,7 @@ void LoginWindow::onLogin()
     if (!found && (email == "admin" || email == "admin@portflow.com") && password == "admin") {
         found = true;
         employeeName = "Admin Dev";
-        employeeRole = "RH";
+        employeeRole = "Admin";
     }
 
     if (found) {

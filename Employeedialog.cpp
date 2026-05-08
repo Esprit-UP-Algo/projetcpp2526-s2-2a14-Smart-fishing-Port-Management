@@ -1,4 +1,6 @@
 #include "employeedialog.h"
+#include "mainwindow.h"
+#include <QApplication>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -218,6 +220,35 @@ void EmployeeDialog::setupUi()
     statusCombo->setFixedHeight(50);
     statusCombo->setStyleSheet(getInputStyle());
     formLayout->addWidget(statusCombo);
+
+    QLabel* rfidLabel = new QLabel("RFID UID");
+    rfidLabel->setFont(labelFont);
+    rfidLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
+    formLayout->addWidget(rfidLabel);
+    QHBoxLayout* rfidLayout = new QHBoxLayout();
+    rfidInput = new QLineEdit();
+    rfidInput->setPlaceholderText("69:E4:F9:05");
+    rfidInput->setFont(inputFont);
+    rfidInput->setFixedHeight(50);
+    rfidInput->setStyleSheet(getInputStyle());
+    rfidLayout->addWidget(rfidInput, 1);
+
+    scanBtn = new QPushButton("Scanner Carte");
+    scanBtn->setFixedSize(140, 50);
+    scanBtn->setCursor(Qt::PointingHandCursor);
+    scanBtn->setStyleSheet(R"(
+        QPushButton { 
+            background-color: #2ECC71; 
+            color: white; 
+            border-radius: 10px; 
+            font-weight: 600; 
+        }
+        QPushButton:hover { background-color: #27AE60; }
+    )");
+    connect(scanBtn, &QPushButton::clicked, this, &EmployeeDialog::onScanRfid);
+    rfidLayout->addWidget(scanBtn);
+    formLayout->addLayout(rfidLayout);
+
     formLayout->addStretch();
 
     QHBoxLayout* buttonLayout = new QHBoxLayout();
@@ -276,6 +307,7 @@ void EmployeeDialog::populateFields()
     if (dateParts.size() == 3) dateInput->setDate(QDate(dateParts[2].toInt(), dateParts[1].toInt(), dateParts[0].toInt()));
     int index = statusCombo->findText(employeeData->status);
     if (index >= 0) statusCombo->setCurrentIndex(index);
+    rfidInput->setText(employeeData->rfid_uid);
 }
 
 Employee EmployeeDialog::getData() const
@@ -290,6 +322,7 @@ Employee EmployeeDialog::getData() const
     employee.salary = salaryInput->text();
     employee.date = dateInput->date().toString("dd/MM/yyyy");
     employee.status = statusCombo->currentText();
+    employee.rfid_uid = rfidInput->text();
     return employee;
 }
 
@@ -375,4 +408,43 @@ void EmployeeDialog::onSaveClicked()
         return;
     }
     accept();
+}
+
+void EmployeeDialog::onScanRfid()
+{
+    scanBtn->setText("Approchez la carte...");
+    scanBtn->setStyleSheet("background-color: #F1C40F; color: white; border-radius: 10px; font-weight: 600;");
+    
+    // Find MainWindow reliably
+    MainWindow* mainWin = nullptr;
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        mainWin = qobject_cast<MainWindow*>(widget);
+        if (mainWin) break;
+    }
+
+    if (mainWin) {
+        connect(mainWin, &MainWindow::rfidScanned, this, &EmployeeDialog::updateRfidField, Qt::UniqueConnection);
+    } else {
+        QMessageBox::warning(this, "Arduino", "Impossible de se connecter au lecteur RFID (MainWindow introuvable).");
+    }
+}
+
+void EmployeeDialog::updateRfidField(const QString& uid)
+{
+    rfidInput->setText(uid);
+    scanBtn->setText("Scanner Carte");
+    scanBtn->setStyleSheet("background-color: #2ECC71; color: white; border-radius: 10px; font-weight: 600;");
+    
+    // Disconnect after first scan
+    MainWindow* mainWin = nullptr;
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        mainWin = qobject_cast<MainWindow*>(widget);
+        if (mainWin) break;
+    }
+    
+    if (mainWin) {
+        disconnect(mainWin, &MainWindow::rfidScanned, this, &EmployeeDialog::updateRfidField);
+    }
+    
+    QMessageBox::information(this, "RFID", "Carte détectée : " + uid);
 }

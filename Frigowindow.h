@@ -13,6 +13,14 @@
 #include <QVector>
 #include <QComboBox>
 #include <QSqlRecord>
+#include <QCalendarWidget>
+#include <QListWidget>
+#include <QMap>
+#include <QDate>
+#include <QShowEvent>
+#include <QTextCharFormat>
+#include <QBrush>
+#include <QColor>
 #include "frigo.h"
 
 // Structure Frigo removed, using FrigoModel class
@@ -24,6 +32,8 @@ class FrigoWindow : public QMainWindow
 public:
     explicit FrigoWindow(QWidget *parent = nullptr);
     ~FrigoWindow();
+
+    void setDarkMode(bool dark);
 
 private slots:
     void onSearch(const QString& text);
@@ -48,9 +58,12 @@ private:
     QFrame* createHeader();
     QFrame* createToolbar();
     QFrame* createTableCard();
+    QFrame* createCalendarCard();
     QPushButton* createNavButton(const QString& icon, const QString& text, bool isActive = false, bool isLogout = false);
     void setupTable();
     void populateTable(const QString& filterText = "");
+    void loadCalendarData();
+    void updateCalendarDetails(const QDate &date);
     QWidget* createStatusBadge(const QString& status);
     QWidget* createActionButtons(int row, const QString& dbId);
     QString generateFrigoId();
@@ -59,6 +72,12 @@ private:
     QTableWidget*   table;
     QLineEdit*      searchInput;
     QComboBox*      sortCombo;
+
+    QCalendarWidget* calendar;
+    QListWidget*      calendarDetails;
+    QMap<QDate, QStringList> maintenanceDates;
+    QMap<QDate, QStringList> deliveryDates;
+    bool isDarkMode = false;
 };
 
 #endif // FRIGOWINDOW_H

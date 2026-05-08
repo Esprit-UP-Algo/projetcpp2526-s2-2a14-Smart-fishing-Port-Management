@@ -25,6 +25,10 @@ bool Bateau::ajouter() {
         lastError = "Cette immatriculation appartient déjà à un autre bateau.";
         return false;
     }
+    if (codeSecretExiste(codeSecret)) {
+        lastError = "Ce code secret est déjà utilisé par un autre bateau.";
+        return false;
+    }
 
     QSqlQuery query;
     if (idQuai.isEmpty()) {
@@ -99,6 +103,10 @@ bool Bateau::modifier(QString id) {
     // [NOUVEAU] Unicité (en excluant le bateau actuel)
     if (immatriculationExiste(immatriculation, id.toInt())) {
         lastError = "Cette immatriculation appartient déjà à un autre bateau.";
+        return false;
+    }
+    if (codeSecretExiste(codeSecret, id.toInt())) {
+        lastError = "Ce code secret est déjà utilisé par un autre bateau.";
         return false;
     }
 
@@ -216,6 +224,22 @@ bool Bateau::immatriculationExiste(QString imm, int idBateauExclu) {
         query.bindValue(":id", idBateauExclu);
     }
     query.bindValue(":imm", imm);
+    
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+    return false;
+}
+
+bool Bateau::codeSecretExiste(int code, int idBateauExclu) {
+    QSqlQuery query;
+    if (idBateauExclu == -1) {
+        query.prepare("SELECT COUNT(*) FROM BATEAUX WHERE CODE_SECRET = :code");
+    } else {
+        query.prepare("SELECT COUNT(*) FROM BATEAUX WHERE CODE_SECRET = :code AND IDBATEAU != :id");
+        query.bindValue(":id", idBateauExclu);
+    }
+    query.bindValue(":code", code);
     
     if (query.exec() && query.next()) {
         return query.value(0).toInt() > 0;

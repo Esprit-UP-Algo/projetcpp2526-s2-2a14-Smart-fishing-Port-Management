@@ -16,6 +16,9 @@
 #include <QStackedWidget>
 #include <QPropertyAnimation>
 #include <QSystemTrayIcon>
+#include <QPointer>
+#include <QMap>
+#include <QDateTime>
 #include "arduino.h"
 
 class MainWindow : public QMainWindow
@@ -25,6 +28,9 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(const QString& userName = "", const QString& userRole = "", QWidget *parent = nullptr);
     ~MainWindow();
+
+signals:
+    void rfidScanned(const QString& uid);
 
 private slots:
     void onNavigateToEmployees();
@@ -41,6 +47,7 @@ private slots:
     void onTrayMessageClicked();
     void handleSerialData(); // Unified slot for Arduino data
     void processPortAccess(const QString& code);
+    void processRFIDPresence(const QString& uid);
 
 private:
     void setupUi();
@@ -81,10 +88,17 @@ private:
     Arduino A;
     QByteArray serialBuffer;
     void checkFridgeTemperature(int sensorId, double currentTemp);
+    void updateFrigoNotifications();
+    QLabel* frigoNotifyLabel1;
+    QLabel* frigoNotifyLabel2;
+    QSet<QString> currentlyInDanger;
+    QSet<QString> arduinoNotifiedDanger;
+    QPointer<class TemperatureAlert> unifiedAlert;
+    QMap<QString, QDateTime> lastDismissed;
     QString loggedUserName;
     QString loggedUserRole;
     QLabel* welcomeLabel;
-
+    QString activeEmployeeTable;
 };
 
 #endif // MAINWINDOW_H

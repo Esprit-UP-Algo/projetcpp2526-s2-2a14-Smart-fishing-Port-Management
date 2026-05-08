@@ -20,6 +20,7 @@
 #include <QtSql/QSqlRecord>
 
 #include "quai.h"
+#include "ortools_optimizer.h"
 
 // ==================== CIRCULAR PROGRESS WIDGET ====================
 class CircularProgress : public QWidget {
@@ -134,7 +135,9 @@ class QuaisWindow : public QMainWindow
 
 public:
     explicit QuaisWindow(QWidget *parent = nullptr);
-    virtual ~QuaisWindow(); // <--- AJOUTÉ
+    ~QuaisWindow();
+    static void refreshAll();
+    static void handleMaintenanceImpact(int idQuai);
     void loadQuaisFromDatabase();
 private:
     // UI
@@ -172,13 +175,12 @@ private slots:
     void afficherStatistiques();
     void onGenerateContract(int row);
     void onAutoAssignBoat();
-    
-public:
-    static void refreshAll();
 
 private:
     bool assignerQuaiAutomatiquement(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
+    bool assignerQuaiAvecORTools(const QVariantMap& bateauInfo, Quai& quaiChoisi, int& tempsEstime, QString& explication);
     int findQuaiIndexByNumero(int numero) const;
+    int findQuaiIndexById(int idQuai) const;
     void ensureAvailabilityTimerForQuai(const Quai& quai);
     int estimateCountdownSeconds(const Quai& quai) const;
     int remainingAvailabilitySeconds(int numero) const;
@@ -188,6 +190,7 @@ private:
     void processPendingDockAssignment(int numero);
     void markQuaiAsAvailable(int numero, bool showNotification = true);
     void showAvailabilityCountdownPopup(int numero);
+    bool markQuaiAsMaintenance(int idQuai, QString* errorMessage = nullptr);
 
 private slots:
     void onQuaiCellClicked(int row, int column);

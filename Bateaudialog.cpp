@@ -349,10 +349,25 @@ void BateauDialog::setupUi()
     etatCombo->setStyleSheet(getInputStyle());
     formLayout->addWidget(etatCombo);
 
+    // Seul le bateau "Au port" peut choisir un quai
+    auto updateQuaiStatus = [=]() {
+        if (etatCombo->currentIndex() == 0) { // "Au port"
+            quaiCombo->setEnabled(true);
+        } else {
+            quaiCombo->setCurrentIndex(0); // "Aucun quai"
+            quaiCombo->setEnabled(false);
+        }
+    };
+
+    connect(etatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, updateQuaiStatus);
+    
+    // Initialiser l'état au démarrage
+    updateQuaiStatus();
+
     formLayout->addSpacing(10);
 
     // --- Code Secret ---
-    QLabel* codeLabel = new QLabel("Code Secret (Entier)");
+    QLabel* codeLabel = new QLabel("Code Secret (4 chiffres)");
     codeLabel->setFont(labelFont);
     codeLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
     formLayout->addWidget(codeLabel);
@@ -361,9 +376,33 @@ void BateauDialog::setupUi()
     codeSecInput->setPlaceholderText("ex: 1234");
     codeSecInput->setFont(inputFont);
     codeSecInput->setFixedHeight(50);
+    codeSecInput->setMaxLength(4);
     codeSecInput->setStyleSheet(getInputStyle());
-    codeSecInput->setValidator(new QIntValidator(0, 999999, this));
+    // Autoriser uniquement 0 à 4 chiffres pendant la saisie
+    QRegularExpression codeRegex("^\\d{0,4}$");
+    codeSecInput->setValidator(new QRegularExpressionValidator(codeRegex, this));
     formLayout->addWidget(codeSecInput);
+
+    QLabel* codeErrorLabel = new QLabel("⚠️ Le code secret doit contenir exactement 4 chiffres.");
+    codeErrorLabel->setStyleSheet("color: #E74C3C; font-size: 13px; font-weight: bold; margin-top: -5px;");
+    codeErrorLabel->hide();
+    formLayout->addWidget(codeErrorLabel);
+
+    connect(codeSecInput, &QLineEdit::textChanged, this, [=](const QString &text){
+        if (text.isEmpty()) {
+            codeErrorLabel->hide();
+            codeSecInput->setStyleSheet(getInputStyle());
+            return;
+        }
+        QRegularExpression fullCode("^\\d{4}$");
+        if (!fullCode.match(text).hasMatch()) {
+            codeErrorLabel->show();
+            codeSecInput->setStyleSheet("border: 2px solid #E74C3C; background-color: #FDEDEC; border-radius: 10px; padding: 12px 15px; color: #E74C3C; font-size: 12px;");
+        } else {
+            codeErrorLabel->hide();
+            codeSecInput->setStyleSheet("border: 2px solid #27AE60; background-color: #EAFAF1; border-radius: 10px; padding: 12px 15px; color: #2C3E50; font-size: 12px;");
+        }
+    });
 
     formLayout->addStretch();
 
@@ -496,9 +535,20 @@ bool BateauDialog::validateInputs() {
         return false;
     }
 
-    // 7. Code Secret
-    if(codeSecInput->text().trimmed().isEmpty()){
-        showError("Le code secret est obligatoire (nombre entier).");
+    // 7. Code Secret — exactement 4 chiffres
+    QString codeStr = codeSecInput->text().trimmed();
+    QRegularExpression codeExact("^\\d{4}$");
+    if (codeStr.isEmpty()) {
+        showError("Le code secret est obligatoire (4 chiffres).");
+        return false;
+    } else if (!codeExact.match(codeStr).hasMatch()) {
+        showError("Le code secret doit contenir exactement 4 chiffres (ex: 1234).");
+        return false;
+    }
+
+    // [NOUVEAU] Un quai est obligatoire si le bateau est au port
+    if (etatCombo->currentText() == "Au port" && quaiCombo->currentData().toString().isEmpty()) {
+        showError("Un quai doit être sélectionné pour un bateau stationné au port.");
         return false;
     }
 
@@ -524,6 +574,13 @@ void BateauDialog::populateFields() {
     if (etatStr == "En mer") etatCombo->setCurrentIndex(1);
     else if (etatStr == "En maintenance") etatCombo->setCurrentIndex(2);
     else etatCombo->setCurrentIndex(0); // Au port (default)
+    
+    // Forcer la mise à jour de l'activation du quai après avoir peuplé l'état
+    if (etatCombo->currentIndex() != 0) {
+        quaiCombo->setEnabled(false);
+    } else {
+        quaiCombo->setEnabled(true);
+    }
     
     codeSecInput->setText(QString::number(bateauData->getCodeSecret()));
 }

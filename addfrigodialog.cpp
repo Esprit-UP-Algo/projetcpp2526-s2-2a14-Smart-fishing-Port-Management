@@ -144,7 +144,7 @@ void AddFrigoDialog::setupUi()
     phoneBox->setStyleSheet(getInputStyle());
     phoneBox->setMinimumHeight(45);
     phoneBox->setEditable(true); // Allow manual entry if needed, but primarily for selection
-    
+
     // Populer avec les téléphones des employés
     QSqlQuery qEmp("SELECT DISTINCT TELEPHONE FROM EMPLOYEES WHERE TELEPHONE IS NOT NULL");
     while (qEmp.next()) {
@@ -172,12 +172,12 @@ void AddFrigoDialog::setupUi()
     cancel->setCursor(Qt::PointingHandCursor);
     cancel->setStyleSheet("background:#e2e8f0; color:#475569; border:none; border-radius:10px; height:45px; font-weight:600;");
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
-    
+
     QPushButton* save = new QPushButton("Enregistrer");
     save->setCursor(Qt::PointingHandCursor);
     save->setStyleSheet("background:#5D9CEC; color:white; border:none; border-radius:10px; height:45px; font-weight:600;");
     connect(save, &QPushButton::clicked, this, &AddFrigoDialog::onSave);
-    
+
     btns->addWidget(cancel);
     btns->addWidget(save);
     mainContentLayout->addLayout(btns);
@@ -278,7 +278,7 @@ QString AddFrigoDialog::getInputStyle() const
             background: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 12px; padding: 10px 15px; font-size: 12pt; color: #1E293B;
         }
         QLineEdit:focus, QComboBox:focus, QDateEdit:focus { border: 2px solid #5D9CEC; background: white; }
-        
+
         QComboBox::drop-down {
             border: none;
             width: 30px;
@@ -314,16 +314,16 @@ void AddFrigoDialog::populateFields()
     statusBox->setCurrentText(frigoData->getStat());
     fishBox->setCurrentText(frigoData->getType());
     phoneBox->setCurrentText(frigoData->getTelephone());
-    
+
     QDate dt = QDate::fromString(frigoData->getDateRes(), "dd/MM/yyyy");
     if (dt.isValid()) dateResEdit->setDate(dt);
 }
 
 FrigoModel AddFrigoDialog::getData() const
 {
-    return FrigoModel("", refEdit->text(), capEdit->text().toDouble(), 
-                      fishBox->currentText(), statusBox->currentText(), 
-                      dateResEdit->date().toString("dd/MM/yyyy"), 
+    return FrigoModel("", refEdit->text(), capEdit->text().toDouble(),
+                      fishBox->currentText(), statusBox->currentText(),
+                      dateResEdit->date().toString("dd/MM/yyyy"),
                       tempEdit->text().toDouble(), occEdit->text().toDouble(),
                       phoneBox->currentText());
 }

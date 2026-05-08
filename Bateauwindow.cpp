@@ -119,6 +119,7 @@ QFrame* BateauWindow::createSidebar()
     appName->setStyleSheet("color:white;background:transparent;margin-bottom:6px;");
     lay->addWidget(appName);
 
+
     QFrame* nav = new QFrame();
     nav->setStyleSheet("background: transparent;");
     QVBoxLayout* navLay = new QVBoxLayout(nav);
@@ -656,7 +657,10 @@ void BateauWindow::onAddBateau()
         while (query.next()) employees.append({query.value(0).toString(), query.value(1).toString()});
     } diag.setEmployeeList(employees);
     QList<QPair<QString, QString>> quais;
-    { QSqlQuery query; if (!query.exec("SELECT IDQUAI, NUMERO, LOCATION FROM QUAIS")) query.exec("SELECT IDQUAI, NUMERO, LOCATION FROM QUAI");
+    { 
+        QSqlQuery query; 
+        if (!query.exec("SELECT IDQUAI, NUMERO, LOCATION FROM QUAIS WHERE ETAT = 'Disponible'")) 
+            query.exec("SELECT IDQUAI, NUMERO, LOCATION FROM QUAI WHERE ETAT = 'Disponible'");
         while (query.next()) quais.append({query.value(0).toString(), QString("Quai %1 (%2)").arg(query.value(1).toString(), query.value(2).toString())});
     } diag.setQuaiList(quais);
 
@@ -703,7 +707,15 @@ void BateauWindow::onEditBateau(int row)
         while (query.next()) employees.append({query.value(0).toString(), query.value(1).toString()});
     } diag.setEmployeeList(employees);
     QList<QPair<QString, QString>> quais;
-    { QSqlQuery query; if (!query.exec("SELECT IDQUAI, NUMERO, LOCATION FROM QUAIS")) query.exec("SELECT IDQUAI, NUMERO, LOCATION FROM QUAI");
+    { 
+        QSqlQuery query; 
+        query.prepare("SELECT IDQUAI, NUMERO, LOCATION FROM QUAIS WHERE ETAT = 'Disponible' OR IDQUAI = :idq");
+        query.bindValue(":idq", b.getIdQuai());
+        if (!query.exec()) {
+            query.prepare("SELECT IDQUAI, NUMERO, LOCATION FROM QUAI WHERE ETAT = 'Disponible' OR IDQUAI = :idq");
+            query.bindValue(":idq", b.getIdQuai());
+            query.exec();
+        }
         while (query.next()) quais.append({query.value(0).toString(), QString("Quai %1 (%2)").arg(query.value(1).toString(), query.value(2).toString())});
     } diag.setQuaiList(quais);
 
