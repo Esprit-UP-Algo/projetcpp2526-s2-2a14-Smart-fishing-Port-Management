@@ -885,6 +885,7 @@ void MainWindow::processPortAccess(const QString& code)
         QSqlQuery qQuery;
         qQuery.prepare("SELECT IDQUAI, NUMERO FROM QUAIS "
                        "WHERE (UPPER(TRIM(ETAT)) NOT IN ('OCCUPÉ', 'OCCUPE') OR ETAT IS NULL) "
+                       "AND (UPPER(TRIM(ETAT)) <> 'MAINTENANCE' OR ETAT IS NULL) "
                        "AND ROWNUM <= 1");
 
         if (qQuery.exec()) {
@@ -893,7 +894,7 @@ void MainWindow::processPortAccess(const QString& code)
                 int numQuai = qQuery.value(1).toInt();
 
                 // Envoie l'autorisation en priorité
-                A.write_to_arduino("A:" + QByteArray::number(numQuai) + "\n");
+                A.write_to_arduino("A:" + QByteArray::number(idQuaiLibre) + "\n");
 
                 QSqlQuery upB, upQ;
                 upB.prepare("UPDATE BATEAUX SET IDQUAI = :q, ETAT = 'Au port' WHERE IDBATEAU = :id");
