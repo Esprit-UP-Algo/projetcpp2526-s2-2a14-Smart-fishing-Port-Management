@@ -6,6 +6,7 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDateEdit>
+#include <QPushButton>
 #include "peche.h"
 
 class PecheDialog : public QDialog
@@ -24,6 +25,7 @@ private:
     QString getInputStyle() const;
     bool validateInputs();
     void showError(const QString& msg);
+    void updateFieldStyle(QWidget* field, bool isValid);
 
 private slots:
     void onSave();

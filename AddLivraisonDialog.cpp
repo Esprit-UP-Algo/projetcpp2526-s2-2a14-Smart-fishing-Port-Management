@@ -1,4 +1,6 @@
 #include "AddLivraisonDialog.h"
+#include <QApplication>
+#include <cstdlib>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -8,25 +10,68 @@
 #include <QScrollArea>
 #include <QFile>
 #include <QTextStream>
+#include <QDate>
+#include <QDateEdit>
 #include <QStyle>
 #include <QUrl>
 #include <QNetworkRequest>
 #include <QJsonDocument>
 #include <QTimer>
 #include <cstdlib>
+#include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
+#include <QtSql/QSqlQuery>
+#include <QtSql/QSqlError>
 
+// ==================== HELPERS POUR DIALOGUE STYLÉ ====================
+class DialogMoveFilter : public QObject {
+public:
+    DialogMoveFilter(QDialog* dialog, QObject* parent = nullptr) : QObject(parent), m_dialog(dialog), m_dragging(false) {}
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (!m_dialog) return QObject::eventFilter(watched, event);
+        switch (event->type()) {
+            case QEvent::MouseButtonPress: {
+                auto* me = static_cast<QMouseEvent*>(event);
+                if (me->button() == Qt::LeftButton) {
+                    m_dragging = true;
+                    m_dragOffset = me->globalPosition().toPoint() - m_dialog->frameGeometry().topLeft();
+                    return true;
+                }
+                break;
+            }
+            case QEvent::MouseMove: {
+                auto* me = static_cast<QMouseEvent*>(event);
+                if (m_dragging && (me->buttons() & Qt::LeftButton)) {
+                    m_dialog->move(me->globalPosition().toPoint() - m_dragOffset);
+                    return true;
+                }
+                break;
+            }
+            case QEvent::MouseButtonRelease: {
+                auto* me = static_cast<QMouseEvent*>(event);
+                if (me->button() == Qt::LeftButton) { m_dragging = false; return true; }
+                break;
+            }
+            default: break;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+private:
+    QDialog* m_dialog;
+    bool m_dragging;
+    QPoint m_dragOffset;
+};
+
+static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle) {
+    if (!dialog || !dragHandle) return;
+    dragHandle->setCursor(Qt::OpenHandCursor);
+    dragHandle->installEventFilter(new DialogMoveFilter(dialog, dragHandle));
+}
 
 AddLivraisonDialog::AddLivraisonDialog(QWidget *parent, Livraison* livraisonData)
-    : QDialog(parent), livraisonData(livraisonData), isEdit(livraisonData != nullptr), 
-      addressValidating(false), addressFound(true), waitingForSave(false)
+    : QDialog(parent), livraisonData(livraisonData), isEdit(livraisonData != nullptr)
 {
-    networkManager = new QNetworkAccessManager(this);
-    connect(networkManager, &QNetworkAccessManager::finished, this, &AddLivraisonDialog::onAddressValidationFinished);
-
-    addressDebounceTimer = new QTimer(this);
-    addressDebounceTimer->setSingleShot(true);
-    connect(addressDebounceTimer, &QTimer::timeout, this, &AddLivraisonDialog::onAddressDebounceTimeout);
-
     setupUi();
     populateLivreurCombo();
     if (isEdit) {
@@ -35,404 +80,253 @@ AddLivraisonDialog::AddLivraisonDialog(QWidget *parent, Livraison* livraisonData
     this->update();
 }
 
-
-AddLivraisonDialog::~AddLivraisonDialog()
-{
-}
+AddLivraisonDialog::~AddLivraisonDialog() {}
 
 void AddLivraisonDialog::setupUi()
 {
     setWindowTitle(isEdit ? "Modifier Livraison" : "Ajouter Livraison");
-    setFixedSize(650, 680);
+    setFixedSize(650, 720);
     setModal(true);
+    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground);
 
-    setStyleSheet(R"(
-        QDialog {
-            background-color: #F0F4F8;
-        }
-    )");
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(this);
+    shadow->setBlurRadius(40);
+    shadow->setOffset(0, 10);
+    shadow->setColor(QColor(0, 0, 0, 100));
 
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    QWidget* container = new QWidget(this);
+    container->setGeometry(15, 15, 620, 690);
+    container->setGraphicsEffect(shadow);
+    container->setStyleSheet("QWidget { background: white; border-radius: 28px; }");
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(container);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Header
+    // Header avec Dégradé Premium (Violet/Indigo pour Livraison)
     QFrame* header = new QFrame();
     header->setFixedHeight(130);
     header->setStyleSheet(R"(
         QFrame {
-            background-color: #5D9CEC;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #2563EB, stop:1 #5D9CEC);
+            border-top-left-radius: 28px;
+            border-top-right-radius: 28px;
         }
     )");
-    QVBoxLayout* headerVLayout = new QVBoxLayout(header);
-    headerVLayout->setContentsMargins(30, 15, 30, 15);
-    headerVLayout->setSpacing(2);
+    
+    QHBoxLayout* headerLay = new QHBoxLayout(header);
+    headerLay->setContentsMargins(35, 0, 25, 0);
 
-    QLabel* title = new QLabel(isEdit ? "Modifier Livraison" : "Ajouter Livraison");
-    title->setFont(QFont("Segoe UI", 20, QFont::Bold));
-    title->setStyleSheet("color: white;");
-    headerVLayout->addWidget(title);
+    QVBoxLayout* titleCol = new QVBoxLayout();
+    titleCol->setSpacing(2);
+    titleCol->setAlignment(Qt::AlignVCenter);
 
-    QLabel* infoLabel = new QLabel("Veuillez saisir l'adresse, le nom du van, le type de transport et le prix.");
-    infoLabel->setFont(QFont("Segoe UI", 9));
-    infoLabel->setWordWrap(true);
-    infoLabel->setStyleSheet("color: rgba(255, 255, 255, 0.85);");
-    headerVLayout->addWidget(infoLabel);
+    QLabel* title = new QLabel(isEdit ? "Modifier Livraison" : "Nouvelle Livraison");
+    title->setFont(QFont("Segoe UI", 22, QFont::Bold));
+    title->setStyleSheet("color: white; background: transparent;");
+    titleCol->addWidget(title);
 
-    QLabel* subTitle = new QLabel(isEdit ? "✏️  Mise à jour des informations" : "📦  Nouvelle expédition");
-    subTitle->setFont(QFont("Segoe UI", 10, QFont::DemiBold));
-    subTitle->setStyleSheet("color: rgba(255, 255, 255, 0.95);");
-    headerVLayout->addWidget(subTitle);
+    QLabel* sub = new QLabel(isEdit ? "✏️  Mise à jour de l'itinéraire et du transport" : "📦  Planification d'une nouvelle expédition maritime");
+    sub->setFont(QFont("Segoe UI", 10));
+    sub->setStyleSheet("color: rgba(255, 255, 255, 0.85); background: transparent;");
+    titleCol->addWidget(sub);
+    headerLay->addLayout(titleCol, 1);
+
+    QPushButton* closeBtn = new QPushButton("✕");
+    closeBtn->setFixedSize(38, 38);
+    closeBtn->setCursor(Qt::PointingHandCursor);
+    closeBtn->setStyleSheet(R"(
+        QPushButton { background: rgba(255,255,255,0.15); color: white; border: none;
+                      border-radius: 19px; font-size: 15px; font-weight: bold; }
+        QPushButton:hover { background: rgba(255,255,255,0.3); }
+    )");
+    connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
+    headerLay->addWidget(closeBtn);
 
     mainLayout->addWidget(header);
+    makeDialogMovable(this, header);
 
-    // Scroll Area (matching BateauDialog)
     QScrollArea* scrollArea = new QScrollArea();
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setStyleSheet("QScrollArea { background-color: #ffffff; border: none; }");
-    scrollArea->viewport()->setStyleSheet("background-color: #ffffff;");
+    scrollArea->setStyleSheet("QScrollArea { background: transparent; border: none; }");
+    scrollArea->viewport()->setStyleSheet("background: transparent;");
 
-    QWidget* content = new QWidget();
-    content->setObjectName("dialogContent");
-    content->setStyleSheet("QWidget#dialogContent { background-color: #ffffff; }");
-    
-    QVBoxLayout* formLayout = new QVBoxLayout(content);
-    formLayout->setSpacing(20);
-    formLayout->setContentsMargins(40, 30, 40, 30);
+    QWidget* formContent = new QWidget();
+    formContent->setStyleSheet("background: transparent;");
+    QVBoxLayout* formLayout = new QVBoxLayout(formContent);
+    formLayout->setSpacing(18);
+    formLayout->setContentsMargins(45, 30, 45, 30);
 
-    auto getInputStyle = []() -> QString {
-        return R"(
-            QLineEdit, QComboBox, QTextEdit, QDateEdit {
-                background-color: #F8F9FA;
-                border: 2px solid #E1E8ED;
-                border-radius: 10px;
-                padding: 10px 15px;
-                color: #2C3E50;
-                font-size: 11pt;
-            }
-            QLineEdit:hover, QComboBox:hover, QTextEdit:hover, QDateEdit:hover {
-                border: 2px solid #CBD5E1;
-            }
-            /* Hover States for Validation */
-            QLineEdit:hover[state="error"], QTextEdit:hover[state="error"] {
-                border: 2px solid #EF4444;
-            }
-            QLineEdit:hover[state="success"], QTextEdit:hover[state="success"] {
-                border: 2px solid #10B981;
-            }
-            QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QDateEdit:focus {
-                border: 2px solid #5D9CEC;
-                background-color: white;
-            }
-            /* Error styling for fields */
-            *[state="error"] {
-                border: 2px solid #FCA5A5;
-                background-color: #FEF2F2;
-            }
-            /* Success styling for fields */
-            *[state="success"] {
-                border: 2px solid #A7F3D0;
-            }
-            /* Fix for Calendar Popup */
-            QCalendarWidget QAbstractItemView {
-                background-color: white;
-                color: #2C3E50;
-                selection-background-color: #5D9CEC;
-                selection-color: white;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar { 
-                background-color: #5D9CEC; 
-            }
-            QCalendarWidget QToolButton {
-                color: white;
-                font-weight: bold;
-            }
-        )";
+    auto addLabel = [&](const QString& text) {
+        QLabel* lbl = new QLabel(text);
+        lbl->setFont(QFont("Segoe UI", 9, QFont::Bold));
+        lbl->setStyleSheet("color: #4B5563; margin-bottom: 2px; letter-spacing: 0.5px;");
+        formLayout->addWidget(lbl);
+        return lbl;
     };
 
-    QFont labelFont("Segoe UI", 11, QFont::DemiBold);
-
-    // Reference Field
-    QLabel* refLabel = new QLabel("🆔  Référence Livraison (Commence par LIV-)");
-    refLabel->setFont(labelFont);
-    refLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
-    formLayout->addWidget(refLabel);
- 
+    addLabel("RÉFÉRENCE LIVRAISON");
     referenceEdit = new QLineEdit();
     referenceEdit->setPlaceholderText("LIV-1234");
-    referenceEdit->setFixedHeight(45);
     referenceEdit->setStyleSheet(getInputStyle());
-    if (isEdit && livraisonData) {
-        referenceEdit->setText(livraisonData->getReference());
-    } else {
-        referenceEdit->setText("LIV-");
-    }
+    QRegularExpression livRegex("^LIV(-\\d{0,6})?$");
+    referenceEdit->setValidator(new QRegularExpressionValidator(livRegex, this));
     formLayout->addWidget(referenceEdit);
- 
+
     errorReference = new QLabel("⚠ La référence doit commencer par LIV-");
-    errorReference->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-    errorReference->setVisible(false);
+    errorReference->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    errorReference->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
+    errorReference->hide();
     formLayout->addWidget(errorReference);
     connect(referenceEdit, &QLineEdit::textChanged, this, &AddLivraisonDialog::onReferenceChanged);
- 
-    // Livreur Field
-    QLabel* livreurLabel = new QLabel("👤  Livreur Responsable");
-    livreurLabel->setFont(labelFont);
-    livreurLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
-    formLayout->addWidget(livreurLabel);
- 
+
+    addLabel("LIVREUR RESPONSABLE");
     livreurCombo = new QComboBox();
-    livreurCombo->setFixedHeight(45);
     livreurCombo->setStyleSheet(getInputStyle());
     formLayout->addWidget(livreurCombo);
 
-    // Adresse
-    QLabel* adresseLabel = new QLabel("📍  Adresse de livraison");
-    adresseLabel->setFont(labelFont);
-    adresseLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
-    formLayout->addWidget(adresseLabel);
-    
+    addLabel("ADRESSE DE DESTINATION");
     adresseEdit = new QTextEdit();
-    adresseEdit->setPlaceholderText("Ex: 123 Rue de la Marine,\nTunis, Tunisie");
+    adresseEdit->setPlaceholderText("Ex: 123 Rue de la Marine, Tunis");
     adresseEdit->setFixedHeight(80);
     adresseEdit->setStyleSheet(getInputStyle());
     formLayout->addWidget(adresseEdit);
 
-    errorAdresse = new QLabel("⚠ L'adresse ne peut pas être vide");
-    errorAdresse->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-    errorAdresse->setVisible(false);
+    errorAdresse = new QLabel("⚠ L'adresse est obligatoire");
+    errorAdresse->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    errorAdresse->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
+    errorAdresse->hide();
     formLayout->addWidget(errorAdresse);
-    connect(adresseEdit, &QTextEdit::textChanged, this, &AddLivraisonDialog::onAdresseChanged);
+    connect(adresseEdit, &QTextEdit::textChanged, this, [=](){
+        onAdresseChanged();
+    });
 
-    // Date de livraison
-    QLabel* dateLabel = new QLabel("📅  Date de livraison");
-    dateLabel->setFont(labelFont);
-    dateLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
-    formLayout->addWidget(dateLabel);
-    
+    addLabel("DATE PRÉVUE");
     dateEdit = new QDateEdit();
-    dateEdit->setDate(QDate::currentDate());
     dateEdit->setCalendarPopup(true);
-    dateEdit->setFixedHeight(45);
+    dateEdit->setDate(QDate::currentDate());
     dateEdit->setStyleSheet(getInputStyle());
-    dateEdit->setDisplayFormat("dd/MM/yyyy");
     formLayout->addWidget(dateEdit);
 
-    // Véhicule
-    QLabel* vehiculeLabel = new QLabel("🚐  Nom du Véhicule / Van");
-    vehiculeLabel->setFont(labelFont);
-    vehiculeLabel->setStyleSheet("color: #2C3E50; margin-bottom: 2px;");
-    formLayout->addWidget(vehiculeLabel);
-    
-    vehiculeEdit = new QComboBox();
-    vehiculeEdit->addItems({
-        "Van Agile-01",
-        "Van Swift-02",
-        "Camionnette PortFlow-03",
-        "Fourgon Logistics-04",
-        "Bateau de Transport-05"
-    });
-    vehiculeEdit->setFixedHeight(45);
+    addLabel("VÉHICULE ASSIGNÉ");
+    vehiculeEdit = new QLineEdit();
+    vehiculeEdit->setPlaceholderText("Ex: Van-01 ou Camion-A");
     vehiculeEdit->setStyleSheet(getInputStyle());
     formLayout->addWidget(vehiculeEdit);
 
-    errorVehicule = new QLabel(""); // Keep initialized but hidden/empty as it's no longer used
-    errorVehicule->setVisible(false);
-
-    // Row for Transport and Price
-    QHBoxLayout* row2 = new QHBoxLayout();
-    row2->setSpacing(20);
-    
-    QVBoxLayout* transCol = new QVBoxLayout();
-    QLabel* transLabel = new QLabel("🚛  Transport");
-    transLabel->setFont(labelFont);
-    transLabel->setStyleSheet("color: #2C3E50;");
-    transCol->addWidget(transLabel);
-    
-    transportEdit = new QComboBox();
-    transportEdit->addItems({
-        "Camion non frigorifique",
-        "Camion frigorifique",
-        "Motocyclette / Scooter",
-        "Véhicule utilitaire léger",
-        "Bateau"
+    connect(vehiculeEdit, &QLineEdit::textChanged, this, [=](const QString&){
+        updateFieldStyle(vehiculeEdit, !vehiculeEdit->text().trimmed().isEmpty());
     });
-    transportEdit->setFixedHeight(45);
-    transportEdit->setStyleSheet(getInputStyle());
-    transCol->addWidget(transportEdit);
-    row2->addLayout(transCol);
 
-    QVBoxLayout* prixCol = new QVBoxLayout();
-    QLabel* prixLabel = new QLabel("💰  Prix (DT / $ / €)");
-    prixLabel->setFont(labelFont);
-    prixLabel->setStyleSheet("color: #2C3E50;");
-    prixCol->addWidget(prixLabel);
+    addLabel("TRANSPORT");
+    transportEdit = new QComboBox();
+    transportEdit->addItems({"Camion non frigorifique", "Camion frigorifique", "Motocyclette / Scooter", "Véhicule utilitaire léger", "Bateau"});
+    transportEdit->setStyleSheet(getInputStyle());
+    formLayout->addWidget(transportEdit);
+
+    addLabel("PRIX (DT / $ / €)");
     prixEdit = new QLineEdit();
-    prixEdit->setPlaceholderText("Ex: 150 DT, 50$ ou 45€");
-    prixEdit->setFixedHeight(45);
+    prixEdit->setPlaceholderText("0.00 DT");
     prixEdit->setStyleSheet(getInputStyle());
-    prixCol->addWidget(prixEdit);
+    formLayout->addWidget(prixEdit);
 
     errorPrix = new QLabel("⚠ Doit finir par DT, $ ou €");
-    errorPrix->setStyleSheet("color: #EF4444; font-size: 8pt; font-weight: bold;");
-    errorPrix->setVisible(false);
-    prixCol->addWidget(errorPrix);
+    errorPrix->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    errorPrix->setStyleSheet("color: #EF4444; margin-top: -10px; margin-bottom: 5px;");
+    errorPrix->hide();
+    formLayout->addWidget(errorPrix);
+    
+    QRegularExpression prixRegex("^\\d{0,8}(\\s?(DT|\\$|€))?$");
+    prixEdit->setValidator(new QRegularExpressionValidator(prixRegex, this));
     connect(prixEdit, &QLineEdit::textChanged, this, &AddLivraisonDialog::onPrixChanged);
-    row2->addLayout(prixCol);
 
-    formLayout->addLayout(row2);
+    scrollArea->setWidget(formContent);
+    mainLayout->addWidget(scrollArea, 1);
 
-    formLayout->addStretch();
-
-    // Buttons
-    QHBoxLayout* btnRow = new QHBoxLayout();
-    btnRow->setSpacing(15);
-    btnRow->addStretch();
+    // Footer avec boutons stylés
+    QFrame* footer = new QFrame();
+    footer->setFixedHeight(90);
+    QHBoxLayout* btnLay = new QHBoxLayout(footer);
+    btnLay->setContentsMargins(45, 0, 45, 15);
+    btnLay->setSpacing(20);
 
     QPushButton* cancelBtn = new QPushButton("Annuler");
-    cancelBtn->setFixedSize(120, 50);
+    cancelBtn->setFixedHeight(50);
     cancelBtn->setCursor(Qt::PointingHandCursor);
+    cancelBtn->setFont(QFont("Segoe UI", 10, QFont::Medium));
     cancelBtn->setStyleSheet(R"(
-        QPushButton { background-color: #E8EEF5; color: #5A6C7D; border: none; border-radius: 10px; font-weight: 600; }
-        QPushButton:hover { background-color: #D8DEE5; }
+        QPushButton { background: #F3F4F6; color: #4B5563; border-radius: 15px; }
+        QPushButton:hover { background: #E5E7EB; }
     )");
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
-    btnRow->addWidget(cancelBtn);
+    btnLay->addWidget(cancelBtn, 1);
 
-    QPushButton* saveBtn = new QPushButton(isEdit ? "Mettre à jour" : "Enregistrer");
-    saveBtn->setFixedSize(160, 50);
+    QPushButton* saveBtn = new QPushButton(isEdit ? "💾  Mettre à jour" : "➕  Lancer l'expédition");
+    saveBtn->setFixedHeight(50);
     saveBtn->setCursor(Qt::PointingHandCursor);
+    saveBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
     saveBtn->setStyleSheet(R"(
-        QPushButton { background-color: #5D9CEC; color: white; border: none; border-radius: 10px; font-weight: 700; }
-        QPushButton:hover { background-color: #4A89DC; }
+        QPushButton { 
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #5D9CEC);
+            color: white; border: none; border-radius: 15px; padding: 0 20px;
+        }
+        QPushButton:hover { background: #1D4ED8; }
     )");
     connect(saveBtn, &QPushButton::clicked, this, &AddLivraisonDialog::handleSave);
-    btnRow->addWidget(saveBtn);
+    btnLay->addWidget(saveBtn, 2);
 
-    formLayout->addLayout(btnRow);
-
-    scrollArea->setWidget(content);
-    mainLayout->addWidget(scrollArea);
+    mainLayout->addWidget(footer);
 }
 
 void AddLivraisonDialog::populateFields()
 {
     if (!livraisonData) return;
-    
-    // Set Date
     QDate d = QDate::fromString(livraisonData->getDate(), "dd/MM/yyyy");
     if (d.isValid()) dateEdit->setDate(d);
-    else dateEdit->setDate(QDate::currentDate());
-
     adresseEdit->setPlainText(livraisonData->getAdresse());
     referenceEdit->setText(livraisonData->getReference());
-    livreurCombo->setCurrentText(livraisonData->getIdEmploye());
-    vehiculeEdit->setCurrentText(livraisonData->getVehicule());
+    int lIdx = livreurCombo->findData(livraisonData->getIdEmploye());
+    if (lIdx >= 0) livreurCombo->setCurrentIndex(lIdx);
+    
+    vehiculeEdit->setText(livraisonData->getVehicule());
     transportEdit->setCurrentText(livraisonData->getTransport());
-    QString p = livraisonData->getPrix();
-    if (!p.isEmpty() && !p.endsWith("DT") && !p.endsWith("$") && !p.endsWith("€")) {
-        p += " DT";
-    }
-    prixEdit->setText(p);
-}
- 
-void AddLivraisonDialog::onReferenceChanged() {
-    QString ref = referenceEdit->text().trimmed();
-    bool ok = ref.startsWith("LIV-") && ref.length() > 4;
-    updateFieldStyle(referenceEdit, ok);
-    errorReference->setVisible(!ok);
+    prixEdit->setText(livraisonData->getPrix());
 }
 
 void AddLivraisonDialog::populateLivreurCombo() {
     livreurCombo->clear();
-    // Only select employees who are active and hold the position of 'Livreur'
     QSqlQuery query("SELECT ID_EMPLOYE, PRENOM, NOM FROM EMPLOYEES WHERE \"POSITION\" = 'Livreur' AND STATUT = 'Actif'");
     while (query.next()) {
         QString id = query.value(0).toString();
-        QString prenom = query.value(1).toString();
-        QString nom = query.value(2).toString();
-        livreurCombo->addItem(QString("%1 %2 (%3)").arg(prenom, nom, id), id);
+        livreurCombo->addItem(query.value(1).toString() + " " + query.value(2).toString() + " (" + id + ")", id);
     }
 }
 
-Livraison AddLivraisonDialog::getData() const
-{
-    Livraison data;
-    data.setDate(dateEdit->date().toString("dd/MM/yyyy"));
-    data.setAdresse(adresseEdit->toPlainText());
-    data.setVehicule(vehiculeEdit->currentText());
-    data.setTransport(transportEdit->currentText());
-    data.setReference(referenceEdit->text().trimmed());
-    data.setIdEmploye(livreurCombo->currentData().toString());
-    
-    QString prix = prixEdit->text().trimmed();
-    data.setPrix(prix);
-    if (isEdit && livraisonData) {
-        data.setID(livraisonData->getID());
-    }
-    
-    // Status is automated: "En attente" by default for new, preserved for edit
-    if (isEdit && livraisonData) {
-        data.setStatut(livraisonData->getStatut());
-    } else {
-        data.setStatut("En attente");
-    }
-    
-    // Automatic duration calculation (randomized for demo/completeness)
-    if (isEdit && livraisonData) {
-        data.setDuree(livraisonData->getDuree());
-    } else {
-        data.setDuree(15 + (rand() % 45)); // 15 to 60 mins
-    }
-    
-    return data;
+void AddLivraisonDialog::onReferenceChanged() {
+    QString ref = referenceEdit->text().trimmed();
+    QRegularExpression refRegex("^LIV-\\d{4}-\\d+$");
+    bool valid = refRegex.match(ref).hasMatch();
+    updateFieldStyle(referenceEdit, valid);
+    if (!valid) { errorReference->setText("⚠ Format LIV-YYYY-ID requis"); errorReference->show(); }
+    else errorReference->hide();
 }
 
 void AddLivraisonDialog::onAdresseChanged() {
-    QString addr = adresseEdit->toPlainText().trimmed();
-    
-    // Address was modified, reset validation state
-    addressFound = false;
-    waitingForSave = false;
-    
-    if (addr.isEmpty()) {
-        addressDebounceTimer->stop();
-        updateFieldStyle(adresseEdit, false);
-        errorAdresse->setText("⚠ L'adresse ne peut pas être vide");
-        errorAdresse->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-        errorAdresse->setVisible(true);
-    } else {
-        adresseEdit->setProperty("state", "");
-        adresseEdit->style()->unpolish(adresseEdit);
-        adresseEdit->style()->polish(adresseEdit);
-        
-        errorAdresse->setText("⌛ Recherche et vérification de la localisation...");
-        errorAdresse->setStyleSheet("color: #64748B; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-        errorAdresse->setVisible(true);
-        
-        addressDebounceTimer->start(1200);
-    }
-}
-
-void AddLivraisonDialog::onAddressDebounceTimeout() {
-    QString addr = adresseEdit->toPlainText().trimmed();
-    if (!addr.isEmpty()) {
-        validateAddressViaAPI(addr);
-    }
+    bool valid = !adresseEdit->toPlainText().trimmed().isEmpty();
+    updateFieldStyle(adresseEdit, valid);
+    if (!valid) { errorAdresse->setText("⚠ L'adresse est obligatoire"); errorAdresse->show(); }
+    else errorAdresse->hide();
 }
 
 void AddLivraisonDialog::onPrixChanged() {
-    QString p = prixEdit->text();
-    if (p.contains("-")) {
-        p.remove("-");
-        prixEdit->setText(p);
-        return; // Signal will re-trigger
-    }
-    p = p.trimmed();
+    QString p = prixEdit->text().trimmed();
     bool valid = !p.isEmpty() && (p.endsWith("DT") || p.endsWith("$") || p.endsWith("€"));
     updateFieldStyle(prixEdit, valid);
-    errorPrix->setVisible(!valid);
+    if (!valid) { errorPrix->setText("⚠ Doit finir par DT, $ ou €"); errorPrix->show(); }
+    else errorPrix->hide();
 }
 
 void AddLivraisonDialog::updateFieldStyle(QWidget* field, bool isValid) {
@@ -443,93 +337,83 @@ void AddLivraisonDialog::updateFieldStyle(QWidget* field, bool isValid) {
 
 bool AddLivraisonDialog::validateInputs() {
     bool ok = true;
-    
-    // Validate Reference
+
     QString ref = referenceEdit->text().trimmed();
-    bool refOk = ref.startsWith("LIV-") && ref.length() > 4;
-    if (!refOk) {
-        updateFieldStyle(referenceEdit, false);
-        errorReference->setVisible(true);
-        ok = false;
+    QRegularExpression refRegex("^LIV-\\d{4}-\\d+$");
+    if (!refRegex.match(ref).hasMatch()) { 
+        updateFieldStyle(referenceEdit, false); 
+        errorReference->show();
+        ok = false; 
     }
 
-    if (adresseEdit->toPlainText().trimmed().isEmpty()) {
+    if (adresseEdit->toPlainText().trimmed().isEmpty()) { 
         updateFieldStyle(adresseEdit, false);
-        errorAdresse->setVisible(true);
-        ok = false;
-    }
-    
-    QString p = prixEdit->text().trimmed();
-    if (p.isEmpty() || !(p.endsWith("DT") || p.endsWith("$") || p.endsWith("€"))) {
-        updateFieldStyle(prixEdit, false);
-        errorPrix->setVisible(true);
-        ok = false;
-    }
-    
-    return ok;
-}
-
-void AddLivraisonDialog::validateAddressViaAPI(const QString& address) {
-    if (addressValidating) return;
-    
-    addressValidating = true;
-    errorAdresse->setText("⌛ Validation de l'adresse par satellite...");
-    errorAdresse->setStyleSheet("color: #2563EB; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-    errorAdresse->setVisible(true);
-
-    QString url = "https://nominatim.openstreetmap.org/search?q=" + QUrl::toPercentEncoding(address) + "&format=json&limit=1";
-    QNetworkRequest request((QUrl(url)));
-    request.setHeader(QNetworkRequest::UserAgentHeader, "PortFlowApp/1.0"); // Nominatim requires User-Agent
-    networkManager->get(request);
-}
-
-void AddLivraisonDialog::onAddressValidationFinished(QNetworkReply* reply) {
-    addressValidating = false;
-    
-    if (reply->error() == QNetworkReply::NoError) {
-        QByteArray response = reply->readAll();
-        QJsonDocument json = QJsonDocument::fromJson(response);
-        QJsonArray array = json.array();
-        
-        addressFound = !array.isEmpty();
-        
-        if (addressFound) {
-            errorAdresse->setText("✅ Adresse valide confirmée par satellite !");
-            errorAdresse->setStyleSheet("color: #10B981; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-            errorAdresse->setVisible(true);
-            updateFieldStyle(adresseEdit, true);
-            
-            if (waitingForSave) handleSave();
-        } else {
-            errorAdresse->setText("⚠ Adresse introuvable ou invalide");
-            errorAdresse->setStyleSheet("color: #EF4444; font-size: 9pt; font-weight: bold; margin-top: 5px; margin-left: 5px;");
-            errorAdresse->setVisible(true);
-            updateFieldStyle(adresseEdit, false);
-        }
+        errorAdresse->setText("⚠ L'adresse est obligatoire"); 
+        errorAdresse->show();
+        ok = false; 
     } else {
-        // Network error, assume valid for now but show warning?
-        addressFound = true; // Fallback
-        errorAdresse->setVisible(false);
-        updateFieldStyle(adresseEdit, true);
-        if (waitingForSave) handleSave();
+        errorAdresse->hide();
     }
-    reply->deleteLater();
+    
+    if (vehiculeEdit->text().trimmed().isEmpty()) { 
+        updateFieldStyle(vehiculeEdit, false); 
+        ok = false; 
+    }
+
+    QString p = prixEdit->text().trimmed();
+    if (p.isEmpty() || !(p.endsWith("DT") || p.endsWith("$") || p.endsWith("€"))) { 
+        updateFieldStyle(prixEdit, false); 
+        errorPrix->show();
+        ok = false; 
+    }
+
+    return ok;
 }
 
 void AddLivraisonDialog::handleSave() {
     if (validateInputs()) {
-        // Only proceed if address has been validated through API
-        if (!addressFound && !addressValidating) {
-            waitingForSave = true;
-            validateAddressViaAPI(adresseEdit->toPlainText().trimmed());
-            return;
-        }
-        
-        if (addressValidating) {
-            waitingForSave = true;
-            return;
-        }
-        
         accept();
     }
+}
+
+
+Livraison AddLivraisonDialog::getData() const {
+    Livraison data;
+    data.setDate(dateEdit->date().toString("dd/MM/yyyy"));
+    data.setAdresse(adresseEdit->toPlainText());
+    data.setVehicule(vehiculeEdit->text().trimmed());
+    data.setTransport(transportEdit->currentText());
+    data.setReference(referenceEdit->text().trimmed());
+    data.setIdEmploye(livreurCombo->currentData().toString());
+    data.setPrix(prixEdit->text().trimmed());
+    if (isEdit && livraisonData) {
+        data.setID(livraisonData->getID());
+        data.setStatut(livraisonData->getStatut());
+        data.setDuree(livraisonData->getDuree());
+    } else {
+        data.setStatut("En attente");
+        data.setDuree(15 + (rand() % 45));
+    }
+    return data;
+}
+
+QString AddLivraisonDialog::getInputStyle() const {
+    return R"(
+        QLineEdit, QComboBox, QTextEdit, QDateEdit {
+            background-color: #F9FAFB;
+            border: 2px solid #E5E7EB;
+            border-radius: 12px;
+            padding: 10px 15px;
+            color: #1F2937;
+            font-size: 11pt;
+        }
+        QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTextEdit:focus {
+            border: 2px solid #2563EB;
+            background-color: white;
+        }
+        *[state="error"] { border: 2px solid #EF4444; background-color: #FEF2F2; }
+        *[state="success"] { border: 2px solid #10B981; }
+        QComboBox::drop-down { border: none; width: 30px; }
+        QComboBox::down-arrow { image: none; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #6B7280; margin-right: 15px; }
+    )";
 }

@@ -12,7 +12,115 @@
 #include <QFileDialog>
 #include <QScrollBar>
 #include "EmployeeStatsWindow.h"
-#include <algorithm>
+#include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
+
+// ==================== UI HELPERS ====================
+class MoveFilter : public QObject {
+    QDialog* d; bool m=false; QPoint o;
+public:
+    MoveFilter(QDialog* dlg) : d(dlg), QObject(dlg) {}
+    bool eventFilter(QObject* obj, QEvent* e) override {
+        if (e->type()==QEvent::MouseButtonPress) {
+            auto* me = static_cast<QMouseEvent*>(e);
+            if (me->button()==Qt::LeftButton) { m=true; o=me->globalPosition().toPoint()-d->frameGeometry().topLeft(); return true; }
+        } else if (e->type()==QEvent::MouseMove && m) {
+            auto* me = static_cast<QMouseEvent*>(e);
+            d->move(me->globalPosition().toPoint()-o); return true;
+        } else if (e->type()==QEvent::MouseButtonRelease) { m=false; return true; }
+        return false;
+    }
+};
+
+static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle) {
+    if (!dialog || !dragHandle) return;
+    dragHandle->setCursor(Qt::OpenHandCursor);
+    dragHandle->installEventFilter(new MoveFilter(dialog));
+}
+
+static bool showStyledActionDialog(QWidget* parent, const QString& title, const QString& message,
+                                   const QString& gradientStart, const QString& gradientEnd,
+                                   const QString& icon, bool hasCancel = true,
+                                   const QString& confirmText = QString(),
+                                   const QString& cancelText = "Annuler") {
+    QDialog* popup = new QDialog(parent);
+    popup->setFixedSize(540, 320);
+    popup->setModal(true);
+    popup->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    popup->setAttribute(Qt::WA_TranslucentBackground);
+
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(popup);
+    shadow->setBlurRadius(40); shadow->setOffset(0, 8); shadow->setColor(QColor(0, 0, 0, 80));
+
+    QWidget* container = new QWidget(popup);
+    container->setGeometry(10, 10, 520, 300);
+    container->setGraphicsEffect(shadow);
+    container->setStyleSheet("QWidget { background: white; border-radius: 20px; }");
+
+    QVBoxLayout* lay = new QVBoxLayout(container);
+    lay->setContentsMargins(0, 0, 0, 0); lay->setSpacing(0);
+
+    QFrame* hdr = new QFrame();
+    hdr->setFixedHeight(64);
+    hdr->setStyleSheet(QString("QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %1, stop:1 %2); border-radius: 20px 20px 0 0; }").arg(gradientStart, gradientEnd));
+    QHBoxLayout* hdrLay = new QHBoxLayout(hdr);
+    hdrLay->setContentsMargins(22, 0, 16, 0);
+
+    QLabel* hdrIcon = new QLabel(icon);
+    hdrIcon->setFont(QFont("Segoe UI", 18));
+    hdrIcon->setStyleSheet("background: transparent;");
+    hdrLay->addWidget(hdrIcon);
+
+    QLabel* hdrTitle = new QLabel(title);
+    hdrTitle->setFont(QFont("Segoe UI", 13, QFont::Bold));
+    hdrTitle->setStyleSheet("color: white; background: transparent;");
+    hdrLay->addWidget(hdrTitle, 1);
+
+    QPushButton* xBtn = new QPushButton("✕");
+    xBtn->setFixedSize(30, 30); xBtn->setCursor(Qt::PointingHandCursor);
+    xBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 15px; font-weight: bold; } QPushButton:hover { background: rgba(255,255,255,0.35); }");
+    QObject::connect(xBtn, &QPushButton::clicked, popup, &QDialog::reject);
+    hdrLay->addWidget(xBtn);
+    lay->addWidget(hdr);
+    makeDialogMovable(popup, hdr);
+
+    QLabel* msgLbl = new QLabel(message);
+    msgLbl->setWordWrap(true); msgLbl->setFont(QFont("Segoe UI", 11));
+    msgLbl->setStyleSheet("color: #374151; background: transparent;");
+    msgLbl->setAlignment(Qt::AlignCenter);
+    msgLbl->setContentsMargins(24, 22, 24, 6);
+    lay->addWidget(msgLbl, 1);
+
+    QHBoxLayout* btnLay = new QHBoxLayout();
+    btnLay->setContentsMargins(20, 8, 20, 20); btnLay->setSpacing(10);
+    btnLay->addStretch();
+
+    if (hasCancel) {
+        QPushButton* noBtn = new QPushButton(cancelText);
+        noBtn->setFixedHeight(40); noBtn->setMinimumWidth(100);
+        noBtn->setCursor(Qt::PointingHandCursor);
+        noBtn->setStyleSheet("QPushButton { background: #F3F4F6; color: #374151; border: none; border-radius: 10px; font-weight: 500; } QPushButton:hover { background: #E5E7EB; }");
+        QObject::connect(noBtn, &QPushButton::clicked, popup, &QDialog::reject);
+        btnLay->addWidget(noBtn);
+    }
+
+    QPushButton* okBtn = new QPushButton(confirmText.isEmpty() ? (hasCancel ? "Confirmer" : "Compris") : confirmText);
+    okBtn->setFixedHeight(40); okBtn->setMinimumWidth(140);
+    okBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    okBtn->setCursor(Qt::PointingHandCursor);
+    okBtn->setStyleSheet(QString(R"(
+        QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %1, stop:1 %2);
+                      color: white; border: none; border-radius: 10px; padding: 0 16px; }
+        QPushButton:hover { background: %1; }
+    )").arg(gradientStart, gradientEnd));
+    QObject::connect(okBtn, &QPushButton::clicked, popup, &QDialog::accept);
+    btnLay->addWidget(okBtn);
+    lay->addLayout(btnLay);
+
+    const bool accepted = (popup->exec() == QDialog::Accepted);
+    popup->deleteLater();
+    return accepted;
+}
 #include <QMenu>
 #include <QAction>
 #include <QRegularExpression>
@@ -271,32 +379,59 @@ QFrame* EmployeeWindow::createHeader()
     connect(addBtn, &QPushButton::clicked, this, &EmployeeWindow::onAddEmployee);
     lay->addWidget(addBtn);
 
-    // Administration Button with Dropdown Menu
-    QPushButton* adminBtn = makeBtn("📜  Administration", "#2B5EA6", "#1D4ED8");
+    return hdr;
+}
+
+QFrame* EmployeeWindow::createToolbar()
+{
+    QFrame* bar = new QFrame();
+    bar->setStyleSheet(R"(
+        QFrame { background: white; border-radius: 14px; border: 1.5px solid #e2e8f0; }
+    )");
+    bar->setFixedHeight(62);
+
+    QHBoxLayout* lay = new QHBoxLayout(bar);
+    lay->setContentsMargins(16, 0, 16, 0);
+    lay->setSpacing(12);
+
+    /* Search Input */
+    searchInput = new QLineEdit();
+    searchInput->setPlaceholderText("Rechercher un employé par nom, poste...");
+    searchInput->setFont(QFont("Segoe UI", 11));
+    searchInput->setFixedHeight(40);
+    searchInput->setFixedWidth(280);
+    searchInput->setStyleSheet(R"(
+        QLineEdit{ background:#ffffff; border:2px solid #e2e8f0; border-radius:12px; padding:4px 16px; color:#1f2937; }
+        QLineEdit:focus{ border:2px solid #2563EB; background:white; }
+    )");
+    connect(searchInput, &QLineEdit::textChanged, this, &EmployeeWindow::onSearch);
+    lay->addWidget(searchInput);
+
+    auto makeToolBtn = [&](const QString& label, const QString& bg, const QString& hover) {
+        QPushButton* btn = new QPushButton(label);
+        btn->setFont(QFont("Segoe UI", 9, QFont::Bold));
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFixedHeight(40);
+        btn->setStyleSheet(QString(
+            "QPushButton{ background:%1; color:white; border:none; border-radius:10px; padding:0 15px; }"
+            "QPushButton:hover{ background:%2; }").arg(bg, hover));
+        return btn;
+    };
+
+    QPushButton* adminBtn = makeToolBtn("📜  Administration", "#2B5EA6", "#1D4ED8");
     adminMenu = new QMenu(this);
     
     adminMenu->setStyleSheet(R"(
         QMenu {
-            background-color: white;
-            border: 1.5px solid #d1d5db;
-            border-radius: 14px;
-            padding: 10px 0px;
+            background-color: white; border: 1.5px solid #d1d5db; border-radius: 14px; padding: 10px 0px;
         }
         QMenu::item {
-            padding: 12px 30px;
-            font-family: 'Segoe UI';
-            font-size: 13px;
-            font-weight: 500;
-            color: #1e3a5f;
-            border-bottom: 0.5px solid #f1f5f9;
+            padding: 12px 30px; font-family: 'Segoe UI'; font-size: 13px; font-weight: 500; color: #1e3a5f; border-bottom: 0.5px solid #f1f5f9;
         }
         QMenu::item:selected {
-            background-color: #eff6ff;
-            color: #2563EB;
+            background-color: #eff6ff; color: #2563EB;
         }
-        QMenu::item:last {
-            border-bottom: none;
-        }
+        QMenu::item:last { border-bottom: none; }
     )");
 
     QAction* reglementAct = new QAction("📜  Règlement Intérieur", this);
@@ -321,44 +456,17 @@ QFrame* EmployeeWindow::createHeader()
     connect(presenceAct, &QAction::triggered, this, &EmployeeWindow::onPresenceReport);
     connect(registerFaceAct, &QAction::triggered, this, &EmployeeWindow::onRegisterFaceID);
     
-    lay->addWidget(adminBtn);
-
-    // Statistiques Button
-    QPushButton* statsBtn = makeBtn("📊  Statistiques", "#F59E0B", "#D97706");
+    QPushButton* statsBtn = makeToolBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
     connect(statsBtn, &QPushButton::clicked, this, &EmployeeWindow::onViewStats);
-    lay->addWidget(statsBtn);
 
-    // Smart AI Report Button
-    QPushButton* aiBtn = makeBtn("✨  Rapport IA", "#8B5CF6", "#6D28D9");
+    QPushButton* aiBtn = makeToolBtn("✨  Rapport IA", "#8B5CF6", "#6D28D9");
     connect(aiBtn, &QPushButton::clicked, this, &EmployeeWindow::onSmartAIReport);
+
+    lay->addWidget(adminBtn);
+    lay->addWidget(statsBtn);
     lay->addWidget(aiBtn);
-    
-    return hdr;
-}
 
-QFrame* EmployeeWindow::createToolbar()
-{
-    QFrame* bar = new QFrame();
-    bar->setStyleSheet(R"(
-        QFrame { background: white; border-radius: 14px; border: 1.5px solid #e2e8f0; }
-    )");
-    bar->setFixedHeight(62);
-
-    QHBoxLayout* lay = new QHBoxLayout(bar);
-    lay->setContentsMargins(16, 0, 16, 0);
-    lay->setSpacing(12);
-
-    /* Search Input */
-    searchInput = new QLineEdit();
-    searchInput->setPlaceholderText("Rechercher un employé par nom, poste...");
-    searchInput->setFont(QFont("Segoe UI", 11));
-    searchInput->setFixedHeight(45);
-    searchInput->setStyleSheet(R"(
-        QLineEdit{ background:#ffffff; border:2px solid #e2e8f0; border-radius:12px; padding:4px 16px; color:#1f2937; }
-        QLineEdit:focus{ border:2px solid #2563EB; background:white; }
-    )");
-    connect(searchInput, &QLineEdit::textChanged, this, &EmployeeWindow::onSearch);
-    lay->addWidget(searchInput, 3);
+    lay->addStretch();
 
     /* Divider */
     QFrame* div = new QFrame(); div->setFrameShape(QFrame::VLine);
@@ -1073,40 +1181,34 @@ void EmployeeWindow::onDeleteEmployee(int row)
 {
     if (row < 0 || row >= employees.size()) return;
 
-    QMessageBox::StandardButton reply;
-    reply = QMessageBox::question(this, "Confirmation",
-                                  "Êtes-vous sûr de vouloir supprimer l'employé '" + employees[row].firstName + " " + employees[row].lastName + "' ?",
-                                  QMessageBox::Yes | QMessageBox::No);
-
-    if (reply == QMessageBox::Yes) {
-        QString idToDelete = employees[row].id;
-        QSqlQuery query1;
-        query1.prepare("DELETE FROM EMPLOYEES WHERE ID_EMPLOYE = :id");
-        query1.bindValue(":id", idToDelete.toInt());
+    if (showStyledActionDialog(this, "Suppression Employé",
+                               QString("Voulez-vous vraiment supprimer l'employé <b>%1 %2</b> ?").arg(employees[row].firstName, employees[row].lastName),
+                               "#EF4444", "#B91C1C", "🗑️")) {
         
-        if(!query1.exec()) {
-            QString err1 = query1.lastError().text();
-            QSqlQuery query2;
-            query2.prepare("DELETE FROM EMPLOYEE WHERE ID_EMPLOYE = :id");
-            query2.bindValue(":id", idToDelete.toInt());
-            
-            if (!query2.exec()) {
-                QMessageBox::critical(this, "Erreur Base de données", 
-                    "Erreur EMPLOYEES :\n" + err1 + "\n\nErreur EMPLOYEE:\n" + query2.lastError().text());
-                return;
-            }
+        QString idToDelete = employees[row].id;
+        QSqlQuery query;
+        query.prepare("DELETE FROM EMPLOYEES WHERE ID_EMPLOYE = :id");
+        query.bindValue(":id", idToDelete.toInt());
+        
+        if(!query.exec()) {
+            // Affichage de l'erreur via le dialogue stylisé
+            showStyledActionDialog(this, "Erreur Base de données", 
+                                 "Impossible de supprimer l'employé car il est lié à des bateaux ou livraisons.<br><br><b>Détail:</b> " + query.lastError().text(),
+                                 "#991B1B", "#EF4444", "!", false, "Compris");
+            return;
         }
 
         qDebug() << "Employé supprimé:" << employees[row].firstName << employees[row].lastName;
         employees.removeAt(row);
         populateTable(searchInput->text());
+        
+        showStyledActionDialog(this, "Succès", "L'employé a été supprimé avec succès.", "#10B981", "#059669", "✅", false);
     }
 }
 
 void EmployeeWindow::onLogout()
 {
-    if (QMessageBox::question(this, "Quitter", "Voulez-vous vraiment quitter l'application ?",
-                              QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+    if (showStyledActionDialog(this, "Quitter", "Voulez-vous vraiment fermer la gestion des employés ?", "#1E3A5F", "#3B82F6", "🚪", true, "Oui, Quitter", "Annuler")) {
         this->close();
     }
 }

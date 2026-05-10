@@ -477,6 +477,117 @@ static bool showStyledActionDialog(QWidget* parent, const QString& title, const 
     return accepted;
 }
 
+static QString showStyledChoiceDialog(QWidget* parent, const QString& title, const QString& message,
+                                      const QString& btn1Text, const QString& btn2Text)
+{
+    QDialog* popup = new QDialog(parent);
+    popup->setFixedSize(540, 320);
+    popup->setModal(true);
+    popup->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    popup->setAttribute(Qt::WA_TranslucentBackground);
+
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(popup);
+    shadow->setBlurRadius(40); shadow->setOffset(0, 8); shadow->setColor(QColor(0, 0, 0, 80));
+
+    QWidget* container = new QWidget(popup);
+    container->setGeometry(10, 10, 520, 300);
+    container->setGraphicsEffect(shadow);
+    container->setStyleSheet("QWidget { background: white; border-radius: 20px; }");
+
+    QVBoxLayout* lay = new QVBoxLayout(container);
+    lay->setContentsMargins(0, 0, 0, 0); lay->setSpacing(0);
+
+    QFrame* hdr = new QFrame();
+    hdr->setFixedHeight(64);
+    hdr->setStyleSheet(R"(
+        QFrame {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1E3A8A, stop:1 #3B82F6);
+            border-radius: 20px 20px 0 0;
+        }
+    )");
+    QHBoxLayout* hdrLay = new QHBoxLayout(hdr);
+    hdrLay->setContentsMargins(22, 0, 16, 0);
+
+    QLabel* hdrIcon = new QLabel("⚓");
+    hdrIcon->setFont(QFont("Segoe UI", 18));
+    hdrIcon->setStyleSheet("background: transparent;");
+    hdrLay->addWidget(hdrIcon);
+
+    QLabel* hdrTitle = new QLabel(title);
+    hdrTitle->setFont(QFont("Segoe UI", 13, QFont::Bold));
+    hdrTitle->setStyleSheet("color: white; background: transparent;");
+    hdrLay->addWidget(hdrTitle, 1);
+
+    QPushButton* xBtn = new QPushButton("✕");
+    xBtn->setFixedSize(30, 30); xBtn->setCursor(Qt::PointingHandCursor);
+    xBtn->setStyleSheet(R"(
+        QPushButton { background: rgba(255,255,255,0.2); color: white; border: none;
+                      border-radius: 15px; font-weight: bold; }
+        QPushButton:hover { background: rgba(255,255,255,0.35); }
+    )");
+    QObject::connect(xBtn, &QPushButton::clicked, popup, &QDialog::reject);
+    hdrLay->addWidget(xBtn);
+    lay->addWidget(hdr);
+    makeDialogMovable(popup, hdr);
+
+    QLabel* msgLbl = new QLabel(message);
+    msgLbl->setWordWrap(true); msgLbl->setFont(QFont("Segoe UI", 11));
+    msgLbl->setStyleSheet("color: #374151; background: transparent; line-height: 1.4;");
+    msgLbl->setAlignment(Qt::AlignCenter);
+    msgLbl->setContentsMargins(24, 22, 24, 6);
+    lay->addWidget(msgLbl, 1);
+
+    QHBoxLayout* btnLay = new QHBoxLayout();
+    btnLay->setContentsMargins(20, 8, 20, 20); btnLay->setSpacing(10);
+    btnLay->addStretch();
+
+    QPushButton* cancelBtn = new QPushButton("Annuler");
+    cancelBtn->setFixedHeight(40); cancelBtn->setMinimumWidth(90);
+    cancelBtn->setFont(QFont("Segoe UI", 10, QFont::Medium));
+    cancelBtn->setCursor(Qt::PointingHandCursor);
+    cancelBtn->setStyleSheet(R"(
+        QPushButton { background: #F3F4F6; color: #374151; border: none;
+                      border-radius: 10px; padding: 0 16px; }
+        QPushButton:hover { background: #E5E7EB; }
+    )");
+    QObject::connect(cancelBtn, &QPushButton::clicked, popup, &QDialog::reject);
+    btnLay->addWidget(cancelBtn);
+
+    QString* choice = new QString("");
+
+    QPushButton* b1 = new QPushButton(btn1Text);
+    b1->setFixedHeight(40); b1->setMinimumWidth(120);
+    b1->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    b1->setCursor(Qt::PointingHandCursor);
+    b1->setStyleSheet(R"(
+        QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #1E40AF, stop:1 #3B82F6);
+                      color: white; border: none; border-radius: 10px; padding: 0 16px; }
+        QPushButton:hover { background: #1E40AF; }
+    )");
+    QObject::connect(b1, &QPushButton::clicked, popup, [popup, choice, btn1Text]() { *choice = btn1Text; popup->accept(); });
+    btnLay->addWidget(b1);
+
+    QPushButton* b2 = new QPushButton(btn2Text);
+    b2->setFixedHeight(40); b2->setMinimumWidth(140);
+    b2->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    b2->setCursor(Qt::PointingHandCursor);
+    b2->setStyleSheet(R"(
+        QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #D97706, stop:1 #F59E0B);
+                      color: white; border: none; border-radius: 10px; padding: 0 16px; }
+        QPushButton:hover { background: #D97706; }
+    )");
+    QObject::connect(b2, &QPushButton::clicked, popup, [popup, choice, btn2Text]() { *choice = btn2Text; popup->accept(); });
+    btnLay->addWidget(b2);
+
+    lay->addLayout(btnLay);
+
+    popup->exec();
+    QString result = *choice;
+    delete choice;
+    popup->deleteLater();
+    return result;
+}
+
 struct DockUsageMonitoringAnalysis {
     int quaiNumber = 0;
     int sessionCount = 0;
@@ -1527,10 +1638,53 @@ QFrame* QuaisWindow::createHeader()
         return btn;
     };
 
-    QPushButton* statsBtn = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
+    QPushButton* addBtn = makeBtn("➕  Nouveau Quai", "#2563EB", "#1D4ED8");
+    connect(addBtn, &QPushButton::clicked, this, &QuaisWindow::onAddQuai);
+
+    lay->addWidget(addBtn);
+    return hdr;
+}
+
+QFrame* QuaisWindow::createToolbar()
+{
+    QFrame* bar = new QFrame();
+    bar->setStyleSheet(R"(
+        QFrame { background: white; border-radius: 14px; border: 1.5px solid #e2e8f0; }
+    )");
+    bar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    bar->setMinimumHeight(62);
+
+    QHBoxLayout* lay = new QHBoxLayout(bar);
+    lay->setContentsMargins(16, 0, 16, 0);
+    lay->setSpacing(12);
+
+    searchInput = new QLineEdit();
+    searchInput->setPlaceholderText("🔍  Rechercher un quai par numéro, type...");
+    searchInput->setFixedWidth(350);
+    searchInput->setFixedHeight(40);
+    searchInput->setStyleSheet(R"(
+        QLineEdit { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+                    padding-left: 12px; font-size: 13px; color: #334155; }
+        QLineEdit:focus { border: 1.5px solid #3b82f6; background: white; }
+    )");
+    connect(searchInput, &QLineEdit::textChanged, this, &QuaisWindow::onSearch);
+    lay->addWidget(searchInput);
+
+    auto makeToolBtn = [&](const QString& label, const QString& bg, const QString& hover) {
+        QPushButton* btn = new QPushButton(label);
+        btn->setFont(QFont("Segoe UI", 9, QFont::Bold));
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFixedHeight(40);
+        btn->setStyleSheet(QString(
+            "QPushButton{ background:%1; color:white; border:none; border-radius:10px; padding:0 15px; }"
+            "QPushButton:hover{ background:%2; }").arg(bg, hover));
+        return btn;
+    };
+
+QPushButton* statsBtn = makeToolBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
     connect(statsBtn, &QPushButton::clicked, this, &QuaisWindow::afficherStatistiques);
 
-    QPushButton* pdfBtn = makeBtn("📄  Exporter PDF", "#059669", "#047857");
+    QPushButton* pdfBtn = makeToolBtn("📄  Exporter PDF", "#059669", "#047857");
     connect(pdfBtn, &QPushButton::clicked, this, [this]() {
         if (quais.isEmpty()) {
             QMessageBox::warning(this, "Aucun quai", "Aucun quai disponible.");
@@ -1675,43 +1829,16 @@ QFrame* QuaisWindow::createHeader()
         dlg->exec();
     });
 
-    QPushButton* smartAssignBtn = makeBtn("IA  Affecter un bateau", "#EA580C", "#C2410C");
+    QPushButton* smartAssignBtn = makeToolBtn("IA  Affecter un bateau", "#F59E0B", "#D97706");
     connect(smartAssignBtn, &QPushButton::clicked, this, &QuaisWindow::onAutoAssignBoat);
 
-    QPushButton* addBtn = makeBtn("➕  Nouveau Quai", "#2563EB", "#1D4ED8");
-    connect(addBtn, &QPushButton::clicked, this, &QuaisWindow::onAddQuai);
-
+    
     lay->addWidget(statsBtn);
     lay->addWidget(pdfBtn);
     lay->addWidget(smartAssignBtn);
-    lay->addWidget(addBtn);
-    return hdr;
-}
 
-QFrame* QuaisWindow::createToolbar()
-{
-    QFrame* bar = new QFrame();
-    bar->setStyleSheet(R"(
-        QFrame { background: white; border-radius: 14px; border: 1.5px solid #e2e8f0; }
-    )");
-    bar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    bar->setMinimumHeight(62);
 
-    QHBoxLayout* lay = new QHBoxLayout(bar);
-    lay->setContentsMargins(16, 0, 16, 0);
-    lay->setSpacing(12);
 
-    searchInput = new QLineEdit();
-    searchInput->setPlaceholderText("🔍  Rechercher un quai par numéro, type...");
-    searchInput->setFixedWidth(350);
-    searchInput->setFixedHeight(40);
-    searchInput->setStyleSheet(R"(
-        QLineEdit { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
-                    padding-left: 12px; font-size: 13px; color: #334155; }
-        QLineEdit:focus { border: 1.5px solid #3b82f6; background: white; }
-    )");
-    connect(searchInput, &QLineEdit::textChanged, this, &QuaisWindow::onSearch);
-    lay->addWidget(searchInput);
     lay->addStretch();
 
     QLabel* sortLbl = new QLabel("Trier par :");
@@ -3459,26 +3586,64 @@ void QuaisWindow::onEditQuai(int row)
             return;
         }
 
+        QString newEtat = statutCombo->currentText();
+        QString oldEtat = q.getEtat();
+
+        // [NOUVEAU] Si le quai devient disponible alors qu'il était occupé
+        if (newEtat == "Disponible" && isOccupiedState(oldEtat)) {
+            QSqlQuery boatQuery;
+            boatQuery.prepare("SELECT IDBATEAU, NOMBATEAU FROM BATEAUX WHERE IDQUAI = :idq");
+            boatQuery.bindValue(":idq", q.getIdQuai());
+            
+            if (boatQuery.exec() && boatQuery.next()) {
+                QString boatId = boatQuery.value(0).toString();
+                QString boatName = boatQuery.value(1).toString();
+                QString boatNewEtat = showStyledChoiceDialog(dlg, "Départ du bateau", 
+                    QString("Le quai %1 devient disponible. Quel est le nouvel état du bateau '%2' ?").arg(q.getNumero()).arg(boatName),
+                    "En mer", "En maintenance");
+
+                if (boatNewEtat.isEmpty()) return; // Action annulée
+                
+                QSqlQuery updateBoatQuery;
+                if (boatNewEtat == "En mer") {
+                    updateBoatQuery.prepare("UPDATE BATEAUX SET IDQUAI = NULL, ETAT = :etat, FREQUENCE_SORTIES = COALESCE(FREQUENCE_SORTIES, 0) + 1 WHERE IDBATEAU = :id");
+                } else {
+                    updateBoatQuery.prepare("UPDATE BATEAUX SET IDQUAI = NULL, ETAT = :etat WHERE IDBATEAU = :id");
+                }
+                updateBoatQuery.bindValue(":etat", boatNewEtat);
+                updateBoatQuery.bindValue(":id", boatId);
+                
+                if (!updateBoatQuery.exec()) {
+                    QMessageBox::critical(dlg, "Erreur", "Impossible de mettre à jour le bateau : " + updateBoatQuery.lastError().text());
+                    return;
+                }
+            }
+        }
+
         QSqlQuery query;
         query.prepare("UPDATE QUAIS SET CAPACITE = :cap, ETAT = :etat, TARIF_LOCATION = :tarif "
                       "WHERE NUMERO = :num");
         query.bindValue(":cap",   cap);
-        query.bindValue(":etat",  statutCombo->currentText());
+        query.bindValue(":etat",  newEtat);
         query.bindValue(":tarif", tarif);
         query.bindValue(":num",   q.getNumero());
 
         if (query.exec()) {
             QSqlDatabase::database().commit();
-            q.setEtat(statutCombo->currentText());
-            if (isOccupiedState(statutCombo->currentText()))
+            q.setEtat(newEtat);
+            if (isOccupiedState(newEtat))
                 ensureAvailabilityTimerForQuai(q);
-            else
+            else {
                 quaiAvailabilityDeadlines.remove(q.getNumero());
+                persistAvailabilityDeadline(q.getNumero(), QDateTime());
+                persistSessionStart(q.getNumero(), QDateTime());
+            }
             dlg->accept();
             loadQuaisFromDatabase();
             populateTable(searchInput->text());
+            BateauWindow::refreshAllTables(); // Rafraîchir la liste des bateaux
         } else {
-            QMessageBox::critical(dlg, "Erreur SQL", query.lastError().text());
+            showStyledActionDialog(dlg, "Erreur SQL", query.lastError().text(), "#991B1B", "#EF4444", "!", false, "Compris");
         }
     });
 
@@ -3496,124 +3661,39 @@ void QuaisWindow::onDeleteQuai(int row)
 
     const Quai& q = quais[row];
 
-    QDialog* dlg = new QDialog(this);
-    dlg->setFixedSize(420, 260);
-    dlg->setModal(true);
-    dlg->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
-    dlg->setAttribute(Qt::WA_TranslucentBackground);
-
-    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(dlg);
-    shadow->setBlurRadius(40);
-    shadow->setOffset(0, 8);
-    shadow->setColor(QColor(0, 0, 0, 80));
-
-    QWidget* container = new QWidget(dlg);
-    container->setGeometry(0, 0, 420, 260);
-    container->setGraphicsEffect(shadow);
-    container->setStyleSheet("QWidget { background: white; border-radius: 24px; }");
-
-    QVBoxLayout* mainLay = new QVBoxLayout(container);
-    mainLay->setContentsMargins(0, 0, 0, 0);
-    mainLay->setSpacing(0);
-
-    QFrame* headerBand = new QFrame();
-    headerBand->setFixedHeight(75);
-    headerBand->setStyleSheet(R"(
-        QFrame {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #991B1B, stop:1 #EF4444);
-            border-radius: 24px;
+    if (showStyledActionDialog(this, "Suppression Quai",
+                               QString("Êtes-vous sûr de vouloir supprimer le quai <b>%1 — Quai %1</b> ?<br><br>⚠️ Cette action est irréversible.")
+                               .arg(q.getNumero()),
+                               "#EF4444", "#B91C1C", "🗑️", true, "Supprimer")) {
+        
+        // Vérifier si des bateaux sont encore affectés à ce quai
+        QSqlQuery checkQuery;
+        checkQuery.prepare("SELECT COUNT(*) FROM BATEAUX WHERE IDQUAI = :idq");
+        checkQuery.bindValue(":idq", q.getIdQuai());
+        
+        if (checkQuery.exec() && checkQuery.next() && checkQuery.value(0).toInt() > 0) {
+            showStyledActionDialog(this, "Suppression impossible", 
+                                 "Impossible de supprimer ce quai car il y a encore des bateaux qui y sont affectés.<br>Veuillez d'abord déplacer ou supprimer ces bateaux.",
+                                 "#991B1B", "#EF4444", "!", false, "Compris");
+            return;
         }
-    )");
-    QHBoxLayout* headerLay = new QHBoxLayout(headerBand);
-    headerLay->setContentsMargins(30, 0, 20, 0);
 
-    QLabel* titleLbl = new QLabel("🗑️  Supprimer le Quai");
-    titleLbl->setFont(QFont("Segoe UI", 15, QFont::Bold));
-    titleLbl->setStyleSheet("color: white; background: transparent;");
-    headerLay->addWidget(titleLbl, 1);
-
-    QPushButton* closeBtn = new QPushButton("✕");
-    closeBtn->setFixedSize(34, 34);
-    closeBtn->setCursor(Qt::PointingHandCursor);
-    closeBtn->setStyleSheet(R"(
-        QPushButton { background: rgba(255,255,255,0.2); color: white; border: none;
-                      border-radius: 17px; font-size: 13px; font-weight: bold; }
-        QPushButton:hover { background: rgba(255,255,255,0.4); }
-    )");
-    connect(closeBtn, &QPushButton::clicked, dlg, &QDialog::reject);
-    headerLay->addWidget(closeBtn);
-    mainLay->addWidget(headerBand);
-
-    QVBoxLayout* bodyLay = new QVBoxLayout();
-    bodyLay->setContentsMargins(30, 24, 30, 10);
-
-    QLabel* msgLbl = new QLabel(
-        QString("Êtes-vous sûr de vouloir supprimer le quai\n<b>%1 — Quai %1</b> ?")
-            .arg(q.getNumero())
-        );
-    msgLbl->setFont(QFont("Segoe UI", 11));
-    msgLbl->setStyleSheet("color: #374151; background: transparent;");
-    msgLbl->setAlignment(Qt::AlignCenter);
-    msgLbl->setTextFormat(Qt::RichText);
-    bodyLay->addWidget(msgLbl);
-
-    QLabel* warnLbl = new QLabel("⚠️  Cette action est irréversible.");
-    warnLbl->setFont(QFont("Segoe UI", 9));
-    warnLbl->setStyleSheet("color: #B91C1C; background: transparent;");
-    warnLbl->setAlignment(Qt::AlignCenter);
-    bodyLay->addWidget(warnLbl);
-
-    mainLay->addLayout(bodyLay);
-    mainLay->addStretch();
-
-    QHBoxLayout* btnLay = new QHBoxLayout();
-    btnLay->setContentsMargins(30, 0, 30, 24);
-    btnLay->setSpacing(12);
-
-    QPushButton* cancelBtn = new QPushButton("Annuler");
-    cancelBtn->setFixedHeight(44);
-    cancelBtn->setFont(QFont("Segoe UI", 11, QFont::Medium));
-    cancelBtn->setCursor(Qt::PointingHandCursor);
-    cancelBtn->setStyleSheet(R"(
-        QPushButton { background: #F3F4F6; color: #374151; border: none; border-radius: 12px; padding: 0 20px; }
-        QPushButton:hover { background: #E5E7EB; }
-    )");
-    connect(cancelBtn, &QPushButton::clicked, dlg, &QDialog::reject);
-
-    QPushButton* deleteBtn = new QPushButton("🗑️  Supprimer");
-    deleteBtn->setFixedHeight(44);
-    deleteBtn->setFont(QFont("Segoe UI", 11, QFont::Bold));
-    deleteBtn->setCursor(Qt::PointingHandCursor);
-    deleteBtn->setStyleSheet(R"(
-        QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                          stop:0 #991B1B, stop:1 #EF4444);
-                      color: white; border: none; border-radius: 12px; padding: 0 20px; }
-        QPushButton:hover { background: #B91C1C; }
-    )");
-    connect(deleteBtn, &QPushButton::clicked, dlg, &QDialog::accept);
-
-    btnLay->addStretch();
-    btnLay->addWidget(cancelBtn);
-    btnLay->addWidget(deleteBtn);
-    mainLay->addLayout(btnLay);
-
-    if (dlg->exec() == QDialog::Accepted) {
         QSqlQuery query;
         query.prepare("DELETE FROM QUAIS WHERE NUMERO = :num");
         query.bindValue(":num", q.getNumero());
 
         if (!query.exec()) {
-            QMessageBox::critical(this, "Erreur",
-                                  "Impossible de supprimer le quai :\n" + query.lastError().text());
+            showStyledActionDialog(this, "Erreur",
+                                   "Impossible de supprimer le quai :<br>" + query.lastError().text(),
+                                   "#991B1B", "#EF4444", "!", false, "Fermer");
         } else {
             QSqlDatabase::database().commit();
             loadQuaisFromDatabase();
             populateTable(searchInput->text());
+            BateauWindow::refreshAllTables();
+            showStyledActionDialog(this, "Succès", "Le quai a été supprimé avec succès.", "#10B981", "#059669", "✅", false, "OK");
         }
     }
-
-    dlg->deleteLater();
 }
 
 void QuaisWindow::onUpdateQuai(int id)
@@ -3623,8 +3703,9 @@ void QuaisWindow::onUpdateQuai(int id)
 
 void QuaisWindow::onLogout()
 {
-    if (QMessageBox::question(this, "Quitter", "Quitter l'application ?") == QMessageBox::Yes)
-        close();
+    if (showStyledActionDialog(this, "Quitter", "Voulez-vous vraiment fermer la gestion des quais ?", "#1E3A5F", "#3B82F6", "🚪", true, "Oui, Quitter", "Annuler")) {
+        this->close();
+    }
 }
 
 void QuaisWindow::onSort(int index)

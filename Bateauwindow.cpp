@@ -33,6 +33,115 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <algorithm>
+#include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
+
+// ==================== UI HELPERS ====================
+class MoveFilter : public QObject {
+    QDialog* d; bool m=false; QPoint o;
+public:
+    MoveFilter(QDialog* dlg) : d(dlg), QObject(dlg) {}
+    bool eventFilter(QObject* obj, QEvent* e) override {
+        if (e->type()==QEvent::MouseButtonPress) {
+            auto* me = static_cast<QMouseEvent*>(e);
+            if (me->button()==Qt::LeftButton) { m=true; o=me->globalPosition().toPoint()-d->frameGeometry().topLeft(); return true; }
+        } else if (e->type()==QEvent::MouseMove && m) {
+            auto* me = static_cast<QMouseEvent*>(e);
+            d->move(me->globalPosition().toPoint()-o); return true;
+        } else if (e->type()==QEvent::MouseButtonRelease) { m=false; return true; }
+        return false;
+    }
+};
+
+static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle) {
+    if (!dialog || !dragHandle) return;
+    dragHandle->setCursor(Qt::OpenHandCursor);
+    dragHandle->installEventFilter(new MoveFilter(dialog));
+}
+
+static bool showStyledActionDialog(QWidget* parent, const QString& title, const QString& message,
+                                   const QString& gradientStart, const QString& gradientEnd,
+                                   const QString& icon, bool hasCancel = true,
+                                   const QString& confirmText = QString(),
+                                   const QString& cancelText = "Annuler") {
+    QDialog* popup = new QDialog(parent);
+    popup->setFixedSize(540, 320);
+    popup->setModal(true);
+    popup->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    popup->setAttribute(Qt::WA_TranslucentBackground);
+
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(popup);
+    shadow->setBlurRadius(40); shadow->setOffset(0, 8); shadow->setColor(QColor(0, 0, 0, 80));
+
+    QWidget* container = new QWidget(popup);
+    container->setGeometry(10, 10, 520, 300);
+    container->setGraphicsEffect(shadow);
+    container->setStyleSheet("QWidget { background: white; border-radius: 20px; }");
+
+    QVBoxLayout* lay = new QVBoxLayout(container);
+    lay->setContentsMargins(0, 0, 0, 0); lay->setSpacing(0);
+
+    QFrame* hdr = new QFrame();
+    hdr->setFixedHeight(64);
+    hdr->setStyleSheet(QString("QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %1, stop:1 %2); border-radius: 20px 20px 0 0; }").arg(gradientStart, gradientEnd));
+    QHBoxLayout* hdrLay = new QHBoxLayout(hdr);
+    hdrLay->setContentsMargins(22, 0, 16, 0);
+
+    QLabel* hdrIcon = new QLabel(icon);
+    hdrIcon->setFont(QFont("Segoe UI", 18));
+    hdrIcon->setStyleSheet("background: transparent;");
+    hdrLay->addWidget(hdrIcon);
+
+    QLabel* hdrTitle = new QLabel(title);
+    hdrTitle->setFont(QFont("Segoe UI", 13, QFont::Bold));
+    hdrTitle->setStyleSheet("color: white; background: transparent;");
+    hdrLay->addWidget(hdrTitle, 1);
+
+    QPushButton* xBtn = new QPushButton("✕");
+    xBtn->setFixedSize(30, 30); xBtn->setCursor(Qt::PointingHandCursor);
+    xBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 15px; font-weight: bold; } QPushButton:hover { background: rgba(255,255,255,0.35); }");
+    QObject::connect(xBtn, &QPushButton::clicked, popup, &QDialog::reject);
+    hdrLay->addWidget(xBtn);
+    lay->addWidget(hdr);
+    makeDialogMovable(popup, hdr);
+
+    QLabel* msgLbl = new QLabel(message);
+    msgLbl->setWordWrap(true); msgLbl->setFont(QFont("Segoe UI", 11));
+    msgLbl->setStyleSheet("color: #374151; background: transparent;");
+    msgLbl->setAlignment(Qt::AlignCenter);
+    msgLbl->setContentsMargins(24, 22, 24, 6);
+    lay->addWidget(msgLbl, 1);
+
+    QHBoxLayout* btnLay = new QHBoxLayout();
+    btnLay->setContentsMargins(20, 8, 20, 20); btnLay->setSpacing(10);
+    btnLay->addStretch();
+
+    if (hasCancel) {
+        QPushButton* noBtn = new QPushButton(cancelText);
+        noBtn->setFixedHeight(40); noBtn->setMinimumWidth(100);
+        noBtn->setCursor(Qt::PointingHandCursor);
+        noBtn->setStyleSheet("QPushButton { background: #F3F4F6; color: #374151; border: none; border-radius: 10px; font-weight: 500; } QPushButton:hover { background: #E5E7EB; }");
+        QObject::connect(noBtn, &QPushButton::clicked, popup, &QDialog::reject);
+        btnLay->addWidget(noBtn);
+    }
+
+    QPushButton* okBtn = new QPushButton(confirmText.isEmpty() ? (hasCancel ? "Confirmer" : "Compris") : confirmText);
+    okBtn->setFixedHeight(40); okBtn->setMinimumWidth(140);
+    okBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    okBtn->setCursor(Qt::PointingHandCursor);
+    okBtn->setStyleSheet(QString(R"(
+        QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %1, stop:1 %2);
+                      color: white; border: none; border-radius: 10px; padding: 0 16px; }
+        QPushButton:hover { background: %1; }
+    )").arg(gradientStart, gradientEnd));
+    QObject::connect(okBtn, &QPushButton::clicked, popup, &QDialog::accept);
+    btnLay->addWidget(okBtn);
+    lay->addLayout(btnLay);
+
+    const bool accepted = (popup->exec() == QDialog::Accepted);
+    popup->deleteLater();
+    return accepted;
+}
 
 QList<BateauWindow*> BateauWindow::s_instances;
 
@@ -196,15 +305,9 @@ QFrame* BateauWindow::createHeader()
         btn->setStyleSheet(QString("QPushButton{background:%1; color:white; border:none; border-radius:12px; padding:0 20px;} QPushButton:hover{ background:%2; }").arg(bg, hover));
         return btn;
     };
-    QPushButton* statsBtn = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
-    QPushButton* predBtn  = makeBtn("🔮  Prédiction", "#D97706", "#B45309");
-    QPushButton* pdfBtn   = makeBtn("📄  Exporter PDF",  "#059669", "#047857");
     QPushButton* addBtn   = makeBtn("➕  Nouveau Bateau",  "#2563EB", "#1D4ED8");
-    connect(statsBtn, &QPushButton::clicked, this, &BateauWindow::onShowStatistics);
-    connect(predBtn,  &QPushButton::clicked, this, &BateauWindow::onPredictMaintenanceGlobal);
-    connect(pdfBtn,   &QPushButton::clicked, this, &BateauWindow::onGeneratePDF);
     connect(addBtn,   &QPushButton::clicked, this, &BateauWindow::onAddBateau);
-    lay->addWidget(statsBtn); lay->addWidget(predBtn); lay->addWidget(pdfBtn); lay->addWidget(addBtn);
+    lay->addWidget(addBtn);
     return hdr;
 }
 
@@ -221,6 +324,30 @@ QFrame* BateauWindow::createToolbar()
     searchInput->setStyleSheet("QLineEdit { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding-left:12px; font-size:13px; color:#334155; } QLineEdit:focus { border:1.5px solid #3b82f6; background:white; }");
     connect(searchInput, &QLineEdit::textChanged, this, &BateauWindow::onSearch);
     lay->addWidget(searchInput);
+
+    auto makeToolBtn = [&](const QString& label, const QString& bg, const QString& hover) {
+        QPushButton* btn = new QPushButton(label);
+        btn->setFont(QFont("Segoe UI", 9, QFont::Bold));
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFixedHeight(40);
+        btn->setStyleSheet(QString(
+            "QPushButton{ background:%1; color:white; border:none; border-radius:10px; padding:0 15px; }"
+            "QPushButton:hover{ background:%2; }").arg(bg, hover));
+        return btn;
+    };
+
+    QPushButton* statsBtn = makeToolBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
+    QPushButton* predBtn  = makeToolBtn("🔮  Prédiction", "#F59E0B", "#D97706");
+    QPushButton* pdfBtn   = makeToolBtn("📄  PDF", "#059669", "#047857");
+
+    connect(statsBtn, &QPushButton::clicked, this, &BateauWindow::onShowStatistics);
+    connect(predBtn,  &QPushButton::clicked, this, &BateauWindow::onPredictMaintenanceGlobal);
+    connect(pdfBtn,   &QPushButton::clicked, this, &BateauWindow::onGeneratePDF);
+
+    lay->addWidget(statsBtn);
+    lay->addWidget(predBtn);
+    lay->addWidget(pdfBtn);
+
     lay->addStretch();
     QLabel* sortLbl = new QLabel("Trier par :");
     sortLbl->setStyleSheet("color:#64748b; font-weight:600; border:none; background:transparent;");
@@ -274,10 +401,7 @@ void BateauWindow::setupTable()
     table->setColumnHidden(13, true);
     table->setColumnHidden(14, true);
 
-    table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    table->horizontalHeader()->setStretchLastSection(false);
-    // Nom Bateau stretches
-    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table->horizontalHeader()->setStretchLastSection(true);
 
     table->verticalHeader()->setVisible(false);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -316,7 +440,27 @@ void BateauWindow::setupTable()
             font-family: 'Segoe UI';
             font-size: 11pt;
         }
+        QHeaderView::section:first {
+            border-top-left-radius: 14px;
+        }
+        QHeaderView::section:last {
+            border-top-right-radius: 14px;
+        }
     )");
+
+    // Define fixed column widths for a more professional look
+    table->setColumnWidth(1, 180); // Nom Bateau
+    table->setColumnWidth(2, 180); // Immatriculation
+    table->setColumnWidth(3, 110); // Capacité
+    table->setColumnWidth(4, 110); // Longueur
+    table->setColumnWidth(5, 90);  // Âge
+    table->setColumnWidth(6, 180); // Dernière Maint
+    table->setColumnWidth(7, 200); // Prochaine Maint
+    table->setColumnWidth(8, 140); // Employé
+    table->setColumnWidth(9, 110); // Quai
+    table->setColumnWidth(10, 140); // État
+    table->setColumnWidth(11, 110); // Code
+    table->setColumnWidth(12, 110); // Actions
 }
 
 void BateauWindow::populateTable(const QString& filterText)
@@ -352,7 +496,15 @@ void BateauWindow::populateTable(const QString& filterText)
             if (j == 4 && !val.isEmpty()) val += " m";
             if (j == 5 && !val.isEmpty()) val += " ans";
             QTableWidgetItem* item = new QTableWidgetItem(val);
-            item->setTextAlignment(Qt::AlignCenter); item->setFont(cellFont);
+            
+            // Align Left for Name (1) and Immatriculation (2), Center for others
+            if (j == 1 || j == 2) {
+                item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            } else {
+                item->setTextAlignment(Qt::AlignCenter);
+            }
+            
+            item->setFont(cellFont);
             table->setItem(r, j, item);
         }
 
@@ -386,7 +538,8 @@ void BateauWindow::populateTable(const QString& filterText)
         // Employé & Quai
         for(int j = 7; j <= 8; ++j) {
             QTableWidgetItem* item = new QTableWidgetItem(model->data(model->index(i, j)).toString());
-            item->setTextAlignment(Qt::AlignCenter); item->setFont(cellFont);
+            item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter); 
+            item->setFont(cellFont);
             table->setItem(r, j + 1, item); // Décalé de +1
         }
 
@@ -666,7 +819,11 @@ void BateauWindow::onAddBateau()
 
     if (diag.exec() == QDialog::Accepted) {
         Bateau b = diag.getData(); b.setIdBateau(generateBateauId());
-        if (b.ajouter()) { QMessageBox::information(this, "OK", "Ajout effectué."); populateTable(); }
+        if (b.ajouter()) { 
+            QMessageBox::information(this, "OK", "Ajout effectué."); 
+            populateTable(); 
+            QuaisWindow::refreshAll(); 
+        }
         else QMessageBox::critical(this, "Erreur", "Echec : " + Bateau::getLastError());
     }
 }
@@ -733,12 +890,16 @@ void BateauWindow::onEditBateau(int row)
 void BateauWindow::onDeleteBateau(int row)
 {
     QString id = table->item(row, 0)->text();
-    if (QMessageBox::question(this, "Suppression", "Supprimer ?", QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes) {
+    QString nom = table->item(row, 1)->text();
+    
+    if (showStyledActionDialog(this, "Suppression Bateau", 
+                               QString("Êtes-vous sûr de vouloir supprimer le bateau <b>%1</b> ?<br><br>Cette action est irréversible.").arg(nom),
+                               "#EF4444", "#B91C1C", "🗑️")) {
         Bateau b; 
         if (b.supprimer(id)) { 
-            QMessageBox::information(this, "OK", "Supprimé."); 
+            showStyledActionDialog(this, "Succès", "Le bateau a été supprimé avec succès.", "#10B981", "#059669", "✅", false);
             populateTable(); 
-            QuaisWindow::refreshAll(); // <--- AJOUTÉ
+            QuaisWindow::refreshAll(); 
         }
         else QMessageBox::critical(this, "Erreur", "Echec : " + Bateau::getLastError());
     }
@@ -746,7 +907,9 @@ void BateauWindow::onDeleteBateau(int row)
 
 void BateauWindow::onLogout()
 {
-    if (QMessageBox::question(this, "Quitter", "Voulez-vous quitter ?", QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) this->close();
+    if (showStyledActionDialog(this, "Quitter", "Voulez-vous vraiment fermer la gestion des bateaux ?", "#1E3A5F", "#3B82F6", "🚪", true, "Oui, Quitter", "Annuler")) {
+        this->close();
+    }
 }
 
 

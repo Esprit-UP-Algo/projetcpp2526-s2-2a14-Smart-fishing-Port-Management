@@ -2,81 +2,193 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QFrame>
+#include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
+
+// ==================== HELPERS POUR DIALOGUE STYLÉ ====================
+class DialogMoveFilter : public QObject {
+public:
+    DialogMoveFilter(QDialog* dialog, QObject* parent = nullptr) : QObject(parent), m_dialog(dialog), m_dragging(false) {}
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (!m_dialog) return QObject::eventFilter(watched, event);
+        switch (event->type()) {
+            case QEvent::MouseButtonPress: {
+                auto* me = static_cast<QMouseEvent*>(event);
+                if (me->button() == Qt::LeftButton) {
+                    m_dragging = true;
+                    m_dragOffset = me->globalPosition().toPoint() - m_dialog->frameGeometry().topLeft();
+                    return true;
+                }
+                break;
+            }
+            case QEvent::MouseMove: {
+                auto* me = static_cast<QMouseEvent*>(event);
+                if (m_dragging && (me->buttons() & Qt::LeftButton)) {
+                    m_dialog->move(me->globalPosition().toPoint() - m_dragOffset);
+                    return true;
+                }
+                break;
+            }
+            case QEvent::MouseButtonRelease: {
+                auto* me = static_cast<QMouseEvent*>(event);
+                if (me->button() == Qt::LeftButton) { m_dragging = false; return true; }
+                break;
+            }
+            default: break;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+private:
+    QDialog* m_dialog;
+    bool m_dragging;
+    QPoint m_dragOffset;
+};
+
+static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle) {
+    if (!dialog || !dragHandle) return;
+    dragHandle->setCursor(Qt::OpenHandCursor);
+    dragHandle->installEventFilter(new DialogMoveFilter(dialog, dragHandle));
+}
 
 PecheExportDialog::PecheExportDialog(QWidget *parent) : QDialog(parent)
 {
     setWindowTitle("Options d'Export PDF");
-    setMinimumWidth(400);
-    setStyleSheet("QDialog { background-color: #f8fafc; }");
+    setFixedSize(500, 550);
+    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground);
 
-    QVBoxLayout* mainLay = new QVBoxLayout(this);
-    mainLay->setSpacing(20);
-    mainLay->setContentsMargins(25, 25, 25, 25);
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(this);
+    shadow->setBlurRadius(30);
+    shadow->setOffset(0, 8);
+    shadow->setColor(QColor(0, 0, 0, 100));
 
-    QLabel* titleL = new QLabel("Configuration du Rapport");
-    titleL->setStyleSheet("font-size: 18px; font-weight: bold; color: #1e3a5f;");
-    mainLay->addWidget(titleL);
+    QWidget* container = new QWidget(this);
+    container->setGeometry(15, 15, 470, 520);
+    container->setGraphicsEffect(shadow);
+    container->setStyleSheet("QWidget { background: white; border-radius: 24px; }");
 
-    // Type selection
-    QLabel* typeL = new QLabel("Type de rapport :");
-    typeL->setStyleSheet("font-weight: 600; color: #475569;");
+    QVBoxLayout* mainLay = new QVBoxLayout(container);
+    mainLay->setContentsMargins(0, 0, 0, 0);
+    mainLay->setSpacing(0);
+
+    // Header Orange (Thème Pêche)
+    QFrame* header = new QFrame();
+    header->setFixedHeight(100);
+    header->setStyleSheet(R"(
+        QFrame {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #F97316, stop:1 #FB923C);
+            border-top-left-radius: 24px;
+            border-top-right-radius: 24px;
+        }
+    )");
+    QHBoxLayout* headerLay = new QHBoxLayout(header);
+    headerLay->setContentsMargins(25, 0, 20, 0);
+
+    QLabel* titleL = new QLabel("📄 Export Rapport PDF");
+    titleL->setFont(QFont("Segoe UI", 16, QFont::Bold));
+    titleL->setStyleSheet("color: white; background: transparent;");
+    headerLay->addWidget(titleL);
+
+    QPushButton* closeBtn = new QPushButton("✕");
+    closeBtn->setFixedSize(32, 32);
+    closeBtn->setCursor(Qt::PointingHandCursor);
+    closeBtn->setStyleSheet(R"(
+        QPushButton { background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 16px; font-weight: bold; }
+        QPushButton:hover { background: rgba(255,255,255,0.4); }
+    )");
+    connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
+    headerLay->addWidget(closeBtn);
+    mainLay->addWidget(header);
+    makeDialogMovable(this, header);
+
+    QWidget* content = new QWidget();
+    QVBoxLayout* contentLay = new QVBoxLayout(content);
+    contentLay->setContentsMargins(35, 25, 35, 25);
+    contentLay->setSpacing(15);
+
+    auto addLabel = [&](const QString& text) {
+        QLabel* lbl = new QLabel(text);
+        lbl->setFont(QFont("Segoe UI", 9, QFont::Bold));
+        lbl->setStyleSheet("color: #475569; margin-bottom: -5px;");
+        contentLay->addWidget(lbl);
+    };
+
+    QString comboStyle = R"(
+        QComboBox, QDateEdit {
+            background: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 10px; padding: 8px 12px; font-size: 11pt; color: #1E293B;
+        }
+        QComboBox:focus, QDateEdit:focus { border: 2px solid #F97316; background: white; }
+    )";
+
+    addLabel("TYPE DE RAPPORT");
     typeCombo = new QComboBox();
     typeCombo->addItems({"Rapport Complet (Total)", "Rapport par Bateau", "Rapport par Date", "Rapport par Bateau & Date"});
-    typeCombo->setFixedHeight(35);
-    mainLay->addWidget(typeL);
-    mainLay->addWidget(typeCombo);
+    typeCombo->setStyleSheet(comboStyle);
+    contentLay->addWidget(typeCombo);
 
-    // Boat Selection (Hidden by default)
     boatWidget = new QWidget();
     QVBoxLayout* boatLay = new QVBoxLayout(boatWidget);
-    boatLay->setContentsMargins(0,0,0,0);
-    QLabel* boatL = new QLabel("Choisir le bateau :");
-    boatL->setStyleSheet("font-weight: 600; color: #475569;");
+    boatLay->setContentsMargins(0, 5, 0, 0);
+    QLabel* bLbl = new QLabel("CHOISIR LE BATEAU");
+    bLbl->setFont(QFont("Segoe UI", 9, QFont::Bold));
+    bLbl->setStyleSheet("color: #475569;");
+    boatLay->addWidget(bLbl);
     boatCombo = new QComboBox();
-    boatCombo->setFixedHeight(35);
-    boatLay->addWidget(boatL);
+    boatCombo->setStyleSheet(comboStyle);
     boatLay->addWidget(boatCombo);
     boatWidget->setVisible(false);
-    mainLay->addWidget(boatWidget);
+    contentLay->addWidget(boatWidget);
 
-    // Date Selection (Hidden by default)
     dateWidget = new QWidget();
     QVBoxLayout* dateLayV = new QVBoxLayout(dateWidget);
-    dateLayV->setContentsMargins(0,0,0,0);
-    QLabel* dateL = new QLabel("Choisir la période :");
-    dateL->setStyleSheet("font-weight: 600; color: #475569;");
+    dateLayV->setContentsMargins(0, 5, 0, 0);
+    QLabel* dLbl = new QLabel("PÉRIODE");
+    dLbl->setFont(QFont("Segoe UI", 9, QFont::Bold));
+    dLbl->setStyleSheet("color: #475569;");
+    dateLayV->addWidget(dLbl);
     
     QHBoxLayout* dateLayH = new QHBoxLayout();
     startDateEdit = new QDateEdit(QDate::currentDate().addMonths(-1));
     startDateEdit->setCalendarPopup(true);
-    startDateEdit->setFixedHeight(35);
+    startDateEdit->setStyleSheet(comboStyle);
     endDateEdit = new QDateEdit(QDate::currentDate());
     endDateEdit->setCalendarPopup(true);
-    endDateEdit->setFixedHeight(35);
+    endDateEdit->setStyleSheet(comboStyle);
     
-    dateLayH->addWidget(new QLabel("Du:"));
-    dateLayH->addWidget(startDateEdit);
-    dateLayH->addWidget(new QLabel("Au:"));
-    dateLayH->addWidget(endDateEdit);
-    
-    dateLayV->addWidget(dateL);
+    dateLayH->addWidget(new QLabel("De:"));
+    dateLayH->addWidget(startDateEdit, 1);
+    dateLayH->addWidget(new QLabel("À:"));
+    dateLayH->addWidget(endDateEdit, 1);
     dateLayV->addLayout(dateLayH);
     dateWidget->setVisible(false);
-    mainLay->addWidget(dateWidget);
+    contentLay->addWidget(dateWidget);
 
-    // Buttons
+    contentLay->addStretch();
+
     QHBoxLayout* btnLay = new QHBoxLayout();
+    btnLay->setSpacing(15);
     QPushButton* cancelBtn = new QPushButton("Annuler");
-    QPushButton* okBtn = new QPushButton("Générer PDF");
+    cancelBtn->setFixedHeight(45);
+    cancelBtn->setCursor(Qt::PointingHandCursor);
+    cancelBtn->setStyleSheet("QPushButton { background: #F1F5F9; color: #475569; border-radius: 12px; font-weight: 600; } QPushButton:hover { background: #E2E8F0; }");
     
-    cancelBtn->setFixedHeight(40);
-    okBtn->setFixedHeight(40);
-    okBtn->setStyleSheet("background-color: #2563EB; color: white; font-weight: bold; border-radius: 8px;");
-    cancelBtn->setStyleSheet("background-color: white; border: 1px solid #d1d5db; border-radius: 8px;");
+    QPushButton* okBtn = new QPushButton("💾 Générer PDF");
+    okBtn->setFixedHeight(45);
+    okBtn->setCursor(Qt::PointingHandCursor);
+    okBtn->setStyleSheet("QPushButton { background: #F97316; color: white; border-radius: 12px; font-weight: bold; } QPushButton:hover { background: #EA580C; }");
     
-    btnLay->addWidget(cancelBtn);
-    btnLay->addWidget(okBtn);
-    mainLay->addLayout(btnLay);
+    btnLay->addWidget(cancelBtn, 1);
+    btnLay->addWidget(okBtn, 2);
+    contentLay->addLayout(btnLay);
+
+    mainLay->addWidget(content);
 
     connect(typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PecheExportDialog::onTypeChanged);
     connect(okBtn, &QPushButton::clicked, this, &QDialog::accept);

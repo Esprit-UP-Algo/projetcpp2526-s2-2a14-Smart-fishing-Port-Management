@@ -30,6 +30,12 @@ bool Bateau::ajouter() {
         return false;
     }
 
+    QSqlDatabase db = QSqlDatabase::database();
+    if (!db.transaction()) {
+        lastError = "Impossible de démarrer la transaction.";
+        return false;
+    }
+
     QSqlQuery query;
     if (idQuai.isEmpty()) {
         query.prepare("INSERT INTO BATEAUX (IDBATEAU, NOMBATEAU, IMMATRICULATION, CAPACITE, LONGEUR, AGE_BATEAU, DATE_DERNIERE_MAINTENANCE, ID_EMPLOYE, IDQUAI, ETAT, CODE_SECRET) "
@@ -42,18 +48,36 @@ bool Bateau::ajouter() {
     query.bindValue(":id", idBateau.toInt());
     query.bindValue(":nom", nomBateau);
     query.bindValue(":imm", immatriculation);
-    query.bindValue(":cap", capacite.isEmpty() ? QVariant() : capacite.toDouble());
-    query.bindValue(":lon", longueur.isEmpty() ? QVariant() : longueur.toDouble());
-    query.bindValue(":age", ageBateau.isEmpty() ? QVariant() : ageBateau.toInt());
+    query.bindValue(":cap", capacite.isEmpty() ? QVariant(QVariant::Double) : capacite.toDouble());
+    query.bindValue(":lon", longueur.isEmpty() ? QVariant(QVariant::Double) : longueur.toDouble());
+    query.bindValue(":age", ageBateau.isEmpty() ? QVariant(QVariant::Int) : ageBateau.toInt());
     query.bindValue(":date", dateMaintenance);
-    query.bindValue(":idE", idEmploye.isEmpty() ? QVariant() : idEmploye.toInt());
+    query.bindValue(":idE", idEmploye.isEmpty() ? QVariant(QVariant::Int) : idEmploye.toInt());
     if (!idQuai.isEmpty()) {
         query.bindValue(":idQ", idQuai.toInt());
     }
     query.bindValue(":etat", etat);
     query.bindValue(":codeSec", codeSecret);
 
-    if (query.exec()) return true;
+    if (query.exec()) {
+        // [NOUVEAU] Occuper le quai si le bateau est au port
+        if (etat.trimmed().compare("Au port", Qt::CaseInsensitive) == 0 && !idQuai.isEmpty()) {
+            QSqlQuery occQ;
+            occQ.prepare("UPDATE QUAIS SET ETAT = 'Occupé' WHERE IDQUAI = :idq");
+            occQ.bindValue(":idq", idQuai.toInt());
+            if (!occQ.exec()) {
+                db.rollback();
+                lastError = "Erreur lors de la mise à jour du quai : " + occQ.lastError().text();
+                return false;
+            }
+        }
+        if (db.commit()) return true;
+        lastError = "Erreur lors du commit : " + db.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    db.rollback();
     lastError = query.lastError().text();
     return false;
 }
@@ -126,15 +150,58 @@ bool Bateau::modifier(QString id) {
         incQuery.exec();
     }
 
-    // [NOUVEAU] Libérer le quai si le bateau n'est plus au port
+    QSqlDatabase db = QSqlDatabase::database();
+    if (!db.transaction()) {
+        lastError = "Impossible de démarrer la transaction.";
+        return false;
+    }
+
+    // [NOUVEAU] Gérer l'état du quai
+    QSqlQuery oldQ;
+    oldQ.prepare("SELECT IDQUAI FROM BATEAUX WHERE IDBATEAU = :id");
+    oldQ.bindValue(":id", id.toInt());
+    QString oldIdQuai = "";
+    if (oldQ.exec() && oldQ.next()) {
+        oldIdQuai = oldQ.value(0).toString();
+    }
+
     if (etat.trimmed().compare("Au port", Qt::CaseInsensitive) != 0) {
-        QSqlQuery freeQ;
-        freeQ.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE IDQUAI = (SELECT IDQUAI FROM BATEAUX WHERE IDBATEAU = :id)");
-        freeQ.bindValue(":id", id.toInt());
-        freeQ.exec();
-        
-        // On force IDQUAI à NULL dans l'objet pour la requête SQL suivante
+        // Le bateau n'est plus au port : libérer l'ancien quai s'il existait
+        if (!oldIdQuai.isEmpty() && oldIdQuai != "0") {
+            QSqlQuery freeQ;
+            freeQ.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE IDQUAI = :idq");
+            freeQ.bindValue(":idq", oldIdQuai.toInt());
+            if (!freeQ.exec()) {
+                db.rollback();
+                lastError = "Erreur lors de la libération du quai : " + freeQ.lastError().text();
+                return false;
+            }
+        }
         idQuai = ""; 
+    } else {
+        // Le bateau est au port :
+        // 1. Si le quai a changé, libérer l'ancien
+        if (!oldIdQuai.isEmpty() && oldIdQuai != "0" && oldIdQuai != idQuai) {
+            QSqlQuery freeQ;
+            freeQ.prepare("UPDATE QUAIS SET ETAT = 'Disponible' WHERE IDQUAI = :idq");
+            freeQ.bindValue(":idq", oldIdQuai.toInt());
+            if (!freeQ.exec()) {
+                db.rollback();
+                lastError = "Erreur lors de la libération de l'ancien quai : " + freeQ.lastError().text();
+                return false;
+            }
+        }
+        // 2. Occuper le nouveau quai
+        if (!idQuai.isEmpty() && idQuai != "0") {
+            QSqlQuery occQ;
+            occQ.prepare("UPDATE QUAIS SET ETAT = 'Occupé' WHERE IDQUAI = :idq");
+            occQ.bindValue(":idq", idQuai.toInt());
+            if (!occQ.exec()) {
+                db.rollback();
+                lastError = "Erreur lors de l'occupation du nouveau quai : " + occQ.lastError().text();
+                return false;
+            }
+        }
     }
 
     QSqlQuery query;
@@ -150,11 +217,11 @@ bool Bateau::modifier(QString id) {
     
     query.bindValue(":nom", nomBateau);
     query.bindValue(":imm", immatriculation);
-    query.bindValue(":cap", capacite.isEmpty() ? QVariant() : capacite.toDouble());
-    query.bindValue(":lon", longueur.isEmpty() ? QVariant() : longueur.toDouble());
-    query.bindValue(":age", ageBateau.isEmpty() ? QVariant() : ageBateau.toInt());
+    query.bindValue(":cap", capacite.isEmpty() ? QVariant(QVariant::Double) : capacite.toDouble());
+    query.bindValue(":lon", longueur.isEmpty() ? QVariant(QVariant::Double) : longueur.toDouble());
+    query.bindValue(":age", ageBateau.isEmpty() ? QVariant(QVariant::Int) : ageBateau.toInt());
     query.bindValue(":date", dateMaintenance);
-    query.bindValue(":idE", idEmploye.isEmpty() ? QVariant() : idEmploye.toInt());
+    query.bindValue(":idE", idEmploye.isEmpty() ? QVariant(QVariant::Int) : idEmploye.toInt());
     if (!idQuai.isEmpty()) {
         query.bindValue(":idQ", idQuai.toInt());
     }
@@ -162,7 +229,14 @@ bool Bateau::modifier(QString id) {
     query.bindValue(":codeSec", codeSecret);
     query.bindValue(":id", id.toInt());
 
-    if (query.exec()) return true;
+    if (query.exec()) {
+        if (db.commit()) return true;
+        lastError = "Erreur lors du commit : " + db.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    db.rollback();
     lastError = query.lastError().text();
     return false;
 }

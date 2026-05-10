@@ -31,18 +31,28 @@ private:
     bool validateInputs();
     void showError(const QString& msg);
     QString getInputStyle() const;
+    void updateFieldStyle(QWidget* field, bool isValid);
     QString getRadioStyle() const;
 
     QLineEdit* nomBateauInput;
+    QLabel* nomErrorLabel;
     QLineEdit* immatriculationInput;
+    QLabel* immatErrorLabel;
+    QLabel* immatUnicityLabel;
     QLineEdit* capaciteInput;
+    QLabel* capErrorLabel;
+    QLineEdit* codeSecInput;
+    QLabel* codeErrorLabel;
     QLineEdit* longueurInput;
+    QLabel* longErrorLabel;
     QLineEdit* ageInput;
+    QLabel* ageErrorLabel;
     QDateEdit* dateMaintenanceInput;
+    QLabel* dateErrorLabel;
     QComboBox* employeeCombo;
     QComboBox* quaiCombo;
+    QLabel* quaiErrorLabel;
     QComboBox* etatCombo;
-    QLineEdit* codeSecInput;
 
     Bateau* bateauData;
     bool isEdit;

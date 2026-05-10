@@ -29,7 +29,115 @@
 #include <QJsonDocument>
 #include <QTextCharFormat>
 #include <QBrush>
-#include <QColor>
+#include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
+
+// ==================== UI HELPERS ====================
+class MoveFilter : public QObject {
+    QDialog* d; bool m=false; QPoint o;
+public:
+    MoveFilter(QDialog* dlg) : d(dlg), QObject(dlg) {}
+    bool eventFilter(QObject* obj, QEvent* e) override {
+        if (e->type()==QEvent::MouseButtonPress) {
+            auto* me = static_cast<QMouseEvent*>(e);
+            if (me->button()==Qt::LeftButton) { m=true; o=me->globalPosition().toPoint()-d->frameGeometry().topLeft(); return true; }
+        } else if (e->type()==QEvent::MouseMove && m) {
+            auto* me = static_cast<QMouseEvent*>(e);
+            d->move(me->globalPosition().toPoint()-o); return true;
+        } else if (e->type()==QEvent::MouseButtonRelease) { m=false; return true; }
+        return false;
+    }
+};
+
+static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle) {
+    if (!dialog || !dragHandle) return;
+    dragHandle->setCursor(Qt::OpenHandCursor);
+    dragHandle->installEventFilter(new MoveFilter(dialog));
+}
+
+static bool showStyledActionDialog(QWidget* parent, const QString& title, const QString& message,
+                                   const QString& gradientStart, const QString& gradientEnd,
+                                   const QString& icon, bool hasCancel = true,
+                                   const QString& confirmText = QString(),
+                                   const QString& cancelText = "Annuler") {
+    QDialog* popup = new QDialog(parent);
+    popup->setFixedSize(540, 320);
+    popup->setModal(true);
+    popup->setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    popup->setAttribute(Qt::WA_TranslucentBackground);
+
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(popup);
+    shadow->setBlurRadius(40); shadow->setOffset(0, 8); shadow->setColor(QColor(0, 0, 0, 80));
+
+    QWidget* container = new QWidget(popup);
+    container->setGeometry(10, 10, 520, 300);
+    container->setGraphicsEffect(shadow);
+    container->setStyleSheet("QWidget { background: white; border-radius: 20px; }");
+
+    QVBoxLayout* lay = new QVBoxLayout(container);
+    lay->setContentsMargins(0, 0, 0, 0); lay->setSpacing(0);
+
+    QFrame* hdr = new QFrame();
+    hdr->setFixedHeight(64);
+    hdr->setStyleSheet(QString("QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %1, stop:1 %2); border-radius: 20px 20px 0 0; }").arg(gradientStart, gradientEnd));
+    QHBoxLayout* hdrLay = new QHBoxLayout(hdr);
+    hdrLay->setContentsMargins(22, 0, 16, 0);
+
+    QLabel* hdrIcon = new QLabel(icon);
+    hdrIcon->setFont(QFont("Segoe UI", 18));
+    hdrIcon->setStyleSheet("background: transparent;");
+    hdrLay->addWidget(hdrIcon);
+
+    QLabel* hdrTitle = new QLabel(title);
+    hdrTitle->setFont(QFont("Segoe UI", 13, QFont::Bold));
+    hdrTitle->setStyleSheet("color: white; background: transparent;");
+    hdrLay->addWidget(hdrTitle, 1);
+
+    QPushButton* xBtn = new QPushButton("✕");
+    xBtn->setFixedSize(30, 30); xBtn->setCursor(Qt::PointingHandCursor);
+    xBtn->setStyleSheet("QPushButton { background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 15px; font-weight: bold; } QPushButton:hover { background: rgba(255,255,255,0.35); }");
+    QObject::connect(xBtn, &QPushButton::clicked, popup, &QDialog::reject);
+    hdrLay->addWidget(xBtn);
+    lay->addWidget(hdr);
+    makeDialogMovable(popup, hdr);
+
+    QLabel* msgLbl = new QLabel(message);
+    msgLbl->setWordWrap(true); msgLbl->setFont(QFont("Segoe UI", 11));
+    msgLbl->setStyleSheet("color: #374151; background: transparent;");
+    msgLbl->setAlignment(Qt::AlignCenter);
+    msgLbl->setContentsMargins(24, 22, 24, 6);
+    lay->addWidget(msgLbl, 1);
+
+    QHBoxLayout* btnLay = new QHBoxLayout();
+    btnLay->setContentsMargins(20, 8, 20, 20); btnLay->setSpacing(10);
+    btnLay->addStretch();
+
+    if (hasCancel) {
+        QPushButton* noBtn = new QPushButton(cancelText);
+        noBtn->setFixedHeight(40); noBtn->setMinimumWidth(100);
+        noBtn->setCursor(Qt::PointingHandCursor);
+        noBtn->setStyleSheet("QPushButton { background: #F3F4F6; color: #374151; border: none; border-radius: 10px; font-weight: 500; } QPushButton:hover { background: #E5E7EB; }");
+        QObject::connect(noBtn, &QPushButton::clicked, popup, &QDialog::reject);
+        btnLay->addWidget(noBtn);
+    }
+
+    QPushButton* okBtn = new QPushButton(confirmText.isEmpty() ? (hasCancel ? "Confirmer" : "Compris") : confirmText);
+    okBtn->setFixedHeight(40); okBtn->setMinimumWidth(140);
+    okBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
+    okBtn->setCursor(Qt::PointingHandCursor);
+    okBtn->setStyleSheet(QString(R"(
+        QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 %1, stop:1 %2);
+                      color: white; border: none; border-radius: 10px; padding: 0 16px; }
+        QPushButton:hover { background: %1; }
+    )").arg(gradientStart, gradientEnd));
+    QObject::connect(okBtn, &QPushButton::clicked, popup, &QDialog::accept);
+    btnLay->addWidget(okBtn);
+    lay->addLayout(btnLay);
+
+    const bool accepted = (popup->exec() == QDialog::Accepted);
+    popup->deleteLater();
+    return accepted;
+}
 
 FrigoWindow::FrigoWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -280,22 +388,9 @@ QFrame* FrigoWindow::createHeader()
         return btn;
     };
 
-    QPushButton* statsBtn  = makeBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
-    QPushButton* classBtn  = makeBtn("🌿  Classification", "#10B981", "#059669");
-    QPushButton* smsBtn    = makeBtn("📱  Envoi SMS",      "#F59E0B", "#D97706");
-    QPushButton* pdfBtn    = makeBtn("📄  Exporter PDF",   "#059669", "#047857");
-    QPushButton* addBtn    = makeBtn("➕  Nouveau Frigo",  "#2563EB", "#1D4ED8");
+    QPushButton* addBtn = makeBtn("➕  Nouveau Frigo", "#2563EB", "#1D4ED8");
+    connect(addBtn, &QPushButton::clicked, this, &FrigoWindow::onAddFrigo);
 
-    connect(statsBtn, &QPushButton::clicked, this, &FrigoWindow::onShowStatistics);
-    connect(classBtn, &QPushButton::clicked, this, &FrigoWindow::onShowClassification);
-    connect(smsBtn,   &QPushButton::clicked, this, &FrigoWindow::onSendSMS);
-    connect(pdfBtn,   &QPushButton::clicked, this, &FrigoWindow::onGeneratePDF);
-    connect(addBtn,   &QPushButton::clicked, this, &FrigoWindow::onAddFrigo);
-
-    lay->addWidget(statsBtn);
-    lay->addWidget(classBtn);
-    lay->addWidget(smsBtn);
-    lay->addWidget(pdfBtn);
     lay->addWidget(addBtn);
     return hdr;
 }
@@ -320,7 +415,7 @@ QFrame* FrigoWindow::createToolbar()
     /* Search bar */
     searchInput = new QLineEdit();
     searchInput->setPlaceholderText("🔍  Rechercher par statut, contenu...");
-    searchInput->setFixedWidth(350);
+    searchInput->setFixedWidth(320);
     searchInput->setFixedHeight(40);
     searchInput->setStyleSheet(R"(
         QLineEdit {
@@ -331,6 +426,32 @@ QFrame* FrigoWindow::createToolbar()
     )");
     connect(searchInput, &QLineEdit::textChanged, this, &FrigoWindow::onSearch);
     lay->addWidget(searchInput);
+
+    auto makeToolBtn = [&](const QString& label, const QString& bg, const QString& hover) {
+        QPushButton* btn = new QPushButton(label);
+        btn->setFont(QFont("Segoe UI", 9, QFont::Bold));
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFixedHeight(40);
+        btn->setStyleSheet(QString(
+            "QPushButton{ background:%1; color:white; border:none; border-radius:10px; padding:0 15px; }"
+            "QPushButton:hover{ background:%2; }").arg(bg, hover));
+        return btn;
+    };
+
+    QPushButton* statsBtn  = makeToolBtn("📊  Statistiques", "#7C3AED", "#6D28D9");
+    QPushButton* classBtn  = makeToolBtn("🌿  Classification", "#10B981", "#059669");
+    QPushButton* smsBtn    = makeToolBtn("📱  SMS", "#F59E0B", "#D97706");
+    QPushButton* pdfBtn    = makeToolBtn("📄  PDF", "#059669", "#047857");
+
+    connect(statsBtn, &QPushButton::clicked, this, &FrigoWindow::onShowStatistics);
+    connect(classBtn, &QPushButton::clicked, this, &FrigoWindow::onShowClassification);
+    connect(smsBtn,   &QPushButton::clicked, this, &FrigoWindow::onSendSMS);
+    connect(pdfBtn,   &QPushButton::clicked, this, &FrigoWindow::onGeneratePDF);
+
+    lay->addWidget(statsBtn);
+    lay->addWidget(classBtn);
+    lay->addWidget(smsBtn);
+    lay->addWidget(pdfBtn);
 
     lay->addStretch();
 
@@ -947,13 +1068,15 @@ void FrigoWindow::onDeleteFrigoById(const QString& id)
     }
     refQuery.finish();
 
-    if (QMessageBox::question(this, "Confirmation",
-                              QString("Voulez-vous vraiment supprimer le frigo '%1' ?").arg(ref)) == QMessageBox::Yes) {
-        if (frigoModel.supprimer(id)) {
+    if (showStyledActionDialog(this, "Suppression Frigo", 
+                               QString("Voulez-vous vraiment supprimer le frigo <b>%1</b> ?").arg(ref),
+                               "#EF4444", "#B91C1C", "🗑️")) {
+        FrigoModel f;
+        if (f.supprimer(id)) {
+            showStyledActionDialog(this, "Succès", "Le frigo a été supprimé avec succès.", "#10B981", "#059669", "✅", false);
             populateTable();
-            QMessageBox::information(this, "Succès", "Frigo supprimé.");
         } else {
-            QMessageBox::critical(this, "Erreur", "La suppression a échoué. Vérifiez que ce frigo n'est pas référencé par des pêches.");
+            QMessageBox::critical(this, "Erreur", "La suppression a échoué.\n" + f.getLastError());
         }
     }
 }

@@ -5,6 +5,7 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QDateEdit>
+#include <QPushButton>
 #include "Employeewindow.h"
 
 class EmployeeDialog : public QDialog
@@ -32,6 +33,7 @@ private:
     void setupUi();
     void populateFields();
     QString getInputStyle() const;
+    void updateFieldStyle(QWidget* field, bool isValid);
 
     QLineEdit* firstNameInput;
     QLabel* firstNameErrorLabel;

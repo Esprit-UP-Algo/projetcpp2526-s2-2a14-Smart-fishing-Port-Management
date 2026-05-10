@@ -15,278 +15,344 @@
 #include <QSqlError>
 #include <QMessageBox>
 #include <QDateEdit>
+#include <QGraphicsDropShadowEffect>
+#include <QMouseEvent>
+
+// ==================== HELPERS POUR DIALOGUE STYLÉ ====================
+class DialogMoveFilter : public QObject {
+public:
+    DialogMoveFilter(QDialog* dialog, QObject* parent = nullptr) : QObject(parent), m_dialog(dialog), m_dragging(false) {}
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (!m_dialog) return QObject::eventFilter(watched, event);
+        switch (event->type()) {
+            case QEvent::MouseButtonPress: {
+                auto* me = static_cast<QMouseEvent*>(event);
+                if (me->button() == Qt::LeftButton) {
+                    m_dragging = true;
+                    m_dragOffset = me->globalPosition().toPoint() - m_dialog->frameGeometry().topLeft();
+                    return true;
+                }
+                break;
+            }
+            case QEvent::MouseMove: {
+                auto* me = static_cast<QMouseEvent*>(event);
+                if (m_dragging && (me->buttons() & Qt::LeftButton)) {
+                    m_dialog->move(me->globalPosition().toPoint() - m_dragOffset);
+                    return true;
+                }
+                break;
+            }
+            case QEvent::MouseButtonRelease: {
+                auto* me = static_cast<QMouseEvent*>(event);
+                if (me->button() == Qt::LeftButton) { m_dragging = false; return true; }
+                break;
+            }
+            default: break;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+private:
+    QDialog* m_dialog;
+    bool m_dragging;
+    QPoint m_dragOffset;
+};
+
+static void makeDialogMovable(QDialog* dialog, QWidget* dragHandle) {
+    if (!dialog || !dragHandle) return;
+    dragHandle->setCursor(Qt::OpenHandCursor);
+    dragHandle->installEventFilter(new DialogMoveFilter(dialog, dragHandle));
+}
 
 EmployeeDialog::EmployeeDialog(QWidget *parent, Employee* employeeData)
     : QDialog(parent), employeeData(employeeData), isEdit(employeeData != nullptr)
 {
     setupUi();
-    if (isEdit) {
-        populateFields();
-    }
+    if (isEdit) populateFields();
 }
 
-EmployeeDialog::~EmployeeDialog()
-{
-}
+EmployeeDialog::~EmployeeDialog() {}
 
 void EmployeeDialog::setupUi()
 {
-    setWindowTitle("Ajouter / Modifier Employé");
-    setFixedSize(700, 650);
+    setWindowTitle(isEdit ? "Modifier Employé" : "Nouvel Employé");
+    setFixedSize(680, 750);
     setModal(true);
+    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground);
 
-    setStyleSheet(R"(
-        QDialog {
-            background-color: #F0F4F8;
-        }
-    )");
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(this);
+    shadow->setBlurRadius(40);
+    shadow->setOffset(0, 10);
+    shadow->setColor(QColor(0, 0, 0, 100));
 
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    QWidget* container = new QWidget(this);
+    container->setGeometry(15, 15, 650, 720);
+    container->setGraphicsEffect(shadow);
+    container->setStyleSheet("QWidget { background: white; border-radius: 28px; }");
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(container);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
+    // Header avec Dégradé Vert (Emerald)
     QFrame* header = new QFrame();
-    header->setFixedHeight(80);
+    header->setFixedHeight(130);
     header->setStyleSheet(R"(
         QFrame {
-            background-color: #5D9CEC;
-            padding: 20px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #2563EB, stop:1 #5D9CEC);
+            border-top-left-radius: 28px;
+            border-top-right-radius: 28px;
         }
     )");
-    QHBoxLayout* headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(30, 20, 30, 20);
+    
+    QHBoxLayout* headerLay = new QHBoxLayout(header);
+    headerLay->setContentsMargins(35, 0, 25, 0);
 
-    QLabel* title = new QLabel(isEdit ? "Modifier Employé" : "Ajouter Employé");
-    QFont titleFont("Segoe UI", 18, QFont::Bold);
-    title->setFont(titleFont);
-    title->setStyleSheet("color: white;");
-    headerLayout->addWidget(title);
-    headerLayout->addStretch();
+    QVBoxLayout* titleCol = new QVBoxLayout();
+    titleCol->setSpacing(2);
+    titleCol->setAlignment(Qt::AlignVCenter);
+
+    QLabel* title = new QLabel(isEdit ? "Modifier le Profil" : "Nouvel Employé");
+    title->setFont(QFont("Segoe UI", 22, QFont::Bold));
+    title->setStyleSheet("color: white; background: transparent;");
+    titleCol->addWidget(title);
+
+    QLabel* sub = new QLabel(isEdit ? "✏️  Mise à jour des informations personnelles" : "👥  Enregistrement d'un nouveau membre de l'équipe");
+    sub->setFont(QFont("Segoe UI", 10));
+    sub->setStyleSheet("color: rgba(255, 255, 255, 0.85); background: transparent;");
+    titleCol->addWidget(sub);
+    headerLay->addLayout(titleCol, 1);
+
+    QPushButton* closeBtn = new QPushButton("✕");
+    closeBtn->setFixedSize(38, 38);
+    closeBtn->setCursor(Qt::PointingHandCursor);
+    closeBtn->setStyleSheet(R"(
+        QPushButton { background: rgba(255,255,255,0.15); color: white; border: none;
+                      border-radius: 19px; font-size: 15px; font-weight: bold; }
+        QPushButton:hover { background: rgba(255,255,255,0.3); }
+    )");
+    connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
+    headerLay->addWidget(closeBtn);
+
     mainLayout->addWidget(header);
+    makeDialogMovable(this, header);
 
     QScrollArea* scrollArea = new QScrollArea();
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setStyleSheet("QScrollArea { background-color: white; border: none; }");
+    scrollArea->setStyleSheet("QScrollArea { background: transparent; border: none; }");
+    scrollArea->viewport()->setStyleSheet("background: transparent;");
 
-    QWidget* content = new QWidget();
-    content->setStyleSheet("background-color: white;");
-    QVBoxLayout* formLayout = new QVBoxLayout(content);
-    formLayout->setSpacing(25);
-    formLayout->setContentsMargins(40, 40, 40, 40);
+    QWidget* formContent = new QWidget();
+    formContent->setStyleSheet("background: transparent;");
+    QVBoxLayout* formLayout = new QVBoxLayout(formContent);
+    formLayout->setSpacing(18);
+    formLayout->setContentsMargins(45, 30, 45, 30);
 
-    QFont labelFont("Segoe UI", 12, QFont::Medium);
-    QFont inputFont("Segoe UI", 12);
+    auto addLabel = [&](const QString& text) {
+        QLabel* lbl = new QLabel(text);
+        lbl->setFont(QFont("Segoe UI", 9, QFont::Bold));
+        lbl->setStyleSheet("color: #4B5563; margin-bottom: 2px; letter-spacing: 0.5px;");
+        formLayout->addWidget(lbl);
+        return lbl;
+    };
 
-    QHBoxLayout* nameRow = new QHBoxLayout();
-    nameRow->setSpacing(20);
-
-    QVBoxLayout* prenomCol = new QVBoxLayout();
-    prenomCol->setSpacing(8);
-    QLabel* prenomLabel = new QLabel("Prénom");
-    prenomLabel->setFont(labelFont);
-    prenomLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    prenomCol->addWidget(prenomLabel);
+    addLabel("PRÉNOM");
     firstNameInput = new QLineEdit();
     firstNameInput->setPlaceholderText("Ahmed");
-    firstNameInput->setFont(inputFont);
-    firstNameInput->setFixedHeight(50);
     firstNameInput->setStyleSheet(getInputStyle());
-    prenomCol->addWidget(firstNameInput);
+    firstNameInput->setValidator(new QRegularExpressionValidator(QRegularExpression("^[a-zA-ZÀ-ÿ\\s-]*$"), this));
+    formLayout->addWidget(firstNameInput);
     firstNameErrorLabel = new QLabel("");
-    firstNameErrorLabel->setStyleSheet("color: #E74C3C; font-size: 11px; font-weight: bold; margin-top: -5px;");
+    firstNameErrorLabel->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    firstNameErrorLabel->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
     firstNameErrorLabel->hide();
-    prenomCol->addWidget(firstNameErrorLabel);
+    formLayout->addWidget(firstNameErrorLabel);
     connect(firstNameInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateFirstName);
-    nameRow->addLayout(prenomCol);
 
-    QVBoxLayout* nomCol = new QVBoxLayout();
-    nomCol->setSpacing(8);
-    QLabel* nomLabel = new QLabel("Nom");
-    nomLabel->setFont(labelFont);
-    nomLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    nomCol->addWidget(nomLabel);
+    addLabel("NOM");
     lastNameInput = new QLineEdit();
     lastNameInput->setPlaceholderText("Khalil");
-    lastNameInput->setFont(inputFont);
-    lastNameInput->setFixedHeight(50);
     lastNameInput->setStyleSheet(getInputStyle());
-    nomCol->addWidget(lastNameInput);
+    lastNameInput->setValidator(new QRegularExpressionValidator(QRegularExpression("^[a-zA-ZÀ-ÿ\\s-]*$"), this));
+    formLayout->addWidget(lastNameInput);
     lastNameErrorLabel = new QLabel("");
-    lastNameErrorLabel->setStyleSheet("color: #E74C3C; font-size: 11px; font-weight: bold; margin-top: -5px;");
+    lastNameErrorLabel->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    lastNameErrorLabel->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
     lastNameErrorLabel->hide();
-    nomCol->addWidget(lastNameErrorLabel);
+    formLayout->addWidget(lastNameErrorLabel);
     connect(lastNameInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateLastName);
-    nameRow->addLayout(nomCol);
-    formLayout->addLayout(nameRow);
 
-    QLabel* cinLabel = new QLabel("CIN");
-    cinLabel->setFont(labelFont);
-    cinLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    formLayout->addWidget(cinLabel);
+    addLabel("NUMÉRO CIN (8 CHIFFRES)");
     cinInput = new QLineEdit();
     cinInput->setPlaceholderText("12345678");
     cinInput->setMaxLength(8);
-    cinInput->setFont(inputFont);
-    cinInput->setFixedHeight(50);
+    cinInput->setValidator(new QRegularExpressionValidator(QRegularExpression("^\\d{0,8}$"), this));
     cinInput->setStyleSheet(getInputStyle());
     formLayout->addWidget(cinInput);
     cinErrorLabel = new QLabel("");
-    cinErrorLabel->setStyleSheet("color: #E74C3C; font-size: 11px; font-weight: bold; margin-top: -5px;");
+    cinErrorLabel->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    cinErrorLabel->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
     cinErrorLabel->hide();
     formLayout->addWidget(cinErrorLabel);
     connect(cinInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateCin);
 
-    QLabel* phoneLabel = new QLabel("Téléphone");
-    phoneLabel->setFont(labelFont);
-    phoneLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    formLayout->addWidget(phoneLabel);
+    addLabel("TÉLÉPHONE");
     phoneInput = new QLineEdit();
     phoneInput->setPlaceholderText("98765432");
     phoneInput->setMaxLength(8);
-    phoneInput->setFont(inputFont);
-    phoneInput->setFixedHeight(50);
+    phoneInput->setValidator(new QRegularExpressionValidator(QRegularExpression("^\\d{0,8}$"), this));
     phoneInput->setStyleSheet(getInputStyle());
     formLayout->addWidget(phoneInput);
     phoneErrorLabel = new QLabel("");
-    phoneErrorLabel->setStyleSheet("color: #E74C3C; font-size: 11px; font-weight: bold; margin-top: -5px;");
+    phoneErrorLabel->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    phoneErrorLabel->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
     phoneErrorLabel->hide();
     formLayout->addWidget(phoneErrorLabel);
     connect(phoneInput, &QLineEdit::textChanged, this, &EmployeeDialog::validatePhone);
 
-    QLabel* emailLabel = new QLabel("Email");
-    emailLabel->setFont(labelFont);
-    emailLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    formLayout->addWidget(emailLabel);
+    addLabel("EMAIL PROFESSIONNEL");
     emailInput = new QLineEdit();
     emailInput->setPlaceholderText("nom@gmail.com");
-    emailInput->setFont(inputFont);
-    emailInput->setFixedHeight(50);
     emailInput->setStyleSheet(getInputStyle());
     formLayout->addWidget(emailInput);
     emailErrorLabel = new QLabel("");
-    emailErrorLabel->setStyleSheet("color: #E74C3C; font-size: 11px; font-weight: bold; margin-top: -5px;");
+    emailErrorLabel->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    emailErrorLabel->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
     emailErrorLabel->hide();
     formLayout->addWidget(emailErrorLabel);
     connect(emailInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateEmail);
 
-    QLabel* positionLabel = new QLabel("Position");
-    positionLabel->setFont(labelFont);
-    positionLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    formLayout->addWidget(positionLabel);
+    QHBoxLayout* posRow = new QHBoxLayout();
+    QVBoxLayout* pCol = new QVBoxLayout();
+    addLabel("POSITION");
     positionCombo = new QComboBox();
     positionCombo->addItems({"Marin", "Pêcheur", "RH", "Technicien", "Sécurité", "Livreur"});
-    positionCombo->setFont(inputFont);
-    positionCombo->setFixedHeight(50);
     positionCombo->setStyleSheet(getInputStyle());
-    formLayout->addWidget(positionCombo);
+    pCol->addWidget(positionCombo);
+    posRow->addLayout(pCol);
 
-    QLabel* salaireLabel = new QLabel("Salaire");
-    salaireLabel->setFont(labelFont);
-    salaireLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    formLayout->addWidget(salaireLabel);
+    QVBoxLayout* sCol = new QVBoxLayout();
+    addLabel("SALAIRE (DT)");
     salaryInput = new QLineEdit();
     salaryInput->setPlaceholderText("1200");
-    salaryInput->setFont(inputFont);
-    salaryInput->setFixedHeight(50);
     salaryInput->setStyleSheet(getInputStyle());
-    formLayout->addWidget(salaryInput);
+    salaryInput->setValidator(new QIntValidator(0, 100000, this));
+    sCol->addWidget(salaryInput);
     salaryErrorLabel = new QLabel("");
-    salaryErrorLabel->setStyleSheet("color: #E74C3C; font-size: 11px; font-weight: bold; margin-top: -5px;");
+    salaryErrorLabel->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    salaryErrorLabel->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
     salaryErrorLabel->hide();
-    formLayout->addWidget(salaryErrorLabel);
+    sCol->addWidget(salaryErrorLabel);
     connect(salaryInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateSalary);
+    posRow->addLayout(sCol);
+    formLayout->addLayout(posRow);
 
-    QLabel* dateLabel = new QLabel("Date de recrutement");
-    dateLabel->setFont(labelFont);
-    dateLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    formLayout->addWidget(dateLabel);
+    addLabel("DATE DE RECRUTEMENT");
     dateInput = new QDateEdit();
-    dateInput->setDate(QDate::currentDate());
     dateInput->setCalendarPopup(true);
-    dateInput->setFont(inputFont);
-    dateInput->setFixedHeight(50);
+    dateInput->setDate(QDate::currentDate());
     dateInput->setStyleSheet(getInputStyle());
-    dateInput->setDisplayFormat("dd/MM/yyyy");
     formLayout->addWidget(dateInput);
 
-    QLabel* statusLabel = new QLabel("Statut");
-    statusLabel->setFont(labelFont);
-    statusLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    formLayout->addWidget(statusLabel);
+    addLabel("STATUT DU COMPTE");
     statusCombo = new QComboBox();
     statusCombo->addItems({"Actif", "Congé", "Inactif"});
-    statusCombo->setFont(inputFont);
-    statusCombo->setFixedHeight(50);
     statusCombo->setStyleSheet(getInputStyle());
     formLayout->addWidget(statusCombo);
 
-    QLabel* rfidLabel = new QLabel("RFID UID");
-    rfidLabel->setFont(labelFont);
-    rfidLabel->setStyleSheet("color: #2C3E50; margin-bottom: 5px;");
-    formLayout->addWidget(rfidLabel);
+    addLabel("RFID UID");
     QHBoxLayout* rfidLayout = new QHBoxLayout();
     rfidInput = new QLineEdit();
-    rfidInput->setPlaceholderText("69:E4:F9:05");
-    rfidInput->setFont(inputFont);
-    rfidInput->setFixedHeight(50);
+    rfidInput->setPlaceholderText("XX:XX:XX:XX");
     rfidInput->setStyleSheet(getInputStyle());
     rfidLayout->addWidget(rfidInput, 1);
 
     scanBtn = new QPushButton("Scanner Carte");
-    scanBtn->setFixedSize(140, 50);
+    scanBtn->setFixedWidth(140);
+    scanBtn->setFixedHeight(48);
     scanBtn->setCursor(Qt::PointingHandCursor);
     scanBtn->setStyleSheet(R"(
-        QPushButton { 
-            background-color: #2ECC71; 
-            color: white; 
-            border-radius: 10px; 
-            font-weight: 600; 
-        }
-        QPushButton:hover { background-color: #27AE60; }
+        QPushButton { background: #2563EB; color: white; border-radius: 12px; font-weight: bold; }
+        QPushButton:hover { background: #1D4ED8; }
     )");
     connect(scanBtn, &QPushButton::clicked, this, &EmployeeDialog::onScanRfid);
     rfidLayout->addWidget(scanBtn);
     formLayout->addLayout(rfidLayout);
 
-    formLayout->addStretch();
+    scrollArea->setWidget(formContent);
+    mainLayout->addWidget(scrollArea, 1);
 
-    QHBoxLayout* buttonLayout = new QHBoxLayout();
-    buttonLayout->addStretch();
+    // Footer avec boutons stylés
+    QFrame* footer = new QFrame();
+    footer->setFixedHeight(90);
+    QHBoxLayout* btnLay = new QHBoxLayout(footer);
+    btnLay->setContentsMargins(45, 0, 45, 15);
+    btnLay->setSpacing(20);
+
     QPushButton* cancelBtn = new QPushButton("Annuler");
-    cancelBtn->setFixedSize(140, 50);
+    cancelBtn->setFixedHeight(50);
     cancelBtn->setCursor(Qt::PointingHandCursor);
+    cancelBtn->setFont(QFont("Segoe UI", 10, QFont::Medium));
     cancelBtn->setStyleSheet(R"(
-        QPushButton { background-color: #E8EEF5; color: #5A6C7D; border-radius: 10px; font-weight: 600; }
-        QPushButton:hover { background-color: #D8DEE5; }
+        QPushButton { background: #F3F4F6; color: #4B5563; border-radius: 15px; }
+        QPushButton:hover { background: #E5E7EB; }
     )");
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
-    buttonLayout->addWidget(cancelBtn);
+    btnLay->addWidget(cancelBtn, 1);
 
-    QPushButton* saveBtn = new QPushButton("Enregistrer");
-    saveBtn->setFixedSize(160, 50);
+    QPushButton* saveBtn = new QPushButton(isEdit ? "💾  Mettre à jour" : "➕  Enregistrer Employé");
+    saveBtn->setFixedHeight(50);
     saveBtn->setCursor(Qt::PointingHandCursor);
+    saveBtn->setFont(QFont("Segoe UI", 10, QFont::Bold));
     saveBtn->setStyleSheet(R"(
-        QPushButton { background-color: #5D9CEC; color: white; border-radius: 10px; font-weight: 700; }
-        QPushButton:hover { background-color: #4A89DC; }
+        QPushButton { 
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:1 #5D9CEC);
+            color: white; border: none; border-radius: 15px; padding: 0 20px;
+        }
+        QPushButton:hover { background: #1D4ED8; }
     )");
     connect(saveBtn, &QPushButton::clicked, this, &EmployeeDialog::onSaveClicked);
-    buttonLayout->addWidget(saveBtn);
-    formLayout->addLayout(buttonLayout);
+    btnLay->addWidget(saveBtn, 2);
 
-    scrollArea->setWidget(content);
-    mainLayout->addWidget(scrollArea);
+    mainLayout->addWidget(footer);
+
+    // Connections pour validation
+    connect(firstNameInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateFirstName);
+    connect(lastNameInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateLastName);
+    connect(cinInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateCin);
+    connect(phoneInput, &QLineEdit::textChanged, this, &EmployeeDialog::validatePhone);
+    connect(emailInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateEmail);
+    connect(salaryInput, &QLineEdit::textChanged, this, &EmployeeDialog::validateSalary);
+}
+
+void EmployeeDialog::updateFieldStyle(QWidget* field, bool isValid) {
+    field->setProperty("state", isValid ? "success" : "error");
+    field->style()->unpolish(field);
+    field->style()->polish(field);
 }
 
 QString EmployeeDialog::getInputStyle() const
 {
     return R"(
         QLineEdit, QComboBox, QDateEdit {
-            background-color: #F8F9FA; border: 2px solid #E1E8ED; border-radius: 10px;
-            padding: 12px 15px; color: #2C3E50; font-size: 12px;
+            background-color: #F9FAFB;
+            border: 2px solid #E5E7EB;
+            border-radius: 12px;
+            padding: 10px 15px;
+            color: #1F2937;
+            font-size: 11pt;
         }
-        QLineEdit:focus, QComboBox:focus, QDateEdit:focus { border: 2px solid #5D9CEC; background-color: white; }
-        QComboBox::drop-down, QDateEdit::drop-down { border: none; width: 30px; }
+        QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+            border: 2px solid #2563EB;
+            background-color: white;
+        }
+        *[state="error"] { border: 2px solid #EF4444; background-color: #FEF2F2; }
+        *[state="success"] { border: 2px solid #10B981; }
+        QComboBox::drop-down { border: none; width: 30px; }
+        QComboBox::down-arrow { image: none; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #6B7280; margin-right: 15px; }
     )";
 }
 
@@ -300,11 +366,9 @@ void EmployeeDialog::populateFields()
     emailInput->setText(employeeData->email);
     int posIndex = positionCombo->findText(employeeData->position);
     if (posIndex >= 0) positionCombo->setCurrentIndex(posIndex);
-    QString cleanSal = employeeData->salary;
-    cleanSal.remove(QRegularExpression("[^0-9]"));
-    salaryInput->setText(cleanSal);
-    QStringList dateParts = employeeData->date.split("/");
-    if (dateParts.size() == 3) dateInput->setDate(QDate(dateParts[2].toInt(), dateParts[1].toInt(), dateParts[0].toInt()));
+    salaryInput->setText(employeeData->salary.split(" ").first());
+    QDate dt = QDate::fromString(employeeData->date, "dd/MM/yyyy");
+    if (dt.isValid()) dateInput->setDate(dt);
     int index = statusCombo->findText(employeeData->status);
     if (index >= 0) statusCombo->setCurrentIndex(index);
     rfidInput->setText(employeeData->rfid_uid);
@@ -313,63 +377,64 @@ void EmployeeDialog::populateFields()
 Employee EmployeeDialog::getData() const
 {
     Employee employee;
-    employee.firstName = firstNameInput->text();
-    employee.lastName = lastNameInput->text();
-    employee.cin = cinInput->text();
-    employee.phone = phoneInput->text();
-    employee.email = emailInput->text();
+    if(isEdit && employeeData) employee.id = employeeData->id;
+    employee.firstName = firstNameInput->text().trimmed();
+    employee.lastName = lastNameInput->text().trimmed();
+    employee.cin = cinInput->text().trimmed();
+    employee.phone = phoneInput->text().trimmed();
+    employee.email = emailInput->text().trimmed();
     employee.position = positionCombo->currentText();
-    employee.salary = salaryInput->text();
+    employee.salary = salaryInput->text().trimmed();
     employee.date = dateInput->date().toString("dd/MM/yyyy");
     employee.status = statusCombo->currentText();
-    employee.rfid_uid = rfidInput->text();
+    employee.rfid_uid = rfidInput->text().trimmed();
     return employee;
 }
 
 void EmployeeDialog::validateFirstName(const QString &text)
 {
-    if (text.isEmpty()) { firstNameErrorLabel->setText("Le prénom est obligatoire"); firstNameErrorLabel->show(); }
-    else if (text.contains(QRegularExpression("[^a-zA-ZÀ-ÿ\\s\\-]"))) { firstNameErrorLabel->setText("utiliser que des lettres"); firstNameErrorLabel->show(); }
-    else firstNameErrorLabel->hide();
+    if (text.isEmpty()) { firstNameErrorLabel->setText("Le prénom est obligatoire"); firstNameErrorLabel->show(); updateFieldStyle(firstNameInput, false); }
+    else if (text.contains(QRegularExpression("[^a-zA-ZÀ-ÿ\\s\\-]"))) { firstNameErrorLabel->setText("utiliser que des lettres"); firstNameErrorLabel->show(); updateFieldStyle(firstNameInput, false); }
+    else { firstNameErrorLabel->hide(); updateFieldStyle(firstNameInput, true); }
 }
 
 void EmployeeDialog::validateLastName(const QString &text)
 {
-    if (text.isEmpty()) { lastNameErrorLabel->setText("Le nom est obligatoire"); lastNameErrorLabel->show(); }
-    else if (text.contains(QRegularExpression("[^a-zA-ZÀ-ÿ\\s\\-]"))) { lastNameErrorLabel->setText("utiliser que des lettres"); lastNameErrorLabel->show(); }
-    else lastNameErrorLabel->hide();
+    if (text.isEmpty()) { lastNameErrorLabel->setText("Le nom est obligatoire"); lastNameErrorLabel->show(); updateFieldStyle(lastNameInput, false); }
+    else if (text.contains(QRegularExpression("[^a-zA-ZÀ-ÿ\\s\\-]"))) { lastNameErrorLabel->setText("utiliser que des lettres"); lastNameErrorLabel->show(); updateFieldStyle(lastNameInput, false); }
+    else { lastNameErrorLabel->hide(); updateFieldStyle(lastNameInput, true); }
 }
 
 void EmployeeDialog::validateCin(const QString &text)
 {
-    if (text.isEmpty()) { cinErrorLabel->setText("Le CIN est obligatoire"); cinErrorLabel->show(); }
-    else if (text.contains(QRegularExpression("[^0-9]"))) { cinErrorLabel->setText("utiliser que des chiffres"); cinErrorLabel->show(); }
-    else if (text.length() != 8) { cinErrorLabel->setText(QString("Le CIN doit comporter 8 chiffres (%1/8)").arg(text.length())); cinErrorLabel->show(); }
-    else cinErrorLabel->hide();
+    if (text.isEmpty()) { cinErrorLabel->setText("Le CIN est obligatoire"); cinErrorLabel->show(); updateFieldStyle(cinInput, false); }
+    else if (text.contains(QRegularExpression("[^0-9]"))) { cinErrorLabel->setText("utiliser que des chiffres"); cinErrorLabel->show(); updateFieldStyle(cinInput, false); }
+    else if (text.length() != 8) { cinErrorLabel->setText(QString("Le CIN doit comporter 8 chiffres (%1/8)").arg(text.length())); cinErrorLabel->show(); updateFieldStyle(cinInput, false); }
+    else { cinErrorLabel->hide(); updateFieldStyle(cinInput, true); }
 }
 
 void EmployeeDialog::validateSalary(const QString &text)
 {
-    if (text.isEmpty()) { salaryErrorLabel->setText("Le salaire est obligatoire"); salaryErrorLabel->show(); }
-    else if (text.contains(QRegularExpression("[^0-9]"))) { salaryErrorLabel->setText("utiliser que des chiffres"); salaryErrorLabel->show(); }
-    else if (text.toInt() < 1000 || text.toInt() > 10000) { salaryErrorLabel->setText("le salaire doit être entre 1000 et 10000"); salaryErrorLabel->show(); }
-    else salaryErrorLabel->hide();
+    if (text.isEmpty()) { salaryErrorLabel->setText("Le salaire est obligatoire"); salaryErrorLabel->show(); updateFieldStyle(salaryInput, false); }
+    else if (text.contains(QRegularExpression("[^0-9]"))) { salaryErrorLabel->setText("utiliser que des chiffres"); salaryErrorLabel->show(); updateFieldStyle(salaryInput, false); }
+    else if (text.toInt() < 1000 || text.toInt() > 10000) { salaryErrorLabel->setText("le salaire doit être entre 1000 et 10000"); salaryErrorLabel->show(); updateFieldStyle(salaryInput, false); }
+    else { salaryErrorLabel->hide(); updateFieldStyle(salaryInput, true); }
 }
 
 void EmployeeDialog::validatePhone(const QString &text)
 {
-    if (text.isEmpty()) { phoneErrorLabel->setText("Le numéro de téléphone est obligatoire"); phoneErrorLabel->show(); }
-    else if (text.contains(QRegularExpression("[^0-9]"))) { phoneErrorLabel->setText("utiliser que des chiffres"); phoneErrorLabel->show(); }
-    else if (text.length() != 8) { phoneErrorLabel->setText(QString("Le numéro doit comporter 8 chiffres (%1/8)").arg(text.length())); phoneErrorLabel->show(); }
-    else phoneErrorLabel->hide();
+    if (text.isEmpty()) { phoneErrorLabel->setText("Le numéro est obligatoire"); phoneErrorLabel->show(); updateFieldStyle(phoneInput, false); }
+    else if (text.contains(QRegularExpression("[^0-9]"))) { phoneErrorLabel->setText("utiliser que des chiffres"); phoneErrorLabel->show(); updateFieldStyle(phoneInput, false); }
+    else if (text.length() != 8) { phoneErrorLabel->setText(QString("Le numéro doit comporter 8 chiffres (%1/8)").arg(text.length())); phoneErrorLabel->show(); updateFieldStyle(phoneInput, false); }
+    else { phoneErrorLabel->hide(); updateFieldStyle(phoneInput, true); }
 }
 
 void EmployeeDialog::validateEmail(const QString &text)
 {
     QRegularExpression emailRegex("^[A-Za-z0-9._%+-]+@gmail\\.com$");
-    if (text.isEmpty()) { emailErrorLabel->setText("L'email est obligatoire"); emailErrorLabel->show(); }
-    else if (!emailRegex.match(text).hasMatch()) { emailErrorLabel->setText("L'email doit être sous forme nom@gmail.com"); emailErrorLabel->show(); }
-    else emailErrorLabel->hide();
+    if (text.isEmpty()) { emailErrorLabel->setText("L'email est obligatoire"); emailErrorLabel->show(); updateFieldStyle(emailInput, false); }
+    else if (!emailRegex.match(text).hasMatch()) { emailErrorLabel->setText("Format: nom@gmail.com"); emailErrorLabel->show(); updateFieldStyle(emailInput, false); }
+    else { emailErrorLabel->hide(); updateFieldStyle(emailInput, true); }
 }
 
 void EmployeeDialog::onSaveClicked()
@@ -391,60 +456,28 @@ void EmployeeDialog::onSaveClicked()
     checkQuery.bindValue(":cin", currentCin);
     if (isEdit && employeeData) checkQuery.bindValue(":id", employeeData->id.toInt());
 
-    bool exists = false;
-    if (checkQuery.exec() && checkQuery.next()) { if (checkQuery.value(0).toInt() > 0) exists = true; }
-    else {
-        QSqlQuery checkQuery2;
-        QString sql2 = "SELECT COUNT(*) FROM EMPLOYEE WHERE CIN = :cin";
-        if (isEdit && employeeData) sql2 += " AND ID_EMPLOYE != :id";
-        checkQuery2.prepare(sql2);
-        checkQuery2.bindValue(":cin", currentCin);
-        if (isEdit && employeeData) checkQuery2.bindValue(":id", employeeData->id.toInt());
-        if (checkQuery2.exec() && checkQuery2.next()) { if (checkQuery2.value(0).toInt() > 0) exists = true; }
-    }
-
-    if (exists) {
-        QMessageBox::critical(this, "Erreur", "Le CIN existe déjà.");
-        return;
+    if (checkQuery.exec() && checkQuery.next()) { 
+        if (checkQuery.value(0).toInt() > 0) {
+            QMessageBox::critical(this, "Erreur", "Le CIN existe déjà.");
+            return;
+        }
     }
     accept();
 }
 
 void EmployeeDialog::onScanRfid()
 {
-    scanBtn->setText("Approchez la carte...");
-    scanBtn->setStyleSheet("background-color: #F1C40F; color: white; border-radius: 10px; font-weight: 600;");
-    
-    // Find MainWindow reliably
+    scanBtn->setText("⏳ Approchez...");
     MainWindow* mainWin = nullptr;
-    for (QWidget* widget : QApplication::topLevelWidgets()) {
-        mainWin = qobject_cast<MainWindow*>(widget);
-        if (mainWin) break;
-    }
-
-    if (mainWin) {
-        connect(mainWin, &MainWindow::rfidScanned, this, &EmployeeDialog::updateRfidField, Qt::UniqueConnection);
-    } else {
-        QMessageBox::warning(this, "Arduino", "Impossible de se connecter au lecteur RFID (MainWindow introuvable).");
-    }
+    for (QWidget* widget : QApplication::topLevelWidgets()) { if ((mainWin = qobject_cast<MainWindow*>(widget))) break; }
+    if (mainWin) connect(mainWin, &MainWindow::rfidScanned, this, &EmployeeDialog::updateRfidField, Qt::UniqueConnection);
 }
 
 void EmployeeDialog::updateRfidField(const QString& uid)
 {
     rfidInput->setText(uid);
     scanBtn->setText("Scanner Carte");
-    scanBtn->setStyleSheet("background-color: #2ECC71; color: white; border-radius: 10px; font-weight: 600;");
-    
-    // Disconnect after first scan
     MainWindow* mainWin = nullptr;
-    for (QWidget* widget : QApplication::topLevelWidgets()) {
-        mainWin = qobject_cast<MainWindow*>(widget);
-        if (mainWin) break;
-    }
-    
-    if (mainWin) {
-        disconnect(mainWin, &MainWindow::rfidScanned, this, &EmployeeDialog::updateRfidField);
-    }
-    
-    QMessageBox::information(this, "RFID", "Carte détectée : " + uid);
+    for (QWidget* widget : QApplication::topLevelWidgets()) { if ((mainWin = qobject_cast<MainWindow*>(widget))) break; }
+    if (mainWin) disconnect(mainWin, &MainWindow::rfidScanned, this, &EmployeeDialog::updateRfidField);
 }

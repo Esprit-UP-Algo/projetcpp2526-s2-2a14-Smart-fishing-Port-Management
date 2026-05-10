@@ -34,6 +34,7 @@ private:
     void setupUi();
     void populateFields();
     bool validateInputs();
+    void updateFieldStyle(QWidget* field, bool isValid);
     QString getInputStyle() const;
 
     QLineEdit* refEdit;
