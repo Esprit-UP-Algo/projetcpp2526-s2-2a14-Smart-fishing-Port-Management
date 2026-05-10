@@ -36,8 +36,9 @@
 class MoveFilter : public QObject {
     QDialog* d; bool m=false; QPoint o;
 public:
-    MoveFilter(QDialog* dlg) : d(dlg), QObject(dlg) {}
+    MoveFilter(QDialog* dlg) : QObject(dlg), d(dlg) {}
     bool eventFilter(QObject* obj, QEvent* e) override {
+        Q_UNUSED(obj);
         if (e->type()==QEvent::MouseButtonPress) {
             auto* me = static_cast<QMouseEvent*>(e);
             if (me->button()==Qt::LeftButton) { m=true; o=me->globalPosition().toPoint()-d->frameGeometry().topLeft(); return true; }
@@ -218,12 +219,12 @@ QFrame* FrigoWindow::createSidebar()
     containerLayout->setAlignment(Qt::AlignCenter);
 
     QLabel* logoLabel = new QLabel();
-    QPixmap logoPix("C:/images/logo.png");
+    QPixmap logoPix(":/images/images/logo.png");
 
     if (!logoPix.isNull()) {
         logoLabel->setPixmap(logoPix.scaled(100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         logoLabel->setAlignment(Qt::AlignCenter);
-        qDebug() << "Logo chargé depuis: C:/images/logo.png";
+        qDebug() << "Logo chargé depuis: :/images/images/logo.png";
     } else {
         logoLabel->setText("🧊");
         logoLabel->setStyleSheet(R"(
@@ -233,7 +234,7 @@ QFrame* FrigoWindow::createSidebar()
             }
         )");
         logoLabel->setAlignment(Qt::AlignCenter);
-        qDebug() << "Attention: Logo non trouvé à C:/images/logo.png - utilisation emoji";
+        qDebug() << "Attention: Logo non trouvé à :/images/images/logo.png - utilisation emoji";
     }
 
     logoLabel->setStyleSheet("background: transparent;");

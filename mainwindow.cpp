@@ -137,37 +137,32 @@ QFrame* MainWindow::createSidebar()
 
     // Logo section
     QFrame* logoFrame = new QFrame();
-    logoFrame->setFixedHeight(160);
+    logoFrame->setFixedHeight(180); // Increased from 160
     logoFrame->setStyleSheet("background: transparent;");
     QVBoxLayout* logoLayout = new QVBoxLayout(logoFrame);
     logoLayout->setAlignment(Qt::AlignCenter);
-    logoLayout->setContentsMargins(20, 15, 20, 15);
+    logoLayout->setContentsMargins(0, 20, 20, 20); // Removed left margin to allow more left shift
 
     QFrame* logoContainer = new QFrame();
-    logoContainer->setFixedSize(220, 100);
-    logoContainer->setStyleSheet(R"(
-        QFrame {
-            background-color: transparent;
-            border-radius: 0px;
-        }
-    )");
+    logoContainer->setFixedSize(320, 180); // Increased from 240, 120
+    logoContainer->setStyleSheet("background: transparent;");
 
-    QVBoxLayout* containerLayout = new QVBoxLayout(logoContainer);
-    containerLayout->setContentsMargins(5, 5, 5, 5);
-    containerLayout->setAlignment(Qt::AlignCenter);
-
-    QLabel* logoLabel = new QLabel();
+    QLabel* logoLabel = new QLabel(logoContainer);
+    logoLabel->setObjectName("sidebarLogoLabel");
+    // Start small and invisible for the "thin air" effect
+    logoLabel->setGeometry(80, 65, 150, 50); 
+    
     QPixmap logoPix(":/images/images/logo.png");
 
     if (!logoPix.isNull()) {
-        logoLabel->setPixmap(logoPix.scaled(200, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        logoLabel->setPixmap(logoPix.scaled(320, 160, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         logoLabel->setAlignment(Qt::AlignCenter);
         qDebug() << "Logo chargé depuis: :/images/images/logo.png";
     } else {
         logoLabel->setText("🚢");
         logoLabel->setStyleSheet(R"(
             QLabel {
-                font-size: 50px;
+                font-size: 60px;
                 color: #2C3E50;
             }
         )");
@@ -176,9 +171,44 @@ QFrame* MainWindow::createSidebar()
     }
 
     logoLabel->setStyleSheet("background: transparent;");
-    containerLayout->addWidget(logoLabel);
     logoLayout->addWidget(logoContainer);
     layout->addWidget(logoFrame);
+
+    // "Appears from Thin Air" Animation Sequence
+    QTimer::singleShot(500, [logoLabel]() {
+        // 1. Fade In
+        QGraphicsOpacityEffect* opacity = new QGraphicsOpacityEffect(logoLabel);
+        logoLabel->setGraphicsEffect(opacity);
+        QPropertyAnimation* fadeAnim = new QPropertyAnimation(opacity, "opacity");
+        fadeAnim->setDuration(1500);
+        fadeAnim->setStartValue(0.0);
+        fadeAnim->setEndValue(1.0);
+        fadeAnim->setEasingCurve(QEasingCurve::InQuad);
+
+        // 2. Scale & Wave (Grow from center)
+        QPropertyAnimation* scaleAnim = new QPropertyAnimation(logoLabel, "geometry");
+        QRect endRect = QRect(-20, 15, 300, 150); // Shifted even more to the left
+        scaleAnim->setDuration(1800);
+        scaleAnim->setStartValue(QRect(130, 90, 0, 0)); // Adjusted start center for x=-20
+        scaleAnim->setEndValue(endRect);
+        scaleAnim->setEasingCurve(QEasingCurve::OutElastic);
+
+        fadeAnim->start(QPropertyAnimation::DeleteWhenStopped);
+        scaleAnim->start(QPropertyAnimation::DeleteWhenStopped);
+
+        // 3. Start persistent floating AFTER entrance
+        QObject::connect(scaleAnim, &QPropertyAnimation::finished, [logoLabel, endRect]() {
+            QPropertyAnimation* floatAnim = new QPropertyAnimation(logoLabel, "pos");
+            QPoint startPos = endRect.topLeft();
+            floatAnim->setDuration(3500);
+            floatAnim->setStartValue(startPos);
+            floatAnim->setKeyValueAt(0.5, startPos + QPoint(0, -10));
+            floatAnim->setEndValue(startPos);
+            floatAnim->setEasingCurve(QEasingCurve::InOutSine);
+            floatAnim->setLoopCount(-1);
+            floatAnim->start(QPropertyAnimation::DeleteWhenStopped);
+        });
+    });
 
     // Navigation
     QFrame* navFrame = new QFrame();
@@ -368,6 +398,7 @@ void MainWindow::setActiveButton(QPushButton* activeBtn)
 
 void MainWindow::switchPage(int index)
 {
+
     QWidget* currentWidget = stackedWidget->currentWidget();
     QGraphicsOpacityEffect* effect = new QGraphicsOpacityEffect(currentWidget);
     currentWidget->setGraphicsEffect(effect);

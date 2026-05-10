@@ -48,11 +48,11 @@ bool Bateau::ajouter() {
     query.bindValue(":id", idBateau.toInt());
     query.bindValue(":nom", nomBateau);
     query.bindValue(":imm", immatriculation);
-    query.bindValue(":cap", capacite.isEmpty() ? QVariant(QVariant::Double) : capacite.toDouble());
-    query.bindValue(":lon", longueur.isEmpty() ? QVariant(QVariant::Double) : longueur.toDouble());
-    query.bindValue(":age", ageBateau.isEmpty() ? QVariant(QVariant::Int) : ageBateau.toInt());
+    query.bindValue(":cap", capacite.isEmpty() ? QVariant(QMetaType(QMetaType::Double)) : capacite.toDouble());
+    query.bindValue(":lon", longueur.isEmpty() ? QVariant(QMetaType(QMetaType::Double)) : longueur.toDouble());
+    query.bindValue(":age", ageBateau.isEmpty() ? QVariant(QMetaType(QMetaType::Int)) : ageBateau.toInt());
     query.bindValue(":date", dateMaintenance);
-    query.bindValue(":idE", idEmploye.isEmpty() ? QVariant(QVariant::Int) : idEmploye.toInt());
+    query.bindValue(":idE", idEmploye.isEmpty() ? QVariant(QMetaType(QMetaType::Int)) : idEmploye.toInt());
     if (!idQuai.isEmpty()) {
         query.bindValue(":idQ", idQuai.toInt());
     }
@@ -217,11 +217,11 @@ bool Bateau::modifier(QString id) {
     
     query.bindValue(":nom", nomBateau);
     query.bindValue(":imm", immatriculation);
-    query.bindValue(":cap", capacite.isEmpty() ? QVariant(QVariant::Double) : capacite.toDouble());
-    query.bindValue(":lon", longueur.isEmpty() ? QVariant(QVariant::Double) : longueur.toDouble());
-    query.bindValue(":age", ageBateau.isEmpty() ? QVariant(QVariant::Int) : ageBateau.toInt());
+    query.bindValue(":cap", capacite.isEmpty() ? QVariant(QMetaType(QMetaType::Double)) : capacite.toDouble());
+    query.bindValue(":lon", longueur.isEmpty() ? QVariant(QMetaType(QMetaType::Double)) : longueur.toDouble());
+    query.bindValue(":age", ageBateau.isEmpty() ? QVariant(QMetaType(QMetaType::Int)) : ageBateau.toInt());
     query.bindValue(":date", dateMaintenance);
-    query.bindValue(":idE", idEmploye.isEmpty() ? QVariant(QVariant::Int) : idEmploye.toInt());
+    query.bindValue(":idE", idEmploye.isEmpty() ? QVariant(QMetaType(QMetaType::Int)) : idEmploye.toInt());
     if (!idQuai.isEmpty()) {
         query.bindValue(":idQ", idQuai.toInt());
     }
@@ -261,9 +261,11 @@ QSqlQueryModel* Bateau::trier(QString critere, QString ordre) {
                                   "FROM BATEAUX b "
                                   "LEFT JOIN EMPLOYEES e ON b.ID_EMPLOYE = e.ID_EMPLOYE "
                                   "LEFT JOIN QUAIS q ON b.IDQUAI = q.IDQUAI "
-                                  "ORDER BY %1 %2")
-        .arg(realCritere, ordre);
-    model->setQuery(queryString);
+                                  "ORDER BY %1 %2").arg(realCritere, ordre);
+    QSqlQuery query;
+    query.prepare(queryString);
+    query.exec();
+    model->setQuery(std::move(query));
     return model;
 }
 

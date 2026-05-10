@@ -156,6 +156,16 @@ bool Livraison::idExists(int id) {
     return false;
 }
 
+bool Livraison::refExists(QString ref) {
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM LIVRAISONS WHERE REFERENCE = :ref");
+    query.bindValue(":ref", ref);
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+    return false;
+}
+
 QString Livraison::getETA() const {
     QSqlQuery query;
     query.prepare("SELECT DATE_DEPART, DUREE_ESTIMEE FROM LIVRAISONS WHERE IDLIVRAISON = :id");

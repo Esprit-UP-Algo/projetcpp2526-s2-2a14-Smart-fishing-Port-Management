@@ -7,6 +7,9 @@
 #include <QComboBox>
 #include <QDateEdit>
 #include <QLabel>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QTimer>
 #include "livraison.h"
 
 class AddLivraisonDialog : public QDialog
@@ -24,6 +27,9 @@ private slots:
     void onReferenceChanged();
     void onAdresseChanged();
     void onPrixChanged();
+    void validateAddressRealTime();
+    void onAddressValidationFinished(QNetworkReply* reply);
+    void updateVehiculeList();
 
 private:
     void setupUi();
@@ -37,7 +43,7 @@ private:
     QComboBox* livreurCombo;
     QTextEdit* adresseEdit;
     QDateEdit* dateEdit;
-    QLineEdit* vehiculeEdit;
+    QComboBox* vehiculeEdit;
     QComboBox* transportEdit;
     QLineEdit* prixEdit;
 
@@ -48,6 +54,10 @@ private:
 
     Livraison* livraisonData;
     bool isEdit;
+
+    QNetworkAccessManager* networkManager;
+    QTimer* validationTimer;
+    QNetworkReply* currentReply = nullptr;
 };
 
 #endif // ADDLIVRAISONDIALOG_H

@@ -22,6 +22,9 @@
 #include <QMouseEvent>
 #include <QtSql/QSqlQuery>
 #include <QtSql/QSqlError>
+#include <QUrlQuery>
+#include <QJsonArray>
+#include <QJsonObject>
 
 // ==================== HELPERS POUR DIALOGUE STYLÉ ====================
 class DialogMoveFilter : public QObject {
@@ -74,6 +77,13 @@ AddLivraisonDialog::AddLivraisonDialog(QWidget *parent, Livraison* livraisonData
 {
     setupUi();
     populateLivreurCombo();
+    
+    networkManager = new QNetworkAccessManager(this);
+    validationTimer = new QTimer(this);
+    validationTimer->setSingleShot(true);
+    validationTimer->setInterval(1000); // Wait 1s after typing to validate
+    connect(validationTimer, &QTimer::timeout, this, &AddLivraisonDialog::validateAddressRealTime);
+
     if (isEdit) {
         populateFields();
     }
@@ -157,7 +167,7 @@ void AddLivraisonDialog::setupUi()
     QWidget* formContent = new QWidget();
     formContent->setStyleSheet("background: transparent;");
     QVBoxLayout* formLayout = new QVBoxLayout(formContent);
-    formLayout->setSpacing(18);
+    formLayout->setSpacing(25); // Increased spacing to prevent squishing
     formLayout->setContentsMargins(45, 30, 45, 30);
 
     auto addLabel = [&](const QString& text) {
@@ -212,20 +222,27 @@ void AddLivraisonDialog::setupUi()
     formLayout->addWidget(dateEdit);
 
     addLabel("VÉHICULE ASSIGNÉ");
-    vehiculeEdit = new QLineEdit();
-    vehiculeEdit->setPlaceholderText("Ex: Van-01 ou Camion-A");
+    vehiculeEdit = new QComboBox();
+    vehiculeEdit->addItems({"Renault Master (Gros)", "Peugeot Partner (Moyen)", "Mercedes Sprinter (Grand)", "Iveco Daily (Moyen)", "Ford Transit (Grand)", "Bateau de Charge"});
+    vehiculeEdit->setEditable(true); // Allow custom names if needed
     vehiculeEdit->setStyleSheet(getInputStyle());
     formLayout->addWidget(vehiculeEdit);
 
-    connect(vehiculeEdit, &QLineEdit::textChanged, this, [=](const QString&){
-        updateFieldStyle(vehiculeEdit, !vehiculeEdit->text().trimmed().isEmpty());
-    });
+    errorVehicule = new QLabel("⚠ Le véhicule est requis");
+    errorVehicule->setFont(QFont("Segoe UI", 8, QFont::Bold));
+    errorVehicule->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
+    errorVehicule->hide();
+    formLayout->addWidget(errorVehicule);
 
     addLabel("TRANSPORT");
     transportEdit = new QComboBox();
     transportEdit->addItems({"Camion non frigorifique", "Camion frigorifique", "Motocyclette / Scooter", "Véhicule utilitaire léger", "Bateau"});
     transportEdit->setStyleSheet(getInputStyle());
     formLayout->addWidget(transportEdit);
+    connect(transportEdit, &QComboBox::currentIndexChanged, this, &AddLivraisonDialog::updateVehiculeList);
+    
+    // Initialize vehicle list
+    updateVehiculeList();
 
     addLabel("PRIX (DT / $ / €)");
     prixEdit = new QLineEdit();
@@ -235,7 +252,7 @@ void AddLivraisonDialog::setupUi()
 
     errorPrix = new QLabel("⚠ Doit finir par DT, $ ou €");
     errorPrix->setFont(QFont("Segoe UI", 8, QFont::Bold));
-    errorPrix->setStyleSheet("color: #EF4444; margin-top: -10px; margin-bottom: 5px;");
+    errorPrix->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;"); // Fixed negative margin
     errorPrix->hide();
     formLayout->addWidget(errorPrix);
     
@@ -291,7 +308,7 @@ void AddLivraisonDialog::populateFields()
     int lIdx = livreurCombo->findData(livraisonData->getIdEmploye());
     if (lIdx >= 0) livreurCombo->setCurrentIndex(lIdx);
     
-    vehiculeEdit->setText(livraisonData->getVehicule());
+    vehiculeEdit->setCurrentText(livraisonData->getVehicule());
     transportEdit->setCurrentText(livraisonData->getTransport());
     prixEdit->setText(livraisonData->getPrix());
 }
@@ -307,18 +324,92 @@ void AddLivraisonDialog::populateLivreurCombo() {
 
 void AddLivraisonDialog::onReferenceChanged() {
     QString ref = referenceEdit->text().trimmed();
-    QRegularExpression refRegex("^LIV-\\d{4}-\\d+$");
-    bool valid = refRegex.match(ref).hasMatch();
-    updateFieldStyle(referenceEdit, valid);
-    if (!valid) { errorReference->setText("⚠ Format LIV-YYYY-ID requis"); errorReference->show(); }
-    else errorReference->hide();
+    QRegularExpression refRegex("^LIV-\\d+$");
+    bool formatValid = refRegex.match(ref).hasMatch();
+    
+    if (!formatValid) {
+        updateFieldStyle(referenceEdit, false);
+        errorReference->setText("⚠ Format LIV-123 requis");
+        errorReference->show();
+    } else {
+        // Check uniqueness if format is OK
+        if (Livraison::refExists(ref)) {
+            updateFieldStyle(referenceEdit, false);
+            errorReference->setText("⚠ Cette référence existe déjà");
+            errorReference->show();
+        } else {
+            updateFieldStyle(referenceEdit, true);
+            errorReference->hide();
+        }
+    }
 }
 
 void AddLivraisonDialog::onAdresseChanged() {
-    bool valid = !adresseEdit->toPlainText().trimmed().isEmpty();
+    QString addr = adresseEdit->toPlainText().trimmed();
+    bool empty = addr.isEmpty();
+    
+    if (empty) {
+        updateFieldStyle(adresseEdit, false);
+        errorAdresse->setText("⚠ L'adresse est obligatoire");
+        errorAdresse->show();
+        validationTimer->stop();
+    } else {
+        errorAdresse->setText("🔍 Vérification de l'adresse...");
+        errorAdresse->setStyleSheet("color: #2563EB; margin-top: 2px; margin-bottom: 5px;");
+        errorAdresse->show();
+        validationTimer->start(); // Debounce API call
+    }
+}
+
+void AddLivraisonDialog::validateAddressRealTime() {
+    QString addr = adresseEdit->toPlainText().trimmed();
+    if (addr.isEmpty()) return;
+
+    if (currentReply) {
+        currentReply->abort();
+        currentReply->deleteLater();
+    }
+
+    QUrl url("https://nominatim.openstreetmap.org/search");
+    QUrlQuery query;
+    query.addQueryItem("q", addr);
+    query.addQueryItem("format", "json");
+    query.addQueryItem("limit", "1");
+    url.setQuery(query);
+
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::UserAgentHeader, "PortFlow/1.0");
+    
+    currentReply = networkManager->get(request);
+    connect(currentReply, &QNetworkReply::finished, this, [this]() {
+        onAddressValidationFinished(currentReply);
+    });
+}
+
+void AddLivraisonDialog::onAddressValidationFinished(QNetworkReply* reply) {
+    if (reply != currentReply) return; // Ignore old replies
+    
+    bool valid = false;
+    if (reply->error() == QNetworkReply::NoError) {
+        QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        QJsonArray results = doc.array();
+        if (!results.isEmpty()) {
+            valid = true;
+        }
+    }
+
     updateFieldStyle(adresseEdit, valid);
-    if (!valid) { errorAdresse->setText("⚠ L'adresse est obligatoire"); errorAdresse->show(); }
-    else errorAdresse->hide();
+    if (valid) {
+        errorAdresse->setText("✅ Adresse valide");
+        errorAdresse->setStyleSheet("color: #10B981; margin-top: 2px; margin-bottom: 5px;");
+    } else {
+        errorAdresse->setText("❌ Lieu introuvable");
+        errorAdresse->setStyleSheet("color: #EF4444; margin-top: 2px; margin-bottom: 5px;");
+    }
+    errorAdresse->show();
+    
+    currentReply = nullptr;
+    reply->deleteLater();
 }
 
 void AddLivraisonDialog::onPrixChanged() {
@@ -339,8 +430,8 @@ bool AddLivraisonDialog::validateInputs() {
     bool ok = true;
 
     QString ref = referenceEdit->text().trimmed();
-    QRegularExpression refRegex("^LIV-\\d{4}-\\d+$");
-    if (!refRegex.match(ref).hasMatch()) { 
+    QRegularExpression refRegex("^LIV-\\d+$");
+    if (!refRegex.match(ref).hasMatch() || Livraison::refExists(ref)) { 
         updateFieldStyle(referenceEdit, false); 
         errorReference->show();
         ok = false; 
@@ -355,9 +446,12 @@ bool AddLivraisonDialog::validateInputs() {
         errorAdresse->hide();
     }
     
-    if (vehiculeEdit->text().trimmed().isEmpty()) { 
+    if (vehiculeEdit->currentText().trimmed().isEmpty()) { 
         updateFieldStyle(vehiculeEdit, false); 
+        errorVehicule->show();
         ok = false; 
+    } else {
+        errorVehicule->hide();
     }
 
     QString p = prixEdit->text().trimmed();
@@ -381,7 +475,7 @@ Livraison AddLivraisonDialog::getData() const {
     Livraison data;
     data.setDate(dateEdit->date().toString("dd/MM/yyyy"));
     data.setAdresse(adresseEdit->toPlainText());
-    data.setVehicule(vehiculeEdit->text().trimmed());
+    data.setVehicule(vehiculeEdit->currentText().trimmed());
     data.setTransport(transportEdit->currentText());
     data.setReference(referenceEdit->text().trimmed());
     data.setIdEmploye(livreurCombo->currentData().toString());
@@ -415,5 +509,41 @@ QString AddLivraisonDialog::getInputStyle() const {
         *[state="success"] { border: 2px solid #10B981; }
         QComboBox::drop-down { border: none; width: 30px; }
         QComboBox::down-arrow { image: none; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #6B7280; margin-right: 15px; }
+        
+        /* Dropdown Styling */
+        QComboBox QAbstractItemView {
+            background-color: white;
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
+            selection-background-color: #EBF5FF;
+            selection-color: #2563EB;
+            outline: none;
+            padding: 4px;
+        }
+        QComboBox QAbstractItemView::item {
+            min-height: 35px;
+            padding-left: 10px;
+            color: #374151;
+            border-radius: 4px;
+        }
+        QComboBox QAbstractItemView::item:hover {
+            background-color: #F3F4F6;
+            color: #1F2937;
+        }
     )";
+}
+
+void AddLivraisonDialog::updateVehiculeList() {
+    QString transport = transportEdit->currentText();
+    vehiculeEdit->clear();
+    
+    if (transport == "Bateau") {
+        vehiculeEdit->addItems({"Cargo Mahdia-01", "Chalutier Express", "Navire Logistique A", "Bateau de Charge"});
+    } else if (transport == "Motocyclette / Scooter") {
+        vehiculeEdit->addItems({"Scooter-01 (Rapide)", "Vespa Deliver", "Moto-Cargo 500"});
+    } else if (transport.contains("Camion")) {
+        vehiculeEdit->addItems({"Renault Master (Gros)", "Mercedes Sprinter (Grand)", "Iveco Daily", "Camion Isuzu", "Volvo FH16"});
+    } else {
+        vehiculeEdit->addItems({"Van Standard", "Véhicule Léger 01", "Caddy Cargo"});
+    }
 }

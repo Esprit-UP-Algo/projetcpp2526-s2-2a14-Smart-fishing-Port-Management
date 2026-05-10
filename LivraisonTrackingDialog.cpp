@@ -37,7 +37,7 @@ void MapWidget::paintEvent(QPaintEvent*) {
 }
 
 LivraisonTrackingDialog::LivraisonTrackingDialog(const QString& id, const QString& address, QWidget *parent)
-    : QDialog(parent), m_id(id), m_address(address), m_currentPointIndex(0), m_zoomLevel(0), m_simElapsed(0)
+    : QDialog(parent), m_zoomLevel(0), m_id(id), m_address(address), m_currentPointIndex(0), m_simElapsed(0)
 {
     setupUi();
     m_networkManager = new QNetworkAccessManager(this);
@@ -246,8 +246,10 @@ void LivraisonTrackingDialog::onRouteFinished(QNetworkReply* reply)
                 QJsonArray p = coords[i].toArray();
                 double lon = p[0].toDouble(); double lat = p[1].toDouble();
                 m_routePoints.append({lon, lat});
-                if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
-                if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+                if (lon < minLon) { minLon = lon; }
+                if (lon > maxLon) { maxLon = lon; }
+                if (lat < minLat) { minLat = lat; }
+                if (lat > maxLat) { maxLat = lat; }
             }
             downloadMap();
         }

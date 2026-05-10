@@ -394,7 +394,7 @@ bool AddFrigoDialog::validateInputs()
     }
 
     // Validation Température
-    double tVal = tempEdit->text().replace(",", ".").toDouble(&ok);
+    tempEdit->text().replace(",", ".").toDouble(&ok);
     if (tempEdit->text().isEmpty()) {
         tempError->setText("⚠️ Température obligatoire.");
         tempError->show();

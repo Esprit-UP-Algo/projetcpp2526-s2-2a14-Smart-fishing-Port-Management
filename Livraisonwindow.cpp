@@ -24,8 +24,8 @@
 class MoveFilter : public QObject {
     QDialog* d; bool m=false; QPoint o;
 public:
-    MoveFilter(QDialog* dlg) : d(dlg), QObject(dlg) {}
-    bool eventFilter(QObject* obj, QEvent* e) override {
+    MoveFilter(QDialog* dlg) : QObject(dlg), d(dlg) {}
+    bool eventFilter(QObject* /*obj*/, QEvent* e) override {
         if (e->type()==QEvent::MouseButtonPress) {
             auto* me = static_cast<QMouseEvent*>(e);
             if (me->button()==Qt::LeftButton) { m=true; o=me->globalPosition().toPoint()-d->frameGeometry().topLeft(); return true; }
@@ -149,7 +149,6 @@ void LiveProgressIndicator::paintEvent(QPaintEvent*) {
     painter.setRenderHint(QPainter::Antialiasing);
 
     int size = 24;
-    int margin = 4;
     QRectF rect(width()/2.0 - size/2.0, height()/2.0 - size/2.0, size, size);
 
     // Dynamic color logic
@@ -567,7 +566,7 @@ void LivraisonWindow::setupTable()
     table->setColumnWidth(5, 100);   // Prix
     table->setColumnWidth(6, 100);   // ETA
     table->setColumnWidth(7, 100);   // Avancement
-    table->setColumnWidth(8, 160);   // Actions
+    table->setColumnWidth(8, 200);   // Actions (Increased from 160)
 
     table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
 }
@@ -596,8 +595,10 @@ void LivraisonWindow::populateTable(const QString& filterText, const QString& so
         QString adresse = model->record(i).value("ADRESSE").toString();
         QString chauffeur = model->record(i).value("ID_EMPLOYE").toString();
         QString statut = model->record(i).value("STATUT").toString();
-        QString prix = model->record(i).value("PRIX").toString();
-        if (!prix.endsWith(" DT")) prix += " DT";
+        
+        // Format price to avoid scientific notation/weird displays
+        double prixVal = model->record(i).value("PRIX").toDouble();
+        QString prix = QString::number(prixVal, 'f', 2) + " DT";
 
         table->setItem(row, 0, new QTableWidgetItem(reference));
         table->setItem(row, 1, new QTableWidgetItem(date));
@@ -673,8 +674,8 @@ QWidget* LivraisonWindow::createActionButtons(int row)
 {
     QWidget* widget = new QWidget();
     QHBoxLayout* layout = new QHBoxLayout(widget);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(10);
+    layout->setContentsMargins(10, 0, 10, 0); // Added margins
+    layout->setSpacing(12); // Increased spacing
     layout->setAlignment(Qt::AlignCenter);
 
     QPushButton* editBtn = new QPushButton("✏️");
@@ -854,39 +855,73 @@ void LivraisonWindow::onExportPDF(int row)
 
     QPdfWriter writer(fileName);
     writer.setPageSize(QPageSize(QPageSize::A4));
-    writer.setPageMargins(QMarginsF(30, 30, 30, 30));
+    writer.setPageMargins(QMarginsF(15, 15, 15, 15)); // Smaller margins for better fit
 
     QPainter painter(&writer);
+    painter.setRenderHint(QPainter::Antialiasing);
+    
+    int w = writer.width();
+    int h = writer.height();
+
+    // Header - Professional Blue Theme
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor("#1E3A8A")); // Deep Blue
+    painter.drawRect(0, 0, w, h * 0.12);
+    
+    painter.setPen(Qt::white);
+    painter.setFont(QFont("Segoe UI", 14, QFont::Bold));
+    painter.drawText(QRect(0, h * 0.01, w, h * 0.03), Qt::AlignCenter, "PORTFLOW MANAGEMENT SYSTEM");
+
+    painter.setFont(QFont("Segoe UI", 26, QFont::Bold));
+    painter.drawText(QRect(0, h * 0.04, w, h * 0.06), Qt::AlignCenter, "REÇU DE LIVRAISON OFFICIEL");
+    
+    painter.setFont(QFont("Segoe UI", 11));
+    painter.drawText(QRect(0, h * 0.09, w, h * 0.03), Qt::AlignCenter, "Logistique & Distribution Portuaire de Mahdia");
+
+    // Content area
+    int y = h * 0.16;
+    auto drawField = [&](const QString& label, const QString& value, bool highlight = false) {
+        painter.setPen(QColor("#1E40AF")); // Medium Blue for labels
+        painter.setFont(QFont("Segoe UI", 11, QFont::Bold));
+        painter.drawText(QRect(0, y, w, h * 0.03), Qt::AlignCenter, label);
+        
+        y += h * 0.03;
+        if (highlight) {
+            painter.setPen(QColor("#1E3A8A"));
+            painter.setFont(QFont("Segoe UI", 18, QFont::Bold));
+        } else {
+            painter.setPen(Qt::black);
+            painter.setFont(QFont("Segoe UI", 13, QFont::DemiBold));
+        }
+        painter.drawText(QRect(0, y, w, h * 0.04), Qt::AlignCenter, value);
+        y += h * 0.05;
+        
+        painter.setPen(QPen(QColor("#3B82F6"), 1, Qt::DotLine)); // Blue dotted line
+        painter.drawLine(w * 0.2, y - h * 0.01, w * 0.8, y - h * 0.01);
+        y += h * 0.01;
+    };
+
+    drawField("RÉFÉRENCE DE LIVRAISON", liv.getReference());
+    drawField("DATE D'EXPÉDITION", liv.getDate());
+    drawField("ADRESSE DE DESTINATION", liv.getAdresse());
+    drawField("VÉHICULE & TRANSPORT", liv.getTransport() + " | " + liv.getVehicule());
+    
+    // Price with big highlight
+    double pVal = liv.getPrix().replace("DT", "").replace("$", "").replace("€", "").trimmed().toDouble();
+    drawField("MONTANT TOTAL À RÉGLER", QString::number(pVal, 'f', 2) + " DT", true);
+
+    // Signature section at the bottom
+    y = h * 0.8;
     painter.setPen(Qt::black);
+    painter.setFont(QFont("Segoe UI", 10, QFont::Bold));
+    painter.drawText(QRect(w * 0.6, y, w * 0.3, h * 0.05), Qt::AlignLeft, "SIGNATURE & CACHET");
     
-    // Header
-    painter.setFont(QFont("Segoe UI", 20, QFont::Bold));
-    painter.drawText(QRect(0, 50, 5000, 100), Qt::AlignCenter, "REÇU DE LIVRAISON");
+    painter.setPen(QPen(Qt::black, 1, Qt::DashLine));
+    painter.drawLine(w * 0.6, y + h * 0.06, w * 0.9, y + h * 0.06);
     
-    painter.setPen(QPen(Qt::black, 2));
-    painter.drawLine(100, 200, 4900, 200);
-
-    // Content
-    painter.setFont(QFont("Segoe UI", 12));
-    int y = 400;
-    painter.drawText(500, y, "Référence Livraison :");
-    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
-    painter.drawText(2000, y, liv.getReference());
-    
-    y += 200;
-    painter.setFont(QFont("Segoe UI", 12));
-    painter.drawText(500, y, "Date :");
-    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
-    painter.drawText(2000, y, liv.getDate());
-    
-    y += 200;
-    painter.setFont(QFont("Segoe UI", 12));
-    painter.drawText(500, y, "Adresse :");
-    painter.setFont(QFont("Segoe UI", 12, QFont::Bold));
-    painter.drawText(2000, y, liv.getAdresse());
-
-    painter.setPen(QPen(Qt::gray, 1, Qt::DashLine));
-    painter.drawLine(100, y + 200, 4900, y + 200);
+    painter.setFont(QFont("Segoe UI", 8, QFont::StyleItalic));
+    painter.setPen(QColor("#64748B"));
+    painter.drawText(QRect(0, h * 0.95, w, h * 0.03), Qt::AlignCenter, "Généré automatiquement par PortFlow Management System");
 
     painter.end();
 
@@ -937,55 +972,54 @@ void LivraisonWindow::onExportAllPDF()
     writer.setPageMargins(QMarginsF(30, 30, 30, 30));
 
     QPainter painter(&writer);
-    painter.setPen(Qt::black);
-    painter.setFont(QFont("Segoe UI", 16, QFont::Bold));
+    painter.setRenderHint(QPainter::Antialiasing);
 
-    // Header
+    // Professional Header
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor("#1E3A8A"));
+    painter.drawRect(0, 0, 9600, 800);
+    
+    painter.setPen(Qt::white);
     painter.setFont(QFont("Segoe UI", 20, QFont::Bold));
-    painter.drawText(QRect(0, 50, 6000, 100), Qt::AlignCenter, "RAPPORT GLOBAL DES LIVRAISONS");
-    
-    painter.setPen(QPen(Qt::black, 2));
-    painter.drawLine(100, 200, 5900, 200);
+    painter.drawText(QRect(400, 200, 8800, 400), Qt::AlignVCenter, "RAPPORT GLOBAL DES LIVRAISONS");
 
-    painter.setFont(QFont("Segoe UI", 10));
-    int y = 350;
-    
-    // Column Headers
     painter.setFont(QFont("Segoe UI", 10, QFont::Bold));
-    painter.setPen(QColor("#475569"));
-    painter.drawText(200, y, "ID");
-    painter.drawText(800, y, "Date");
-    painter.drawText(1600, y, "Adresse");
-    painter.drawText(3600, y, "Statut");
-    painter.drawText(4400, y, "Van");
-    painter.drawText(5200, y, "Prix");
-    y += 150;
+    int y = 1200;
     
-    painter.setPen(QPen(QColor("#e2e8f0"), 1));
-    painter.drawLine(200, y, 5800, y);
-    y += 150;
+    // Table Header Background
+    painter.setBrush(QColor("#F1F5F9"));
+    painter.drawRect(200, y - 100, 9200, 300);
+    
+    painter.setPen(QColor("#475569"));
+    painter.drawText(400, y + 100, "RÉF");
+    painter.drawText(1200, y + 100, "DATE");
+    painter.drawText(2200, y + 100, "DESTINATION");
+    painter.drawText(5500, y + 100, "STATUT");
+    painter.drawText(7200, y + 100, "VÉHICULE");
+    painter.drawText(8500, y + 100, "PRIX");
+    
+    y += 400;
 
     painter.setFont(QFont("Segoe UI", 9));
-    painter.setPen(Qt::black);
-    // Columns: IDLIVRAISON, DATELIVRAISON, ADRESSELIVRAISON, STATUT, VEHICULE, PRIXLIVRAISON
-    QSqlQuery query("SELECT 'LIV' || LPAD(IDLIVRAISON, 3, '0'), DATELIVRAISON, ADRESSELIVRAISON, STATUT, VEHICULE, PRIXLIVRAISON FROM LIVRAISONS");
+    QSqlQuery query("SELECT REFERENCE, DATELIVRAISON, ADRESSELIVRAISON, STATUT, VEHICULE, PRIXLIVRAISON FROM LIVRAISONS");
     while (query.next()) {
-        if (y > 9000) { 
+        if (y > 13000) { 
             writer.newPage();
-            y = 100;
+            y = 500;
         }
-        painter.drawText(200, y, query.value(0).toString());
-        painter.drawText(800, y, query.value(1).toDate().toString("dd/MM/yyyy"));
-        painter.drawText(1600, y, query.value(2).toString().left(35));
-        painter.drawText(3600, y, query.value(3).toString());
-        painter.drawText(4400, y, query.value(4).toString().left(15));
-        painter.drawText(5200, y, query.value(5).toString());
-        y += 200;
-        
-        painter.setPen(QPen(QColor("#f1f5f9"), 1));
-        painter.drawLine(200, y - 50, 5800, y - 50);
         painter.setPen(Qt::black);
+        painter.drawText(400, y, query.value(0).toString());
+        painter.drawText(1200, y, query.value(1).toDate().toString("dd/MM/yyyy"));
+        painter.drawText(2200, y, query.value(2).toString().left(40));
+        painter.drawText(5500, y, query.value(3).toString());
+        painter.drawText(7200, y, query.value(4).toString().left(15));
         
+        double p = query.value(5).toDouble();
+        painter.drawText(8500, y, QString::number(p, 'f', 2) + " DT");
+        
+        y += 300;
+        painter.setPen(QPen(QColor("#F1F5F9"), 1));
+        painter.drawLine(200, y - 150, 9400, y - 150);
     }
 
     painter.end();

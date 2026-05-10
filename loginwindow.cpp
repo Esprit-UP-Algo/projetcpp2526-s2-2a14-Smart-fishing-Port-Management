@@ -19,6 +19,9 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QTimer>
+#include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
+#include <QGraphicsDropShadowEffect>
 
 LoginWindow::LoginWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -90,12 +93,49 @@ QString backgroundImagePath = "C:/Users/Anas/Downloads/login.png";
     // Login card
     loginCard = createLoginCard();
     mainLayout->addWidget(loginCard);
+
+    // Start logo animations
+    QLabel* logo = loginCard->findChild<QLabel*>("logoLabel");
+    if (logo) {
+        QRect endRect = QRect(-40, 10, 600, 300); 
+        
+        // 1. Fade In
+        QGraphicsOpacityEffect* opacity = new QGraphicsOpacityEffect(logo);
+        logo->setGraphicsEffect(opacity);
+        QPropertyAnimation* fadeAnim = new QPropertyAnimation(opacity, "opacity");
+        fadeAnim->setDuration(2000);
+        fadeAnim->setStartValue(0.0);
+        fadeAnim->setEndValue(1.0);
+        fadeAnim->setEasingCurve(QEasingCurve::InQuad);
+
+        // 2. Grow and Wave (Thin air effect)
+        QPropertyAnimation* wave = new QPropertyAnimation(logo, "geometry");
+        wave->setDuration(2200);
+        wave->setStartValue(QRect(260, 160, 0, 0)); // Start small in center
+        wave->setEndValue(endRect);
+        wave->setEasingCurve(QEasingCurve::OutElastic);
+        
+        QPropertyAnimation* floatAnim = new QPropertyAnimation(logo, "pos");
+        floatAnim->setDuration(4000);
+        floatAnim->setStartValue(QPoint(-40, 10));
+        floatAnim->setKeyValueAt(0.5, QPoint(-40, -5)); 
+        floatAnim->setEndValue(QPoint(-40, 10));
+        floatAnim->setEasingCurve(QEasingCurve::InOutSine);
+        floatAnim->setLoopCount(-1);
+
+        connect(wave, &QPropertyAnimation::finished, [floatAnim]() {
+            floatAnim->start(QPropertyAnimation::DeleteWhenStopped);
+        });
+        
+        fadeAnim->start(QPropertyAnimation::DeleteWhenStopped);
+        wave->start(QPropertyAnimation::DeleteWhenStopped);
+    }
 }
 
 QFrame* LoginWindow::createLoginCard()
 {
     QFrame* card = new QFrame();
-    card->setFixedSize(520, 650);  // Increased from 480x580 to accommodate logo with text
+    card->setFixedSize(600, 900);  // Massive card for massive logo
     card->setStyleSheet(R"(
         QFrame {
             background-color: white;
@@ -109,11 +149,19 @@ QFrame* LoginWindow::createLoginCard()
 
     // Logo and title section
     QVBoxLayout* logoLayout = new QVBoxLayout();
-    logoLayout->setAlignment(Qt::AlignCenter);
-    logoLayout->setSpacing(10);  // Reduced spacing
+    logoLayout->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    logoLayout->setContentsMargins(10, 0, 0, 0); 
+    logoLayout->setSpacing(10);  
 
+    // Logo Container
+    QFrame* logoContainer = new QFrame();
+    logoContainer->setFixedSize(580, 350); 
+    logoContainer->setStyleSheet("background: transparent;");
+    
     // Logo
-    QLabel* logoLabel = new QLabel();
+    QLabel* logoLabel = new QLabel(logoContainer);
+    logoLabel->setObjectName("logoLabel");
+    logoLabel->setGeometry(-40, 10, 600, 300); // EXTREME LEFT (x=-40) and ULTRA MASSIVE
 
     // ============================================
     // CHANGE THIS PATH TO YOUR LOGO IMAGE
@@ -137,8 +185,8 @@ QFrame* LoginWindow::createLoginCard()
     if (!logoPix.isNull()) {
         // Logo loaded successfully
         if (logoHasText) {
-            // Logo includes text - make it larger and don't add text below
-            logoLabel->setPixmap(logoPix.scaled(400, 300, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            // Logo includes text - Ultra massive size
+            logoLabel->setPixmap(logoPix.scaled(600, 300, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         } else {
             // Logo is icon only - make it smaller, will add text below
             logoLabel->setPixmap(logoPix.scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -188,8 +236,8 @@ QFrame* LoginWindow::createLoginCard()
         logoLayout->addWidget(subtitleLabel);
     }
 
-    layout->addLayout(logoLayout);
-    layout->addSpacing(20);
+    layout->addWidget(logoContainer, 0, Qt::AlignCenter);
+    layout->addSpacing(10);
 
     // Username input
     QFrame* usernameContainer = createInputField("👤", "Email (ex: nom@gmail.com)");

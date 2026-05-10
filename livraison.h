@@ -50,6 +50,7 @@ public:
     QSqlQueryModel* rechercher(QString val);
     
     static bool idExists(int id);
+    static bool refExists(QString ref);
     static QString getLastError() { return lastError; }
 };
 

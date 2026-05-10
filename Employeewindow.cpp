@@ -19,8 +19,9 @@
 class MoveFilter : public QObject {
     QDialog* d; bool m=false; QPoint o;
 public:
-    MoveFilter(QDialog* dlg) : d(dlg), QObject(dlg) {}
+    MoveFilter(QDialog* dlg) : QObject(dlg), d(dlg) {}
     bool eventFilter(QObject* obj, QEvent* e) override {
+        Q_UNUSED(obj);
         if (e->type()==QEvent::MouseButtonPress) {
             auto* me = static_cast<QMouseEvent*>(e);
             if (me->button()==Qt::LeftButton) { m=true; o=me->globalPosition().toPoint()-d->frameGeometry().topLeft(); return true; }
