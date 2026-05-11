@@ -1039,7 +1039,8 @@ public:
 
         // Quai preview card
         QFrame* previewCard = new QFrame();
-        previewCard->setFixedHeight(88);
+        previewCard->setFixedHeight(0);
+        previewCard->hide();
         previewCard->setStyleSheet(R"(
             QFrame {
                 background: #F0FDF4;
@@ -1084,7 +1085,7 @@ public:
         QWidget* formArea = new QWidget();
         formArea->setStyleSheet("background: transparent;");
         QVBoxLayout* formLay = new QVBoxLayout(formArea);
-        formLay->setContentsMargins(24, 18, 24, 10);
+        formLay->setContentsMargins(24, 8, 24, 10);
         formLay->setSpacing(8);
 
         auto addField = [&](const QString& labelText, QLineEdit*& fieldPtr,
@@ -1110,8 +1111,8 @@ public:
 
             errLblPtr = new QLabel("");
             errLblPtr->setFont(QFont("Segoe UI", 8));
+            errLblPtr->setFixedHeight(18);
             errLblPtr->setStyleSheet("color: #DC2626; background: transparent; margin-top: -4px; margin-bottom: 2px;");
-            errLblPtr->hide();
             formLay->addWidget(errLblPtr);
         };
 
@@ -1123,8 +1124,8 @@ public:
         addField("Nom complet du client *", clientNameField, "ex: Jean Dupont", nameErr);
         QRegularExpression nameExp("^[a-zA-ZÀ-ÿ\\s]+$");
         connect(clientNameField, &QLineEdit::textChanged, this, [nameErr, nameExp](const QString& text) {
-            if (text.isEmpty() || nameExp.match(text).hasMatch()) nameErr->hide();
-            else { nameErr->setText("⚠ Seules les lettres sont autorisées."); nameErr->show(); }
+            if (text.isEmpty() || nameExp.match(text).hasMatch()) nameErr->clear();
+            else nameErr->setText("⚠ Seules les lettres sont autorisées.");
         });
 
         addField("Société / Organisation *", companyField, "ex: Sea Harvest Ltd", compErr);
@@ -1132,15 +1133,15 @@ public:
         addField("Email", emailField, "ex: contact@entreprise.com", emailErr);
         QRegularExpression emailExp("^[\\w\\.-]+@[\\w\\.-]+\\.[a-zA-Z]{2,}$");
         connect(emailField, &QLineEdit::textChanged, this, [emailErr, emailExp](const QString& text) {
-            if (text.isEmpty() || emailExp.match(text).hasMatch()) emailErr->hide();
-            else { emailErr->setText("⚠ Format d'email invalide."); emailErr->show(); }
+            if (text.isEmpty() || emailExp.match(text).hasMatch()) emailErr->clear();
+            else emailErr->setText("⚠ Format d'email invalide.");
         });
 
         addField("Téléphone", phoneField, "ex: 216XXXXXXXX", phoneErr);
         QRegularExpression phoneExp("^\\+?\\d{8,15}$");
         connect(phoneField, &QLineEdit::textChanged, this, [phoneErr, phoneExp](const QString& text) {
-            if (text.isEmpty() || phoneExp.match(text).hasMatch()) phoneErr->hide();
-            else { phoneErr->setText("⚠ Le numéro doit contenir entre 8 et 15 chiffres."); phoneErr->show(); }
+            if (text.isEmpty() || phoneExp.match(text).hasMatch()) phoneErr->clear();
+            else phoneErr->setText("⚠ Le numéro doit contenir entre 8 et 15 chiffres.");
         });
 
         // Date + Duration row
@@ -1611,8 +1612,10 @@ QFrame* QuaisWindow::createHeader()
 {
     QFrame* hdr = new QFrame();
     hdr->setStyleSheet("background: transparent;");
+    hdr->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     QHBoxLayout* lay = new QHBoxLayout(hdr);
-    lay->setContentsMargins(0, 0, 0, 0);
+    lay->setContentsMargins(0, 0, 12, 0);
+    lay->setSpacing(12);
 
     QVBoxLayout* titleCol = new QVBoxLayout();
     QLabel* title = new QLabel("Gestion des Quais");
@@ -3725,27 +3728,24 @@ void QuaisWindow::onSort(int index)
 void QuaisWindow::afficherStatistiques()
 {
     int    totalQuais        = quais.size();
-    int    totalBerths       = 0;
-    int    occupiedBerths    = 0;
-    int    availableBerths   = 0;
-    int    maintenanceBerths = 0;
+    int    occupiedQuais     = 0;
+    int    availableQuais    = 0;
+    int    maintenanceQuais  = 0;
     double totalRevenue      = 0.0;
 
     for (int quaiIndex = 0; quaiIndex < quais.size(); ++quaiIndex) {
         const Quai& q = quais.at(quaiIndex);
-        const int cap = q.getCapacite();
-        totalBerths += cap;
-        if (q.getEtat() == "Occupé") {
-            occupiedBerths += cap;
-            totalRevenue   += q.getTarif() * cap;
+        if (isOccupiedState(q.getEtat())) {
+            ++occupiedQuais;
+            totalRevenue += q.getTarif();
         } else if (q.getEtat() == "Disponible") {
-            availableBerths += cap;
+            ++availableQuais;
         } else {
-            maintenanceBerths += cap;
+            ++maintenanceQuais;
         }
     }
 
-    const double occupancyRate  = (totalBerths > 0) ? (double)occupiedBerths / totalBerths * 100.0 : 0.0;
+    const double occupancyRate  = (totalQuais > 0) ? (double)occupiedQuais / totalQuais * 100.0 : 0.0;
     const double averageRevenue = (totalQuais  > 0) ? totalRevenue / totalQuais : 0.0;
     const double maxQuais       = std::max(totalQuais, 1);
     QList<DockUsageMonitoringAnalysis> monitoringAnalyses;
@@ -3858,8 +3858,8 @@ void QuaisWindow::afficherStatistiques()
     const QList<ChartData> charts = {
                                      { (double)totalQuais,      maxQuais,            "Total\nQuais",          "",  QColor(0x25, 0x63, 0xEB) },
                                      { occupancyRate,           100.0,               "Taux\nd'Occupation",    "%", QColor(0x7C, 0x3A, 0xED) },
-                                     { (double)occupiedBerths,  (double)totalBerths, "Emplacements\nOccupés", "",  QColor(0xF5, 0x9E, 0x0B) },
-                                     { (double)availableBerths, (double)totalBerths, "Emplacements\nLibres",  "",  QColor(0x10, 0xB9, 0x81) },
+                                     { (double)occupiedQuais,   maxQuais,            "Quais\nOccupés",        "",  QColor(0xF5, 0x9E, 0x0B) },
+                                     { (double)availableQuais,  maxQuais,            "Quais\nLibres",         "",  QColor(0x10, 0xB9, 0x81) },
                                      };
 
     QList<CircularProgress*> progressWidgets;
@@ -3932,7 +3932,7 @@ void QuaisWindow::afficherStatistiques()
                                  QString("%1 DT").arg(averageRevenue, 0, 'f', 0),
                                  "Revenu Moyen / Quai", "#6D28D9", "#F5F3FF"));
     cardsLay->addWidget(makeCard("🔧",
-                                 QString::number(maintenanceBerths),
+                                 QString::number(maintenanceQuais),
                                  "En Maintenance", "#B91C1C", "#FEF2F2"));
     cardsLay->addWidget(makeCard("⚡",
                                  QString::number(alertDockCount),
