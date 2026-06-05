@@ -1397,6 +1397,9 @@ QFrame* FrigoWindow::createCalendarCard()
     calendarDetails->setMinimumHeight(150);
     layout->addWidget(calendarDetails);
 
+    // Apply correct palette immediately based on current theme
+    setDarkMode(isDarkMode);
+
     return card;
 }
 

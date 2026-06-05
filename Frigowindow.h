@@ -34,6 +34,7 @@ public:
     ~FrigoWindow();
 
     void setDarkMode(bool dark);
+    bool isDark() const { return isDarkMode; }
 
 private slots:
     void onSearch(const QString& text);

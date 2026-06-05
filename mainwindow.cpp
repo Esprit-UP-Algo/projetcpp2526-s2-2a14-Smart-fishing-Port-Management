@@ -76,6 +76,9 @@ MainWindow::MainWindow(const QString& userName, const QString& userRole, QWidget
                     "DATE_PRESENCE DATE, "
                     "HEURE_ARRIVEE TIMESTAMP, "
                     "HEURE_DEPART TIMESTAMP)");
+
+    // Initialize global dark mode property
+    qApp->setProperty("isDarkMode", isDarkMode);
 }
 
 MainWindow::~MainWindow()
@@ -726,6 +729,7 @@ void MainWindow::onLogout()
 void MainWindow::toggleGlobalTheme()
 {
     isDarkMode = !isDarkMode;
+    qApp->setProperty("isDarkMode", isDarkMode);
     updateThemeRecursive(this, isDarkMode);
 }
 

@@ -1,4 +1,5 @@
 #include "addfrigodialog.h"
+#include "Frigowindow.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -9,6 +10,9 @@
 #include <QScrollArea>
 #include <QDateEdit>
 #include <QDate>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QApplication>
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
@@ -87,7 +91,60 @@ AddFrigoDialog::AddFrigoDialog(QWidget *parent, FrigoModel* frigoData)
     : QDialog(parent), frigoData(frigoData), isEdit(frigoData != nullptr)
 {
     setupUi();
-    if (isEdit) populateFields();
+    // Apply dark mode
+    if (qApp->property("isDarkMode").toBool()) {
+        // Dark container background
+        QWidget* cont = findChild<QWidget*>();
+        if (cont) cont->setStyleSheet("QWidget { background: #1E293B; border-radius: 28px; }");
+
+        // All labels dark-mode text
+        for (QLabel* lbl : findChildren<QLabel*>()) {
+            QString s = lbl->styleSheet();
+            if (s.contains("#4B5563"))
+                lbl->setStyleSheet(s.replace("#4B5563", "#94A3B8"));
+            if (s.contains("#374151"))
+                lbl->setStyleSheet(s.replace("#374151", "#CBD5E1"));
+        }
+
+        // Inputs: dark background + light text
+        QString darkInput = R"(
+            QLineEdit, QComboBox, QDateEdit, QDoubleSpinBox, QSpinBox, QTextEdit {
+                background-color: #2D3748;
+                border: 2px solid #4A5568;
+                border-radius: 12px;
+                padding: 10px 15px;
+                color: #F1F5F9;
+                font-size: 11pt;
+                outline: none;
+            }
+            QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QDoubleSpinBox:focus, QSpinBox:focus, QTextEdit:focus {
+                border: 2px solid #3B82F6;
+                background-color: #374151;
+                outline: none;
+            }
+            QComboBox QLineEdit, QDateEdit QLineEdit, QSpinBox QLineEdit, QDoubleSpinBox QLineEdit {
+                padding: 0px;
+                background: transparent;
+                border: none;
+                color: #F1F5F9;
+            }
+            QComboBox::drop-down { border: none; width: 30px; outline: none; }
+            QComboBox QAbstractItemView {
+                background: #2D3748;
+                color: #F1F5F9;
+                border: 1px solid #4A5568;
+                border-radius: 8px;
+                selection-background-color: #3B82F6;
+                selection-color: white;
+            }
+        )";
+        for (QWidget* w : findChildren<QWidget*>()) {
+            if (w->inherits("QLineEdit") || w->inherits("QComboBox") || w->inherits("QDateEdit") ||
+                w->inherits("QDoubleSpinBox") || w->inherits("QSpinBox") || w->inherits("QTextEdit")) {
+                w->setStyleSheet(darkInput);
+            }
+        }
+    }
 }
 
 AddFrigoDialog::~AddFrigoDialog() {}

@@ -32,7 +32,6 @@ SOURCES += main.cpp \
            addquaidialog.cpp \
            bateau.cpp \
            connection.cpp \
-           contractgenerator.cpp \
            employee.cpp \
            frigo.cpp \
            livraison.cpp \
@@ -73,7 +72,6 @@ HEADERS += mainwindow.h \
            addquaidialog.h \
            bateau.h \
            connection.h \
-           contractgenerator.h \
            employee.h \
            frigo.h \
            livraison.h \
