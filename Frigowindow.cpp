@@ -1403,17 +1403,90 @@ QFrame* FrigoWindow::createCalendarCard()
 void FrigoWindow::setDarkMode(bool dark)
 {
     isDarkMode = dark;
-    
-    // Update the main content area style
-    if (this->centralWidget()) {
-        QString bgColor = isDarkMode ? "#1A202C" : "#F0F4F8";
-        QString textPrimary = isDarkMode ? "#F7FAFC" : "#1e3a5f";
-        
-        // We can't easily reach every widget here since they are created in createContentArea
-        // but updateThemeRecursive in MainWindow will handle most of it.
-        // We just need to handle the parts that it misses.
+
+    // Re-apply calendar stylesheet with theme-correct colors
+    QString dayColor        = dark ? "#E2E8F0" : "#1e293b";
+    QString dayDisabled     = dark ? "#4A5568" : "#cbd5e1";
+    QString calBg           = dark ? "#2D3748" : "white";
+    QString headerBg        = dark ? "#1A202C" : "#f1f5f9";
+    QString headerColor     = dark ? "#CBD5E0" : "#1e3a5f";
+    QString selectedBg      = dark ? "#3B82F6" : "#3b82f6";
+
+    calendar->setStyleSheet(QString(R"(
+        QCalendarWidget {
+            background-color: %1;
+            border: none;
+            border-radius: 12px;
+        }
+        QCalendarWidget QWidget#qt_calendar_navigationbar {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e3a5f, stop:1 #3b82f6);
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            min-height: 45px;
+        }
+        QCalendarWidget QToolButton {
+            color: white;
+            font-weight: bold;
+            font-size: 11pt;
+            background: transparent;
+            border: none;
+            border-radius: 5px;
+            margin: 3px;
+        }
+        QCalendarWidget QToolButton:hover { background: rgba(255, 255, 255, 0.15); }
+        QCalendarWidget QAbstractItemView {
+            background-color: %1;
+            color: %2;
+        }
+        QCalendarWidget QAbstractItemView:enabled {
+            color: %2;
+            selection-background-color: %5;
+            selection-color: white;
+        }
+        QCalendarWidget QAbstractItemView:disabled {
+            color: %3;
+        }
+        QCalendarWidget QHeaderView::section {
+            color: %4;
+            font-weight: bold;
+            font-size: 9pt;
+            background-color: %6;
+            border: none;
+            padding: 5px;
+        }
+        QCalendarWidget QMenu { background-color: %1; color: %2; }
+        QCalendarWidget QSpinBox { color: white; background-color: transparent; }
+    )").arg(calBg, dayColor, dayDisabled, headerColor, selectedBg, headerBg));
+
+    // QPalette is the ONLY reliable way to change day-number text color in Qt's calendar
+    QPalette calPal = calendar->palette();
+    if (dark) {
+        calPal.setColor(QPalette::Text,            QColor("#E2E8F0"));
+        calPal.setColor(QPalette::Base,            QColor("#2D3748"));
+        calPal.setColor(QPalette::Window,          QColor("#2D3748"));
+        calPal.setColor(QPalette::AlternateBase,   QColor("#374151"));
+        calPal.setColor(QPalette::ButtonText,      QColor("#E2E8F0"));
+        calPal.setColor(QPalette::Button,          QColor("#1A202C"));
+        calPal.setColor(QPalette::Highlight,       QColor("#3B82F6"));
+        calPal.setColor(QPalette::HighlightedText, QColor("white"));
+    } else {
+        calPal.setColor(QPalette::Text,            QColor("#1e293b"));
+        calPal.setColor(QPalette::Base,            QColor("white"));
+        calPal.setColor(QPalette::Window,          QColor("white"));
+        calPal.setColor(QPalette::AlternateBase,   QColor("#f8fafc"));
+        calPal.setColor(QPalette::ButtonText,      QColor("#1e3a5f"));
+        calPal.setColor(QPalette::Button,          QColor("#f1f5f9"));
+        calPal.setColor(QPalette::Highlight,       QColor("#3b82f6"));
+        calPal.setColor(QPalette::HighlightedText, QColor("white"));
     }
-    
+    calendar->setPalette(calPal);
+
+    // Also set it on the internal QAbstractItemView that renders the day cells
+    QAbstractItemView* calView = calendar->findChild<QAbstractItemView*>();
+    if (calView) {
+        calView->setPalette(calPal);
+    }
+
     loadCalendarData();
     updateCalendarDetails(calendar->selectedDate());
 }

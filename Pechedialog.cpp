@@ -20,8 +20,29 @@
 #include <QDoubleValidator>
 #include <QGraphicsDropShadowEffect>
 #include <QMouseEvent>
+#include <QAbstractItemView>
+#include <QLineEdit>
 
 // ==================== HELPERS POUR DIALOGUE STYLÉ ====================
+class ComboClickFilter : public QObject {
+public:
+    ComboClickFilter(QObject* parent = nullptr) : QObject(parent) {}
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) {
+            QLineEdit* le = qobject_cast<QLineEdit*>(watched);
+            if (le && le->parentWidget()) {
+                QComboBox* cb = qobject_cast<QComboBox*>(le->parentWidget());
+                if (cb && event->type() == QEvent::MouseButtonPress) {
+                    cb->showPopup();
+                    return true;
+                }
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+
 class DialogMoveFilter : public QObject {
 public:
     DialogMoveFilter(QDialog* dialog, QObject* parent = nullptr) : QObject(parent), m_dialog(dialog), m_dragging(false) {}
@@ -315,6 +336,21 @@ void PecheDialog::setupUi()
     connect(autoSelectBtn, &QPushButton::clicked, this, &PecheDialog::autoSelectFridge);
     connect(fridgeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int){ updateAvailableSpaceDisplay(); });
     connect(quantiteInput, &QLineEdit::textChanged, this, [=](const QString&){ updateAvailableSpaceDisplay(); });
+
+    // Fix black popup background on combo dropdowns
+    ComboClickFilter* comboFilter = new ComboClickFilter(this);
+    for (QComboBox* combo : findChildren<QComboBox*>()) {
+        if (!combo->isEditable()) {
+            combo->setEditable(true);
+            combo->lineEdit()->setReadOnly(true);
+            combo->lineEdit()->setCursor(Qt::PointingHandCursor);
+            combo->lineEdit()->installEventFilter(comboFilter);
+        }
+        if (combo->view() && combo->view()->window()) {
+            combo->view()->window()->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+            combo->view()->window()->setAttribute(Qt::WA_TranslucentBackground);
+        }
+    }
 }
 
 void PecheDialog::updateFieldStyle(QWidget* field, bool isValid) {
@@ -333,15 +369,35 @@ QString PecheDialog::getInputStyle() const
             padding: 10px 15px;
             color: #1F2937;
             font-size: 11pt;
+            outline: none;
         }
         QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
             border: 2px solid #EA580C;
             background-color: white;
+            outline: none;
         }
         *[state="error"] { border: 2px solid #EF4444; background-color: #FEF2F2; }
         *[state="success"] { border: 2px solid #10B981; }
-        QComboBox::drop-down { border: none; width: 30px; }
+        QComboBox::drop-down { border: none; width: 30px; outline: none; }
         QComboBox::down-arrow { image: none; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #6B7280; margin-right: 15px; }
+        QComboBox QAbstractItemView {
+            background: white;
+            color: #1e293b;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            selection-background-color: #EBF5FF;
+            selection-color: #1e293b;
+            outline: none;
+            padding: 4px;
+        }
+        QComboBox QAbstractItemView::item {
+            min-height: 32px;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+        QComboBox QAbstractItemView::item:hover {
+            background-color: #F1F5F9;
+        }
     )";
 }
 

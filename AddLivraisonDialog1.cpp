@@ -9,7 +9,30 @@
 #include <QFile>
 #include <QTextStream>
 #include <QStyle>
+#include <QAbstractItemView>
+#include <QComboBox>
+#include <QLineEdit>
 
+
+// ==================== HELPERS POUR DIALOGUE STYLÉ ====================
+class ComboClickFilter : public QObject {
+public:
+    ComboClickFilter(QObject* parent = nullptr) : QObject(parent) {}
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) {
+            QLineEdit* le = qobject_cast<QLineEdit*>(watched);
+            if (le && le->parentWidget()) {
+                QComboBox* cb = qobject_cast<QComboBox*>(le->parentWidget());
+                if (cb && event->type() == QEvent::MouseButtonPress) {
+                    cb->showPopup();
+                    return true;
+                }
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
 
 AddLivraisonDialog::AddLivraisonDialog(QWidget *parent, Livraison* livraisonData)
     : QDialog(parent), livraisonData(livraisonData), isEdit(livraisonData != nullptr)
@@ -96,6 +119,7 @@ void AddLivraisonDialog::setupUi()
                 padding: 10px 15px;
                 color: #2C3E50;
                 font-size: 11pt;
+                outline: none;
             }
             QLineEdit:hover, QComboBox:hover, QTextEdit:hover, QDateEdit:hover {
                 border: 2px solid #CBD5E1;
@@ -110,6 +134,7 @@ void AddLivraisonDialog::setupUi()
             QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QDateEdit:focus {
                 border: 2px solid #5D9CEC;
                 background-color: white;
+                outline: none;
             }
             /* Error styling for fields */
             *[state="error"] {
@@ -119,6 +144,24 @@ void AddLivraisonDialog::setupUi()
             /* Success styling for fields */
             *[state="success"] {
                 border: 2px solid #A7F3D0;
+            }
+            QComboBox QAbstractItemView {
+                background: white;
+                color: #1e293b;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                selection-background-color: #EBF5FF;
+                selection-color: #1e293b;
+                outline: none;
+                padding: 4px;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 32px;
+                padding: 4px 10px;
+                border-radius: 4px;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background-color: #F1F5F9;
             }
             /* Fix for Calendar Popup */
             QCalendarWidget QAbstractItemView {
@@ -263,6 +306,21 @@ void AddLivraisonDialog::setupUi()
 
     scrollArea->setWidget(content);
     mainLayout->addWidget(scrollArea);
+
+    // Fix black popup background on combo dropdowns
+    ComboClickFilter* comboFilter = new ComboClickFilter(this);
+    for (QComboBox* combo : findChildren<QComboBox*>()) {
+        if (!combo->isEditable()) {
+            combo->setEditable(true);
+            combo->lineEdit()->setReadOnly(true);
+            combo->lineEdit()->setCursor(Qt::PointingHandCursor);
+            combo->lineEdit()->installEventFilter(comboFilter);
+        }
+        if (combo->view() && combo->view()->window()) {
+            combo->view()->window()->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+            combo->view()->window()->setAttribute(Qt::WA_TranslucentBackground);
+        }
+    }
 }
 
 void AddLivraisonDialog::populateFields()

@@ -24,6 +24,8 @@
 #include <QStringList>
 #include <QSystemTrayIcon>
 #include <QTimer>
+#include <QMovie>
+#include <QPainter>
 
 MainWindow::MainWindow(const QString& userName, const QString& userRole, QWidget *parent)
     : QMainWindow(parent), currentActiveBtn(nullptr), employeePage(nullptr), pechePage(nullptr), frigoPage(nullptr), bateauPage(nullptr), livraisonPage(nullptr), quaisPage(nullptr),
@@ -429,29 +431,124 @@ void MainWindow::switchPage(int index)
 
 QWidget* MainWindow::createDashboardPage()
 {
+    // Outer container that holds the animated background
     QWidget* content = new QWidget();
-    content->setStyleSheet("background-color: #F0F4F8;");
+    content->setStyleSheet("background: transparent;");
 
-    QVBoxLayout* layout = new QVBoxLayout(content);
-    layout->setSpacing(30);
-    layout->setContentsMargins(30, 30, 30, 30);
+    // Stack layout so GIF sits behind content
+    QVBoxLayout* stack = new QVBoxLayout(content);
+    stack->setSpacing(0);
+    stack->setContentsMargins(0, 0, 0, 0);
+
+    // ── Animated GIF background label ──────────────────────────────────
+    QLabel* bgLabel = new QLabel(content);
+    bgLabel->setObjectName("dashboardBg");
+    bgLabel->setScaledContents(true);
+    bgLabel->setAlignment(Qt::AlignCenter);
+
+    QMovie* bgMovie = new QMovie(":/images/images/dashboard_bg.gif", QByteArray(), bgLabel);
+    if (bgMovie->isValid()) {
+        bgLabel->setMovie(bgMovie);
+        bgMovie->start();
+    } else {
+        // Fallback solid color
+        bgLabel->setStyleSheet("background-color: #F0F4F8;");
+    }
+
+    // Make bgLabel fill the whole page by resizing with parent
+    bgLabel->setGeometry(0, 0, content->width(), content->height());
+
+    // Install resize event to keep bg filling the widget
+    class BgResizeFilter : public QObject {
+        QLabel* bg;
+    public:
+        BgResizeFilter(QLabel* label, QObject* parent) : QObject(parent), bg(label) {}
+        bool eventFilter(QObject* obj, QEvent* ev) override {
+            if (ev->type() == QEvent::Resize) {
+                QWidget* w = qobject_cast<QWidget*>(obj);
+                if (w) bg->setGeometry(0, 0, w->width(), w->height());
+            }
+            return QObject::eventFilter(obj, ev);
+        }
+    };
+    content->installEventFilter(new BgResizeFilter(bgLabel, content));
+
+    // ── Overlay card for text ──────────────────────────────────────────
+    QWidget* overlay = new QWidget(content);
+    overlay->setStyleSheet("background: transparent;");
+
+    QVBoxLayout* layout = new QVBoxLayout(overlay);
+    layout->setSpacing(20);
+    layout->setContentsMargins(40, 40, 40, 40);
+    layout->addStretch(1);
+
+    // Glass card — use object name so only the frame itself gets the border/bg
+    QFrame* card = new QFrame(overlay);
+    card->setObjectName("dashCard");
+    card->setStyleSheet(R"(
+        QFrame#dashCard {
+            background: rgba(15, 30, 70, 0.55);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
+        QFrame#dashCard * {
+            background: transparent;
+            border: none;
+        }
+    )");
+
+    QGraphicsDropShadowEffect* shadow = new QGraphicsDropShadowEffect(card);
+    shadow->setBlurRadius(40);
+    shadow->setColor(QColor(0, 0, 0, 100));
+    shadow->setOffset(0, 10);
+    card->setGraphicsEffect(shadow);
+
+    QVBoxLayout* cardLayout = new QVBoxLayout(card);
+    cardLayout->setSpacing(8);
+    cardLayout->setContentsMargins(40, 30, 40, 30);
 
     QLabel* title = new QLabel("Tableau de Bord");
-    QFont titleFont("Segoe UI", 32, QFont::Bold);
+    QFont titleFont("Segoe UI", 34, QFont::Bold);
     title->setFont(titleFont);
-    title->setStyleSheet("color: #2C3E50;");
-    layout->addWidget(title);
+    title->setStyleSheet("color: white; background: transparent; border: none;");
+    cardLayout->addWidget(title);
+
+    // Subtle divider
+    QFrame* divider = new QFrame(card);
+    divider->setFrameShape(QFrame::HLine);
+    divider->setStyleSheet("background: rgba(255,255,255,0.3); border: none; max-height: 1px;");
+    divider->setFixedHeight(1);
+    cardLayout->addWidget(divider);
 
     QString welcomeText = loggedUserName.isEmpty() ? "Bienvenue sur PortFlow" : "Bienvenue, " + loggedUserName;
     if (!loggedUserRole.isEmpty()) welcomeText += " (" + loggedUserRole + ")";
-    
-    welcomeLabel = new QLabel(welcomeText);
-    QFont subtitleFont("Segoe UI", 16);
-    welcomeLabel->setFont(subtitleFont);
-    welcomeLabel->setStyleSheet("color: #6B7280;");
-    layout->addWidget(welcomeLabel);
 
-    layout->addStretch();
+    welcomeLabel = new QLabel(welcomeText);
+    QFont subtitleFont("Segoe UI", 14);
+    welcomeLabel->setFont(subtitleFont);
+    welcomeLabel->setStyleSheet("color: rgba(200, 220, 255, 0.95); background: transparent; border: none;");
+    cardLayout->addWidget(welcomeLabel);
+
+    layout->addWidget(card, 0, Qt::AlignLeft | Qt::AlignBottom);
+    layout->addStretch(0);
+
+    // Overlay fills the whole page
+    class OverlayResizeFilter : public QObject {
+        QWidget* ov;
+    public:
+        OverlayResizeFilter(QWidget* overlay, QObject* parent) : QObject(parent), ov(overlay) {}
+        bool eventFilter(QObject* obj, QEvent* ev) override {
+            if (ev->type() == QEvent::Resize) {
+                QWidget* w = qobject_cast<QWidget*>(obj);
+                if (w) ov->setGeometry(0, 0, w->width(), w->height());
+            }
+            return QObject::eventFilter(obj, ev);
+        }
+    };
+    content->installEventFilter(new OverlayResizeFilter(overlay, content));
+    overlay->setGeometry(0, 0, content->width(), content->height());
+    overlay->raise();
+
     return content;
 }
 
@@ -632,60 +729,94 @@ void MainWindow::toggleGlobalTheme()
     updateThemeRecursive(this, isDarkMode);
 }
 
+
 void MainWindow::onSettingsClicked()
 {
     QDialog* settingsDlg = new QDialog(this);
     settingsDlg->setWindowTitle("Paramètres - PortFlow");
-    settingsDlg->setFixedSize(350, 250);
-    settingsDlg->setStyleSheet(isDarkMode ? "background-color: #2D3748; color: white;" : "background-color: #F0F4F8; color: #2C3E50;");
+    settingsDlg->setFixedSize(500, 600);
+    
+    // 1. Background Image (Matching Login)
+    QString backgroundImagePath = "C:/Users/Anas/Downloads/login.png";
+    QPixmap bgPix(backgroundImagePath);
+    if (!bgPix.isNull()) {
+        QPalette palette;
+        QPixmap scaled = bgPix.scaled(settingsDlg->size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+        palette.setBrush(QPalette::Window, QBrush(scaled));
+        settingsDlg->setPalette(palette);
+        settingsDlg->setAutoFillBackground(true);
+    } else {
+        settingsDlg->setStyleSheet(isDarkMode ? "background-color: #1A202C;" : "background-color: #F7FAFC;");
+    }
 
-    QVBoxLayout* layout = new QVBoxLayout(settingsDlg);
-    layout->setSpacing(15);
-    layout->setContentsMargins(30, 30, 30, 30);
+    QVBoxLayout* mainLay = new QVBoxLayout(settingsDlg);
+    mainLay->setContentsMargins(0, 0, 0, 0);
 
-    QLabel* title = new QLabel("Préférences");
-    title->setFont(QFont("Segoe UI", 16, QFont::Bold));
+    // 2. Semi-transparent Glass Card for Readability
+    QFrame* glassCard = new QFrame();
+    glassCard->setObjectName("glassCard");
+    QString cardStyle = isDarkMode ? 
+        "QFrame#glassCard { background-color: rgba(26, 32, 44, 220); border-radius: 0px; }" : 
+        "QFrame#glassCard { background-color: rgba(255, 255, 255, 220); border-radius: 0px; }";
+    glassCard->setStyleSheet(cardStyle);
+    mainLay->addWidget(glassCard);
+
+    QVBoxLayout* layout = new QVBoxLayout(glassCard);
+    layout->setSpacing(25);
+    layout->setContentsMargins(40, 40, 40, 40);
+
+    // Title
+    QLabel* title = new QLabel(isEnglish ? "Settings" : "Paramètres");
+    title->setFont(QFont("Segoe UI", 22, QFont::Bold));
+    title->setStyleSheet("color: #2B5EA6; background: transparent;");
     title->setAlignment(Qt::AlignCenter);
     layout->addWidget(title);
 
-    QPushButton* langBtnDlg = new QPushButton(isEnglish ? "🌐  Language: English" : "🌐  Langue: Français");
-    QPushButton* darkBtnDlg = new QPushButton(isDarkMode ? "☀️  Mode: Clair" : "🌙  Mode: Sombre");
-
+    // Style for buttons
     auto btnStyle = R"(
         QPushButton {
             background-color: #2B5EA6;
             color: white;
             border: none;
             border-radius: 12px;
-            padding: 15px;
+            padding: 18px;
             font-weight: bold;
-            font-size: 16px;
+            font-size: 15px;
         }
         QPushButton:hover {
             background-color: #1e3a5f;
         }
     )";
 
+    // Language Section
+    QPushButton* langBtnDlg = new QPushButton(isEnglish ? "🌐  Language: English" : "🌐  Langue: Français");
     langBtnDlg->setStyleSheet(btnStyle);
-    darkBtnDlg->setStyleSheet(btnStyle);
+    layout->addWidget(langBtnDlg);
 
+    // Theme Section (Dark/Light Mode)
+    QPushButton* darkBtnDlg = new QPushButton(isDarkMode ? "☀️  Mode: Light (Clair)" : "🌙  Mode: Dark (Sombre)");
+    darkBtnDlg->setStyleSheet(btnStyle);
+    layout->addWidget(darkBtnDlg);
+
+    // Connections
     connect(langBtnDlg, &QPushButton::clicked, [this, langBtnDlg, settingsDlg]() {
         toggleLanguage();
         langBtnDlg->setText(isEnglish ? "🌐  Language: English" : "🌐  Langue: Français");
         translateRecursive(settingsDlg, isEnglish);
     });
 
-    connect(darkBtnDlg, &QPushButton::clicked, [this, darkBtnDlg, settingsDlg]() {
+    connect(darkBtnDlg, &QPushButton::clicked, [this, darkBtnDlg, settingsDlg, glassCard]() {
         toggleGlobalTheme();
-        darkBtnDlg->setText(isDarkMode ? "☀️  Mode: Clair" : "🌙  Mode: Sombre");
-        settingsDlg->setStyleSheet(isDarkMode ? "background-color: #2D3748; color: white;" : "background-color: #F0F4F8; color: #2C3E50;");
+        darkBtnDlg->setText(isDarkMode ? "☀️  Mode: Light (Clair)" : "🌙  Mode: Dark (Sombre)");
+        glassCard->setStyleSheet(isDarkMode ? 
+            "QFrame#glassCard { background-color: rgba(26, 32, 44, 220); }" : 
+            "QFrame#glassCard { background-color: rgba(255, 255, 255, 220); }");
     });
 
-    layout->addWidget(langBtnDlg);
-    layout->addWidget(darkBtnDlg);
-    
-    QPushButton* closeBtn = new QPushButton("Fermer");
-    closeBtn->setStyleSheet("background-color: #6c757d; color: white; border-radius: 10px; padding: 10px; font-weight: bold; margin-top: 10px;");
+    layout->addStretch();
+
+    QPushButton* closeBtn = new QPushButton(isEnglish ? "Close" : "Fermer");
+    closeBtn->setStyleSheet("background-color: #A0AEC0; color: white; border-radius: 10px; padding: 12px; font-weight: bold;");
     connect(closeBtn, &QPushButton::clicked, settingsDlg, &QDialog::accept);
     layout->addWidget(closeBtn);
 
@@ -747,7 +878,16 @@ void MainWindow::translateRecursive(QWidget* widget, bool toEnglish)
             {"Gestion des Employés", "Employee Management"}, {"Administration du personnel et suivi des rôles", "Staff administration and role tracking"},
             {"Nouvel Employé", "New Employee"}, {"Trier par :", "Sort by :"}, {"Prénom", "First Name"},
             {"Nom", "Last Name"}, {"Position", "Position"}, {"Salaire", "Salary"}, {"Statut", "Status"},
-            {"Date d'ajout", "Added Date"}, {"Administration", "Administration"}
+            {"Date d'ajout", "Added Date"}, {"Administration", "Administration"},
+            {"Gestion des Quais", "Dock Management"}, {"Administration des emplacements et disponibilités", "Location and availability administration"},
+            {"Statistiques", "Statistics"}, {"Exporter PDF", "Export PDF"}, {"IA Affecter un bateau", "AI Assign Boat"},
+            {"Rechercher un quai par numéro, type...", "Search for a dock by number, type..."},
+            {"Avertissements de surveillance", "Monitoring Warnings"},
+            {"Alertes opérationnelles generees a partir de l'analyse d'occupation des quais, via regles locales et moteur AI/API si configure.", "Operational alerts generated from dock occupancy analysis, via local rules and AI/API engine if configured."},
+            {"R.A.S.", "O.K."}, {"Aucun avertissement pour le moment.", "No warnings at the moment."},
+            {"Référence", "Reference"}, {"Nom du Quai", "Dock Name"}, {"Capacité", "Capacity"},
+            {"Localisation", "Location"}, {"Statut", "Status"}, {"Tarif / Durée", "Rate / Duration"},
+            {"Disponible", "Available"}, {"Occupé", "Occupied"}, {"Maintenance", "Maintenance"}
         };
         for (auto it = dict.constBegin(); it != dict.constEnd(); ++it) {
             QString fr = it.key(); QString en = it.value();

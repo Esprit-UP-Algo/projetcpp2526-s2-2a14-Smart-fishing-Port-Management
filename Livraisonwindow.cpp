@@ -429,17 +429,17 @@ QFrame* LivraisonWindow::createStatsArea()
     QVBoxLayout* totalLabels = new QVBoxLayout();
     QLabel* totalTitle = new QLabel("Total Livraisons");
     totalTitle->setProperty("class", "stats-label");
+    totalTitle->setStyleSheet("border: none; background: transparent;");
+    
     totalDeliveriesLabel = new QLabel("0");
     totalDeliveriesLabel->setProperty("class", "stats-value");
+    totalDeliveriesLabel->setStyleSheet("border: none; background: transparent;");
+    
     totalLabels->addWidget(totalTitle);
     totalLabels->addWidget(totalDeliveriesLabel);
     
-    QLabel* totalIcon = new QLabel("📦");
-    totalIcon->setProperty("class", "stats-icon");
-    
     totalLayout->addLayout(totalLabels);
     totalLayout->addStretch();
-    totalLayout->addWidget(totalIcon);
     
     // Efficiency Card
     QFrame* efficiencyCard = new QFrame();
@@ -452,17 +452,17 @@ QFrame* LivraisonWindow::createStatsArea()
     QVBoxLayout* effLabels = new QVBoxLayout();
     QLabel* effTitle = new QLabel("Efficacité (Livrées)");
     effTitle->setProperty("class", "stats-label");
+    effTitle->setStyleSheet("border: none; background: transparent;");
+    
     efficiencyLabel = new QLabel("0%");
     efficiencyLabel->setProperty("class", "stats-value");
+    efficiencyLabel->setStyleSheet("border: none; background: transparent;");
+    
     effLabels->addWidget(effTitle);
     effLabels->addWidget(efficiencyLabel);
     
-    QLabel* effIcon = new QLabel("📈");
-    effIcon->setProperty("class", "stats-icon");
-    
     effLayout->addLayout(effLabels);
     effLayout->addStretch();
-    effLayout->addWidget(effIcon);
 
     layout->addWidget(totalCard);
     layout->addWidget(efficiencyCard);

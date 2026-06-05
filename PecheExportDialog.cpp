@@ -9,8 +9,29 @@
 #include <QFrame>
 #include <QGraphicsDropShadowEffect>
 #include <QMouseEvent>
+#include <QAbstractItemView>
+#include <QLineEdit>
 
 // ==================== HELPERS POUR DIALOGUE STYLÉ ====================
+class ComboClickFilter : public QObject {
+public:
+    ComboClickFilter(QObject* parent = nullptr) : QObject(parent) {}
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) {
+            QLineEdit* le = qobject_cast<QLineEdit*>(watched);
+            if (le && le->parentWidget()) {
+                QComboBox* cb = qobject_cast<QComboBox*>(le->parentWidget());
+                if (cb && event->type() == QEvent::MouseButtonPress) {
+                    cb->showPopup();
+                    return true;
+                }
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+
 class DialogMoveFilter : public QObject {
 public:
     DialogMoveFilter(QDialog* dialog, QObject* parent = nullptr) : QObject(parent), m_dialog(dialog), m_dragging(false) {}
@@ -122,9 +143,28 @@ PecheExportDialog::PecheExportDialog(QWidget *parent) : QDialog(parent)
 
     QString comboStyle = R"(
         QComboBox, QDateEdit {
-            background: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 10px; padding: 8px 12px; font-size: 11pt; color: #1E293B;
+            background: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 10px; padding: 8px 12px; font-size: 11pt; color: #1E293B; outline: none;
         }
-        QComboBox:focus, QDateEdit:focus { border: 2px solid #F97316; background: white; }
+        QComboBox:focus, QDateEdit:focus { border: 2px solid #F97316; background: white; outline: none; }
+        QComboBox::drop-down { border: none; width: 30px; outline: none; }
+        QComboBox QAbstractItemView {
+            background: white;
+            color: #1e293b;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            selection-background-color: #EBF5FF;
+            selection-color: #1e293b;
+            outline: none;
+            padding: 4px;
+        }
+        QComboBox QAbstractItemView::item {
+            min-height: 32px;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+        QComboBox QAbstractItemView::item:hover {
+            background-color: #F1F5F9;
+        }
     )";
 
     addLabel("TYPE DE RAPPORT");
@@ -195,6 +235,21 @@ PecheExportDialog::PecheExportDialog(QWidget *parent) : QDialog(parent)
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
 
     loadBoats();
+
+    // Fix black popup background on combo dropdowns
+    ComboClickFilter* comboFilter = new ComboClickFilter(this);
+    for (QComboBox* combo : findChildren<QComboBox*>()) {
+        if (!combo->isEditable()) {
+            combo->setEditable(true);
+            combo->lineEdit()->setReadOnly(true);
+            combo->lineEdit()->setCursor(Qt::PointingHandCursor);
+            combo->lineEdit()->installEventFilter(comboFilter);
+        }
+        if (combo->view() && combo->view()->window()) {
+            combo->view()->window()->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+            combo->view()->window()->setAttribute(Qt::WA_TranslucentBackground);
+        }
+    }
 }
 
 void PecheExportDialog::loadBoats()
